@@ -1,0 +1,19 @@
+schema_version = "1.0.0"
+
+id = "wanderer"
+version = "2.96.114"
+name = "Wanderer CAD"
+tagline = "Precision CAD modeling with snapping and a command line"
+maintainer = "Hostylmatic"
+type = "add-on"
+
+tags = ["3D View", "Modeling", "Mesh", "Object", "User Interface"]
+
+blender_version_min = "4.2.0"
+
+license = ["SPDX:GPL-3.0-or-later"]
+copyright = ["2026 Hostylmatic"]
+
+[permissions]
+clipboard = "Copies measurements to the clipboard, pastes into command line"
+files = "Reads DXF drawings; keeps an icon cache in its user folder"
