@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Wanderer CAD",
     "author": "Hostylmatic",
-    "version": (2, 96, 114),
+    "version": (2, 96, 121),
     "blender": (4, 2, 0),
     "location": "3D Viewport > Left toolbar (Object and Edit mode)  |  Add > Wanderer  |  Sidebar > Wanderer",
     "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, and run every command from a command line.",
@@ -403,8 +403,77 @@ def unit_info(scene):
     return UNIT_TO_M.get(key, 1.0) / scale, UNIT_LABEL.get(key, "")
 
 
+# ---- Plan de construction (CPlane) : un plan par zone 3D ; sans plan personnalisé, on garde le plan XY / celui de la vue orthogonale ----
+_CPLANE = {"cur": None}           # repère lu par plane_axes() quand axis == 3 (celui de la zone 3D qui dessine)
+CPLANES = {}                      # rv3d.as_pointer() -> {"cur": (o, x, y, z) ou None, "hist": [], "redo": [], "side": bool}
+
+
+def cp_state(rv3d, create=False):
+    key = rv3d.as_pointer()
+    st = CPLANES.get(key)
+    if st is None and create:
+        st = CPLANES[key] = {"cur": None, "hist": [], "redo": [], "side": False}
+    return st
+
+
+def cp_frame(o, x, y):
+    """Repère direct (o, x, y, z) à partir d'une origine et de deux directions (y est rendu orthogonal à x)."""
+    x = Vector(x).normalized()
+    y = Vector(y) - x * Vector(y).dot(x)
+    if y.length < 1e-9:
+        return None
+    y.normalize()
+    return (Vector(o), x, y, x.cross(y).normalized())
+
+
+def cp_set(rv3d, frame, record=True, auto=False):
+    """Définit (ou, avec None, efface) le plan de construction de cette zone 3D. auto : posé par l'Auto CPlane."""
+    st = cp_state(rv3d, create=True)
+    if record:
+        st["hist"].append(st["cur"])
+        del st["hist"][:-30]
+        st["redo"].clear()
+    st["cur"] = frame
+    st["auto"] = bool(auto and frame is not None)
+    try:
+        st["side"] = bool(rv3d.is_orthographic_side_view)
+    except (AttributeError, ReferenceError):
+        st["side"] = False
+
+
+def cp_undo(rv3d):
+    st = cp_state(rv3d)
+    if not st or not st["hist"]:
+        return False
+    st["redo"].append(st["cur"])
+    st["cur"] = st["hist"].pop()
+    return True
+
+
+def cp_redo(rv3d):
+    st = cp_state(rv3d)
+    if not st or not st["redo"]:
+        return False
+    st["hist"].append(st["cur"])
+    st["cur"] = st["redo"].pop()
+    return True
+
+
+CP_WORLD = {   # plans du monde (Top = plan XY d'origine : on efface simplement le plan personnalisé)
+    "Top": None,
+    "Bottom": ((0, 0, 0), (1, 0, 0), (0, -1, 0)),
+    "Front": ((0, 0, 0), (1, 0, 0), (0, 0, 1)),
+    "Back": ((0, 0, 0), (-1, 0, 0), (0, 0, 1)),
+    "Right": ((0, 0, 0), (0, 1, 0), (0, 0, 1)),
+    "Left": ((0, 0, 0), (0, -1, 0), (0, 0, 1)),
+}
+
+
 def plane_axes(axis):
-    """Axes (u, v, normale) du plan de construction pour une normale X/Y/Z."""
+    """Axes (u, v, normale) du plan de construction pour une normale X/Y/Z (3 : plan personnalisé, voir CPlane)."""
+    if axis == 3 and _CPLANE["cur"] is not None:
+        _o, x, y, z = _CPLANE["cur"]
+        return x.copy(), y.copy(), z.copy()
     if axis == 0:
         return Vector((0, 1, 0)), Vector((0, 0, 1)), Vector((1, 0, 0))
     if axis == 1:
@@ -412,8 +481,21 @@ def plane_axes(axis):
     return Vector((1, 0, 0)), Vector((0, 1, 0)), Vector((0, 0, 1))
 
 
+def plane_origin(axis):
+    if axis == 3 and _CPLANE["cur"] is not None:
+        return _CPLANE["cur"][0].copy()
+    return Vector((0.0, 0.0, 0.0))
+
+
 def drawing_axis(rv3d):
-    """Vue Top/Bottom -> Z, Front/Back -> Y, Right/Left -> X. Sinon plan XY."""
+    """Plan personnalisé (CPlane) -> 3. Sinon vue Top/Bottom -> Z, Front/Back -> Y, Right/Left -> X, et plan XY ailleurs."""
+    st = cp_state(rv3d)
+    if st is not None and st["cur"] is not None:
+        if rv3d.is_orthographic_side_view and not st["side"]:
+            st["cur"] = None                 # on est passé en vue Top / Front / Right : on retrouve le plan de cette vue
+        else:
+            _CPLANE["cur"] = st["cur"]
+            return 3
     if rv3d.is_orthographic_side_view:
         d = rv3d.view_rotation @ Vector((0.0, 0.0, -1.0))
         return max(range(3), key=lambda i: abs(d[i]))
@@ -1330,11 +1412,52 @@ def _seg_seg_point(a, b, c, d):
     return (p + q) * 0.5
 
 
+_TAN = {"first_ok": False, "pend": None, "info": None}     # Tan : cercle mémorisé au 1er point, résultat de la dernière accroche calculée
+
+
+def circle_samples(circ, n=160):
+    """Points du cercle idéal (même repère que circle_info), réduits à ceux qui touchent la partie dessinée (arc)."""
+    cc, r, nn, e1, e2, P, tol = circ
+    th = np.linspace(0.0, 2.0 * math.pi, n, endpoint=False)
+    S = cc + r * (np.cos(th)[:, None] * e1 + np.sin(th)[:, None] * e2)
+    if len(P) <= 400:
+        d = np.min(np.linalg.norm(S[:, None, :] - P[None, :, :], axis=2), axis=1)
+        S = S[d <= tol * 2.0]
+    return S
+
+
+def common_tangents(A, B):
+    """Tangentes communes à deux cercles coplanaires : liste de (point sur A, point sur B), 2 extérieures + 2 croisées. [] sinon."""
+    ca, ra, na, e1a, e2a = A[0], A[1], A[2], A[3], A[4]
+    cb, rb, nb = B[0], B[1], B[2]
+    if abs(float(na @ nb)) < 0.999:
+        return []
+    d3 = cb - ca
+    if abs(float(d3 @ na)) > 1e-4 * max(ra, rb, 1e-9):
+        return []
+    L = float(np.linalg.norm(d3))
+    if L < 1e-9:
+        return []
+    u = d3 / L
+    w = np.cross(na, u)
+    out = []
+    for b in (1.0, -1.0):          # b = 1 : tangentes extérieures, b = -1 : croisées
+        delta = b * rb - ra
+        c = delta / L
+        if abs(c) > 1.0:
+            continue
+        s_ = math.sqrt(max(0.0, 1.0 - c * c))
+        for sg in ((1.0, -1.0) if s_ > 1e-12 else (1.0,)):
+            m = c * u + sg * s_ * w
+            out.append((ca - ra * m, cb - b * rb * m))
+    return out
+
+
 def dynamic_snap(snap, mx, my, region, rv3d, persp, ref, radius):
     """Accroches calculées au curseur : Int, Perp, Tan, Near (dans cet ordre de priorité)."""
     want_near, want_int = osnap("near"), osnap("int")
     want_perp = osnap("perp") and ref is not None
-    want_tan = osnap("tan") and ref is not None
+    want_tan = osnap("tan") and (ref is not None or _TAN["first_ok"])
     here = Vector((mx, my))
     edges = getattr(snap, "edges", None)
     close = []
@@ -1351,13 +1474,13 @@ def dynamic_snap(snap, mx, my, region, rv3d, persp, ref, radius):
                     close.append((float(dist[o]), int(idx[o])))
     best = {}
 
-    def offer(kind, p3):
+    def offer(kind, p3, extra=None):
         sp = project_px(rv3d, region, p3)
         if sp is None:
             return
         d = (sp - here).length
         if d <= radius and (kind not in best or d < best[kind][0]):
-            best[kind] = (d, p3, (sp.x, sp.y))
+            best[kind] = (d, p3, (sp.x, sp.y), extra)
 
     seg = lambda i: (Vector(edges[i, 0]), Vector(edges[i, 1]))
     if want_int and len(close) >= 2:
@@ -1377,8 +1500,29 @@ def dynamic_snap(snap, mx, my, region, rv3d, persp, ref, radius):
                 t = (ref - a).dot(ab) / L
                 if 0.0 < t < 1.0:
                     offer(9, a + ab * t)
-    if want_tan:
-        for (cc, r, n, e1, e2, P, tol) in snap.circles:
+    if want_tan and ref is None:
+        # 1er point : on s'accroche au cercle (le point de tangence sera calculé au 2e clic, comme dans Rhino)
+        for circ in list(getattr(snap, "circles", ()))[:300]:
+            S = circle_samples(circ)
+            if not len(S):
+                continue
+            sx, sy, ok = _project_region(S, persp, region)
+            dd = np.hypot(sx - mx, sy - my)
+            dd[~ok] = np.inf
+            j = int(np.argmin(dd))
+            if dd[j] <= radius:
+                offer(10, Vector(S[j]), ("first", circ))
+    elif want_tan:
+        pend = _TAN["pend"]
+        if pend is not None:
+            for circ in list(getattr(snap, "circles", ()))[:300]:
+                if circ[0] is pend[0] or float(np.linalg.norm(circ[0] - pend[0])) < 1e-9:
+                    continue
+                for ta, tb in common_tangents(pend, circ):
+                    if any(float(np.min(np.linalg.norm(c_[5] - t_, axis=1))) > c_[6] * 2.0 for c_, t_ in ((pend, ta), (circ, tb))):
+                        continue
+                    offer(10, Vector(tb), ("common", Vector(ta)))
+        for (cc, r, n, e1, e2, P, tol) in getattr(snap, "circles", ()):
             v = np.array(ref, dtype=np.float64) - cc
             v = v - n * float(v @ n)
             dd = float(np.linalg.norm(v))
@@ -1402,7 +1546,8 @@ def dynamic_snap(snap, mx, my, region, rv3d, persp, ref, radius):
         offer(7, a + d1 * min(1.0, max(0.0, s_)))
     for kind in (8, 9, 10, 7):
         if kind in best:
-            d, p3, sp = best[kind]
+            d, p3, sp, extra = best[kind]
+            _TAN["info"] = extra
             return p3, sp, kind
     return None
 
@@ -1534,6 +1679,7 @@ def _nav_settle_redraw():
 def find_snap_in(snap, mx, my, region, rv3d, ref=None):
     """Point d'accrochage le plus proche de (mx, my) en pixels. snap = (pts, hom, kinds, bias) (+ segments / cercles).
     ref : dernier point posé (pour Perp et Tan)."""
+    _TAN["info"] = None
     if osnap("disable"):
         return None
     pts, hom, kinds, bias = snap
@@ -2032,7 +2178,7 @@ class DessinBase(bpy.types.Operator):
         if not self.points:
             self.axis = drawing_axis(rv3d)
         _, _, n = plane_axes(self.axis)
-        origin = self.points[0] if self.points else Vector((0.0, 0.0, 0.0))
+        origin = self.points[0] if self.points else plane_origin(self.axis)
 
         snap = self.find_snap(mx, my, region, rv3d)
         self.track_lines = []
@@ -2670,10 +2816,34 @@ class PolylineBase(DessinBase):
             txt += "   [click the first point: close]"
         return txt + "   [Backspace: undo last point, Enter: finish]"
 
+    TAN_PAIR = True     # Tan sur deux cercles : la 2e accroche calcule la tangente commune (comme Rhino)
+
+    def tan_update(self, context, event):
+        """Appelle l'accrochage avec l'état Tan (cercle mémorisé au 1er point) et recale le 1er point sur la tangente."""
+        n = len(self.points)
+        pend = getattr(self, "tan_pend", None)
+        _TAN["first_ok"] = (n == 0)
+        _TAN["pend"] = pend if (n == 1 and pend is not None) else None
+        try:
+            super().update_cursor(context, event)
+        finally:
+            _TAN["first_ok"] = False
+            _TAN["pend"] = None
+        info = _TAN["info"] if getattr(self, "snap_kind", None) == 10 else None
+        self._tan_info = info
+        if n == 0:
+            self.tan_pend = None
+        if len(self.points) == 1 and pend is not None:
+            p0 = getattr(self, "tan_p0", None)
+            if info is not None and info[0] == "common":
+                self.points[0] = info[1].copy()
+            elif p0 is not None:
+                self.points[0] = p0.copy()
+
     def update_cursor(self, context, event):
         self.ortho = bool(event.shift)
         self.closing = False
-        super().update_cursor(context, event)
+        self.tan_update(context, event)
         if (not self.points or self.cur is None or not self.snap_on or self.lock is not None
                 or self.mouse_over_ui(event)):
             return
@@ -2738,6 +2908,13 @@ class PolylineBase(DessinBase):
             return
         if self.points and (p - self.points[-1]).length < 1e-9:
             return
+        info = getattr(self, "_tan_info", None)
+        if not self.points:
+            # 1er point posé sur un cercle avec Tan : on le mémorise, le 2e clic Tan en déduira la tangente commune
+            self.tan_pend = info[1] if (info is not None and info[0] == "first") else None
+            self.tan_p0 = p.copy()
+        elif len(self.points) == 1:
+            self.tan_pend = None
         self.points.append(p)
         self.typed = ['', '']
         self.lock = None
@@ -3122,8 +3299,10 @@ class DESSIN_OT_sketch(PolylineBase):
         mx, my = event.mouse_x - region.x, event.mouse_y - region.y
         _CMD["mouse"][self.area.as_pointer()] = (mx, my)
         _CMD.setdefault("mouse_t", {})[self.area.as_pointer()] = time.monotonic()
+        if not self.points:
+            self.axis = drawing_axis(rv3d)
         _, _, n = plane_axes(self.axis)
-        origin = self.points[0] if self.points else Vector((0.0, 0.0, 0.0))
+        origin = self.points[0] if self.points else plane_origin(self.axis)
         coord = Vector((mx, my))
         ray_o = region_2d_to_origin_3d(region, rv3d, coord)
         ray_v = region_2d_to_vector_3d(region, rv3d, coord)
@@ -8052,6 +8231,29 @@ def redraw_region(op):
             pass
 
 
+def draw_fence_cb(op):
+    """Ligne de coupe du Trim (pointillés), du point d'appui à la souris."""
+    if not _same_region(op) or op.box is None:
+        return
+    x0, y0, x1, y1 = op.box
+    ln = math.hypot(x1 - x0, y1 - y0)
+    if ln < 1.0:
+        return
+    segs = []
+    d = 12.0 * px_scale(1.0)
+    for i in range(int(ln // d) + 1):
+        k0, k1 = i * d / ln, min(i * d + 0.6 * d, ln) / ln
+        segs += [(x0 + (x1 - x0) * k0, y0 + (y1 - y0) * k0), (x0 + (x1 - x0) * k1, y0 + (y1 - y0) * k1)]
+    shader = get_shader('2D')
+    gpu.state.blend_set('ALPHA')
+    shader.bind()
+    gpu.state.line_width_set(1.5)
+    shader.uniform_float("color", (1.0, 1.0, 1.0, 1.0))
+    batch_for_shader(shader, 'LINES', {"pos": segs}).draw(shader)
+    gpu.state.line_width_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
 def draw_box_cb(op):
     if not _same_region(op) or op.box is None:
         return
@@ -8806,12 +9008,8 @@ def draw_lasso_cb(op):
     gpu.state.blend_set('NONE')
 
 
-class DESSIN_OT_selection_lasso(bpy.types.Operator):
-    bl_idname = "dessin.selection_lasso"
-    bl_label = "Lasso Select"
-    bl_description = ("Drag a free-hand loop to select (drag to the right first: objects fully inside, to the left first: objects touched; "
-                      "Shift: add, Ctrl: remove). A simple click selects one object")
-    bl_options = {'REGISTER', 'UNDO'}
+class _SelShapeBase:
+    """Base commune (non enregistrée) du Lasso et de Select Box : un opérateur enregistré ne doit jamais hériter d'un autre."""
 
     @classmethod
     def poll(cls, context):
@@ -8895,8 +9093,17 @@ class DESSIN_OT_selection_lasso(bpy.types.Operator):
             select_objects_shape(context, self.area, self.region, inside_fn, seg_fn, self.crossing, event)
 
 
-class DESSIN_OT_selection_rect(DESSIN_OT_selection_lasso):
+class DESSIN_OT_selection_lasso(_SelShapeBase, bpy.types.Operator):
+    bl_idname = "dessin.selection_lasso"
+    bl_label = "Lasso Select"
+    bl_description = ("Drag a free-hand loop to select (drag to the right first: objects fully inside, to the left first: objects touched; "
+                      "Shift: add, Ctrl: remove). A simple click selects one object")
+    bl_options = {'REGISTER', 'UNDO'}
+
+
+class DESSIN_OT_selection_rect(_SelShapeBase, bpy.types.Operator):
     bl_idname = "dessin.selection_rect"
+    bl_options = {'REGISTER', 'UNDO'}
     bl_label = "Select Box"
     bl_description = ("Drag a box to select, without moving anything (drag to the right: objects fully inside, to the left: "
                       "objects touched; Shift: add, Ctrl: remove). A simple click selects one object")
@@ -8912,7 +9119,7 @@ class DESSIN_OT_selection_rect(DESSIN_OT_selection_lasso):
                 self.pts = [(sx, sy), (cx, sy), (cx, cy), (sx, cy)]
                 redraw_region(self)
             return {'RUNNING_MODAL'}
-        return super().modal(context, event)
+        return _SelShapeBase.modal(self, context, event)
 
 
 CIRCLE_SEL = {"radius": 40.0}          # rayon du pinceau en pixels (échelle d'interface 1)
@@ -9212,6 +9419,17 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
                ('FACE', "Mesh (face)", "Closed shapes are created as a mesh with a filled face"),
                ('CURVE', "Curve", "Shapes are created as curve objects")),
         description="Type of object created by the 2D drawing tools")
+    trim_mode: bpy.props.EnumProperty(
+        name="Trim cut", default='FENCE',
+        items=(('FENCE', "Fence", "Drag a straight line: every part it crosses is trimmed (F)"),
+               ('CROSSING', "Crossing", "Drag a box: every part it touches is trimmed (C)")),
+        description="How the Trim tool cuts when you drag: with a fence line or with a crossing box. Clicking a single part always works")
+    auto_cplane: bpy.props.BoolProperty(
+        name="Auto CPlane", default=False,
+        description="The construction plane follows the planar object (Object mode) or the planar faces (Edit mode) you select, so you can draw on them")
+    auto_cplane_sticky: bpy.props.BoolProperty(
+        name="Sticky", default=False,
+        description="Auto CPlane: the plane stays on the last planar selection when you select something that is not planar (otherwise it goes back to the ground plane)")
     gumball: bpy.props.BoolProperty(
         name="Show Gumball", default=True,
         description="Show the move / rotate / scale handles on the selection (objects, or vertices / edges / faces in Edit mode) when no drawing tool is active")
@@ -9245,7 +9463,7 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     osnap_cen: bpy.props.BoolProperty(name="Cen", default=True, description="Centers of circles, arcs, ellipses and polygons")
     osnap_int: bpy.props.BoolProperty(name="Int", default=True, description="Intersection of two edges or curves")
     osnap_perp: bpy.props.BoolProperty(name="Perp", default=False, description="Perpendicular to an edge from the last point picked")
-    osnap_tan: bpy.props.BoolProperty(name="Tan", default=False, description="Tangent to a circle or arc from the last point picked")
+    osnap_tan: bpy.props.BoolProperty(name="Tan", default=False, description="Tangent to a circle or arc from the last point picked. Line / Polyline: Tan on a first circle, then Tan on a second one, gives the exact common tangent")
     osnap_quad: bpy.props.BoolProperty(name="Quad", default=False, description="Quadrant points (0, 90, 180, 270 degrees) of circles and arcs")
     osnap_knot: bpy.props.BoolProperty(name="Knot", default=False, description="Control points and handles of curves")
     osnap_vertex: bpy.props.BoolProperty(name="Vertex", default=True, description="Vertices of meshes that have faces")
@@ -16812,7 +17030,11 @@ class DESSIN_OT_trim(bpy.types.Operator):
         self.start = (event.mouse_x - region.x, event.mouse_y - region.y)
         self.press_ev = types.SimpleNamespace(mouse_x=event.mouse_x, mouse_y=event.mouse_y)
         self.box = None
-        self.handle = bpy.types.SpaceView3D.draw_handler_add(draw_box_cb, (self,), 'WINDOW', 'POST_PIXEL')
+        try:
+            self.fence = context.scene.dessin.trim_mode == 'FENCE'
+        except (AttributeError, ReferenceError):
+            self.fence = True
+        self.handle = bpy.types.SpaceView3D.draw_handler_add(draw_fence_cb if self.fence else draw_box_cb, (self,), 'WINDOW', 'POST_PIXEL')
         context.window_manager.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
@@ -16841,6 +17063,8 @@ class DESSIN_OT_trim(bpy.types.Operator):
             self.end_modal()
             if box is None:
                 return self.click(context, ev)
+            if getattr(self, "fence", False):
+                return self.fence_trim(context, box)
             return self.box_trim(context, box)
         return {'RUNNING_MODAL'}
 
@@ -16896,12 +17120,11 @@ class DESSIN_OT_trim(bpy.types.Operator):
         write_wire(target, res[0], res[1], hints=hints)
         return True
 
-    def box_trim(self, context, box):
-        """Cadre : toutes les portions de courbes touchées par le cadre sont retirées, une à une (les arêtes changent après chaque coupe)."""
+    def multi_trim(self, context, hits_fn, what):
+        """Retire, une à une, toutes les portions de courbes désignées par hits_fn(ax, ay, bx, by) -> (vivants, paramètre milieu)
+        (les arêtes changent après chaque coupe)."""
         region = self.region
         rv3d = region_rv3d(region, self.area)
-        x0, x1 = sorted((box[0], box[2]))
-        y0, y1 = sorted((box[1], box[3]))
         failed = set()
         done = 0
         t_end = time.monotonic() + 8.0
@@ -16915,22 +17138,10 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 sx, sy, ok = _project_region(V, persp, region)
                 ax, ay, bx, by = sx[E[:, 0]], sy[E[:, 0]], sx[E[:, 1]], sy[E[:, 1]]
                 good = ok[E[:, 0]] & ok[E[:, 1]]
-                # Liang-Barsky : part du segment à l'intérieur du cadre
-                dx, dy = bx - ax, by - ay
-                t0 = np.zeros(len(E))
-                t1 = np.ones(len(E))
-                alive = good.copy()
-                for pp, qq in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
-                    par = np.abs(pp) < 1e-12
-                    alive &= ~(par & (qq < 0))
-                    with np.errstate(divide='ignore', invalid='ignore'):
-                        r = np.where(par, 0.0, qq / np.where(par, 1.0, pp))
-                    neg, pos = (pp < 0) & ~par, (pp > 0) & ~par
-                    t0 = np.where(neg, np.maximum(t0, r), t0)
-                    t1 = np.where(pos, np.minimum(t1, r), t1)
-                alive &= t0 <= t1
+                alive, tmid = hits_fn(ax, ay, bx, by)
+                alive &= good
                 for k in np.nonzero(alive)[0]:
-                    tm = float((t0[k] + t1[k]) * 0.5)
+                    tm = float(tmid[k])
                     mid = tuple(np.round(V[E[k, 0]] + (V[E[k, 1]] - V[E[k, 0]]) * tm, 4))
                     key = (obj.name, mid)
                     if key not in failed:
@@ -16950,10 +17161,49 @@ class DESSIN_OT_trim(bpy.types.Operator):
             if not hit:
                 break
         if not done:
-            self.report({'INFO'}, "Nothing to trim in the box (the parts must cross a cutting curve)")
+            self.report({'INFO'}, f"Nothing to trim {what} (the parts must cross a cutting curve)")
             return {'CANCELLED'}
         self.report({'INFO'}, f"Trimmed {done} part(s)")
         return {'FINISHED'}
+
+    def box_trim(self, context, box):
+        """Cadre (Crossing) : toutes les portions de courbes touchées par le cadre sont retirées."""
+        x0, x1 = sorted((box[0], box[2]))
+        y0, y1 = sorted((box[1], box[3]))
+
+        def hits(ax, ay, bx, by):
+            # Liang-Barsky : part du segment à l'intérieur du cadre
+            dx, dy = bx - ax, by - ay
+            t0 = np.zeros(len(ax))
+            t1 = np.ones(len(ax))
+            alive = np.ones(len(ax), dtype=bool)
+            for pp, qq in ((-dx, ax - x0), (dx, x1 - ax), (-dy, ay - y0), (dy, y1 - ay)):
+                par = np.abs(pp) < 1e-12
+                alive &= ~(par & (qq < 0))
+                with np.errstate(divide='ignore', invalid='ignore'):
+                    r = np.where(par, 0.0, qq / np.where(par, 1.0, pp))
+                neg, pos = (pp < 0) & ~par, (pp > 0) & ~par
+                t0 = np.where(neg, np.maximum(t0, r), t0)
+                t1 = np.where(pos, np.minimum(t1, r), t1)
+            alive &= t0 <= t1
+            return alive, (t0 + t1) * 0.5
+        return self.multi_trim(context, hits, "in the box")
+
+    def fence_trim(self, context, line):
+        """Ligne de coupe (Fence) : toutes les portions de courbes que la ligne traverse sont retirées."""
+        fx0, fy0, fx1, fy1 = line
+        fdx, fdy = fx1 - fx0, fy1 - fy0
+
+        def hits(ax, ay, bx, by):
+            dx, dy = bx - ax, by - ay
+            den = dx * fdy - dy * fdx
+            par = np.abs(den) < 1e-12
+            with np.errstate(divide='ignore', invalid='ignore'):
+                u = np.where(par, 0.0, ((fx0 - ax) * fdy - (fy0 - ay) * fdx) / np.where(par, 1.0, den))     # sur l'arête
+                v = np.where(par, 0.0, ((fx0 - ax) * dy - (fy0 - ay) * dx) / np.where(par, 1.0, den))       # sur la ligne de coupe
+            alive = ~par & (u >= 0.0) & (u <= 1.0) & (v >= 0.0) & (v <= 1.0)
+            return alive, np.clip(u, 0.0, 1.0)
+        return self.multi_trim(context, hits, "along the fence")
 
     def click(self, context, event):
         region = find_window_region(context.area, event.mouse_x, event.mouse_y)
@@ -17028,6 +17278,29 @@ class DESSIN_OT_trim(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class DESSIN_OT_trim_mode(bpy.types.Operator):
+    bl_idname = "dessin.trim_mode"
+    bl_label = "Trim: Fence / Crossing"
+    bl_description = "Chooses how Trim cuts when you drag: with a fence line or with a crossing box"
+    bl_options = {'INTERNAL'}
+
+    mode: bpy.props.EnumProperty(items=(('FENCE', "Fence", ""), ('CROSSING', "Crossing", "")), default='FENCE', options={'SKIP_SAVE'})
+
+    @classmethod
+    def poll(cls, context):
+        # utilisable en mode Objet comme en mode Édition (EDIT_MESH : la touche reste telle quelle dans la barre d'outils)
+        return context.area is not None and context.area.type == 'VIEW_3D'
+
+    def execute(self, context):
+        context.scene.dessin.trim_mode = self.mode
+        self.report({'INFO'}, "Trim: " + ("Fence line" if self.mode == 'FENCE' else "Crossing box"))
+        for win in context.window_manager.windows:
+            for a in win.screen.areas:
+                if a.type == 'VIEW_3D':
+                    a.tag_redraw()
+        return {'FINISHED'}
+
+
 class DESSIN_OT_tool_from_edit(bpy.types.Operator):
     """Outil de la barre du mode édition dont la commande ne travaille qu'en mode objet : quitte l'édition puis la lance."""
     bl_idname = "dessin.tool_from_edit"
@@ -17084,6 +17357,8 @@ def _edit_variant(cls, mode='EDIT_MESH'):
             continue
         if mode != 'EDIT_MESH':
             if op in ("dessin.tool_exit", "dessin.grs_key"):
+                km.append(item)
+            elif op == "dessin.trim_mode":
                 km.append(item)
             elif item[1].get("type") != 'MOUSEMOVE':
                 cmd = main if op == "dessin.pick_object" else op
@@ -18277,16 +18552,42 @@ def outline_paths(obj, depsgraph):
 
 
 def extrude_surface(paths, vec, cap=True):
-    """Extrusion des contours le long de vec : (sommets, faces). Les contours fermés peuvent être bouchés (volume)."""
+    """Extrusion des contours le long de vec : (sommets, faces). Les contours fermés peuvent être bouchés (volume) :
+    les bouchons suivent les trous (un contour dans un autre donne un anneau, pas un couvercle plein)."""
     allV, allF = [], []
     base = 0
     v = np.array(vec, dtype=np.float64)
+    closed_paths = []
     for P, closed in paths:
         rows = np.stack([P, P + v])
-        V, F = grid_mesh(rows, closed, False, cap)
+        V, F = grid_mesh(rows, closed, False, False)
         allV.append(V)
         allF.extend([tuple(i + base for i in f) for f in F])
         base += len(V)
+        if closed and len(P) >= 3:
+            closed_paths.append((P, closed))
+    if cap and closed_paths:
+        regions = []
+        try:
+            regions, _skipped = planar_surfaces(closed_paths)
+        except (ValueError, RuntimeError, TypeError, np.linalg.LinAlgError):
+            regions = []
+        if len(regions) == 0 or sum(len(F) for _V, F in regions) == 0:       # contours non plans : bouchons simples, comme avant
+            for P, _closed in closed_paths:
+                n = len(P)
+                allV.append(np.vstack([P, P + v]))
+                allF.append(tuple(base + i for i in range(n - 1, -1, -1)))
+                allF.append(tuple(base + n + i for i in range(n)))
+                base += 2 * n
+        else:
+            for Vr, Fr in regions:
+                Vr = np.asarray(Vr, dtype=np.float64)
+                allV.append(Vr)
+                allF.extend(tuple(i + base for i in reversed(f)) for f in Fr)       # bas
+                base += len(Vr)
+                allV.append(Vr + v)
+                allF.extend(tuple(i + base for i in f) for f in Fr)                  # haut
+                base += len(Vr)
     return np.vstack(allV), allF
 
 
@@ -23112,10 +23413,20 @@ DESSIN_TT_point = _draw_tool_cls(
 
 DESSIN_TT_trim = _draw_tool_cls(
     "DESSIN_TT_trim", "dessin.trim_tool", "dessin.trim", "Trim",
-    "Trims curves, outlines and surfaces: the selected objects are the cutting curves (nothing selected: all of them), click the part to remove (surfaces: the outline is projected along the view)",
-    "Select the cutting curves first (none: all)  ·  click the part of a curve to remove, or drag a box to remove several  ·  Esc / Enter: leave",
+    "Trims curves, outlines and surfaces: the selected objects are the cutting curves (nothing selected: all of them), click the part to remove or drag a fence line across several (F: fence, C: crossing box; surfaces: the outline is projected along the view)",
+    "Select the cutting curves first (none: all)  ·  click a part to remove it, or drag a fence line (F) / a crossing box (C) to remove several  ·  Esc / Enter: leave",
     hover=False)
-DESSIN_TT_trim.bl_keymap += (("dessin.tool_exit", {"type": 'RET', "value": 'PRESS'}, None),)
+DESSIN_TT_trim.bl_keymap += (("dessin.tool_exit", {"type": 'RET', "value": 'PRESS'}, None),
+                             ("dessin.trim_mode", {"type": 'F', "value": 'PRESS'}, {"properties": [("mode", 'FENCE')]}),
+                             ("dessin.trim_mode", {"type": 'C', "value": 'PRESS'}, {"properties": [("mode", 'CROSSING')]}))
+
+
+def _trim_tool_settings(context, layout, tool):
+    layout.prop(context.scene.dessin, "trim_mode", expand=True)
+    layout.label(text="F: fence line  ·  C: crossing box  ·  click a part to trim it")
+
+
+DESSIN_TT_trim.draw_settings = _trim_tool_settings
 def _pick_then_run_tool(name, idname, op, label, desc, hint):
     """Outil « on désigne les objets (clics), puis Entrée / Espace » : Join, Explode."""
     cls = _draw_tool_cls(name, idname, op, label, desc, hint, hover=False)
@@ -24758,7 +25069,741 @@ def _act_region(attr):
     return run
 
 
+# ---- CPlane : plan de construction personnalisé (face, 3 points, vertical, vue, monde, élévation, annuler / rétablir) ----
+_CP_DRAW = {"handle": None}
+
+
+def _cp_nice(x):
+    """Pas de grille « rond » (1, 2, 5 x 10^k) proche de x."""
+    if x <= 0:
+        return 1.0
+    e = math.floor(math.log10(x))
+    f = x / 10.0 ** e
+    return (1.0 if f < 1.5 else 2.0 if f < 3.5 else 5.0 if f < 7.5 else 10.0) * 10.0 ** e
+
+
+def cplane_draw_cb():
+    """Petite grille dans le plan de construction personnalisé de la zone 3D (rien s'il n'y en a pas)."""
+    try:
+        rv3d = bpy.context.region_data
+        if rv3d is None:
+            return
+        st = cp_state(rv3d)
+        if not st or st["cur"] is None:
+            return
+        o, x, y, _z = st["cur"]
+        step = _cp_nice(max(rv3d.view_distance, 0.05) / 14.0)
+        half = step * 8
+        shader = get_shader('3D')
+        gpu.state.blend_set('ALPHA')
+        gpu.state.line_width_set(1.0)
+        shader.bind()
+        pts = []
+        for i in range(-8, 9):
+            if i == 0:
+                continue
+            pts += [o + x * (i * step) - y * half, o + x * (i * step) + y * half,
+                    o + y * (i * step) - x * half, o + y * (i * step) + x * half]
+        shader.uniform_float("color", (BOX_ORANGE[0], BOX_ORANGE[1], BOX_ORANGE[2], 0.28))
+        batch_for_shader(shader, 'LINES', {"pos": [tuple(p) for p in pts]}).draw(shader)
+        gpu.state.line_width_set(2.0)
+        for d, col in ((x, (0.95, 0.25, 0.25, 0.8)), (y, (0.3, 0.85, 0.3, 0.8))):
+            shader.uniform_float("color", col)
+            batch_for_shader(shader, 'LINES', {"pos": [tuple(o - d * half), tuple(o + d * half)]}).draw(shader)
+        gpu.state.line_width_set(1.0)
+        gpu.state.blend_set('NONE')
+    except (ReferenceError, AttributeError, RuntimeError, TypeError):
+        pass
+
+
+def cp_current_rv3d(context):
+    area = context.area
+    if area is None or area.type != 'VIEW_3D':
+        area = next((a for a in context.window.screen.areas if a.type == 'VIEW_3D'), None) if context.window else None
+    if area is None:
+        return None
+    return area.spaces.active.region_3d
+
+
+def cp_pick(context, region, rv3d, mx, my):
+    """Point 3D sous le curseur : sommet proche d'une face visée, sinon point visé, sinon plan de construction courant."""
+    coord = Vector((mx, my))
+    ro = region_2d_to_origin_3d(region, rv3d, coord)
+    rv = region_2d_to_vector_3d(region, rv3d, coord)
+    try:
+        ok, loc, _nor, idx, obj, mat = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+    except (RuntimeError, TypeError, ValueError):
+        ok = False
+    if ok:
+        best, bd = None, 14.0 * px_scale()
+        try:
+            me = obj.evaluated_get(context.evaluated_depsgraph_get()).data
+            for vi in me.polygons[idx].vertices:
+                w = mat @ me.vertices[vi].co
+                sp = project_px(rv3d, region, w)
+                if sp is not None and (sp - coord).length < bd:
+                    best, bd = w, (sp - coord).length
+        except (AttributeError, IndexError, RuntimeError, ReferenceError):
+            pass
+        return (best if best is not None else loc), True
+    axis = drawing_axis(rv3d)
+    n = plane_axes(axis)[2]
+    hit = geometry.intersect_line_plane(ro, ro + rv, plane_origin(axis), n)
+    return hit, False
+
+
+def cp_pick_cb(op):
+    if not _same_region(op) or not op.pts and op.hover is None:
+        return
+    shader = get_shader('3D')
+    gpu.state.blend_set('ALPHA')
+    gpu.state.point_size_set(9.0)
+    shader.bind()
+    shader.uniform_float("color", (BOX_ORANGE[0], BOX_ORANGE[1], BOX_ORANGE[2], 1.0))
+    if op.pts:
+        batch_for_shader(shader, 'POINTS', {"pos": [tuple(p) for p in op.pts]}).draw(shader)
+        seq = list(op.pts) + ([op.hover] if op.hover is not None else [])
+        if len(seq) >= 2:
+            gpu.state.line_width_set(1.5)
+            batch_for_shader(shader, 'LINE_STRIP', {"pos": [tuple(p) for p in seq]}).draw(shader)
+            gpu.state.line_width_set(1.0)
+    if op.hover is not None:
+        shader.uniform_float("color", (BOX_BLUE[0], BOX_BLUE[1], BOX_BLUE[2], 1.0))
+        batch_for_shader(shader, 'POINTS', {"pos": [tuple(op.hover)]}).draw(shader)
+    gpu.state.point_size_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
+class DESSIN_OT_cplane(bpy.types.Operator):
+    bl_idname = "dessin.cplane"
+    bl_label = "CPlane"
+    bl_description = ("Sets the construction plane the drawing tools work on: click a face to align the plane with it, "
+                      "or press 3 (three points), V (vertical plane), W (back to the world plane), U (undo the plane)")
+    bl_options = {'REGISTER'}
+
+    mode: bpy.props.EnumProperty(name="Mode", default='OBJECT',
+                                 items=(('OBJECT', "Object", "Click a face"), ('3PT', "3 Points", "Origin, X axis, Y axis"),
+                                        ('VERT', "Vertical", "Two points: a plane standing on the line, perpendicular to the current plane")))
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == 'VIEW_3D'
+
+    def prompt(self):
+        txt = {'OBJECT': "CPlane: click a face to align the plane with it  |  3: three points  V: vertical  W: world plane  U: undo plane  Esc: cancel",
+               '3PT': ("CPlane 3 points: origin" if not self.pts else "CPlane 3 points: point on the X axis" if len(self.pts) == 1
+                       else "CPlane 3 points: point on the Y side") + "  |  Esc: cancel",
+               'VERT': ("CPlane vertical: first point of the line" if not self.pts else "CPlane vertical: second point of the line") + "  |  Esc: cancel"}[self.mode]
+        set_prompt(self.area, txt)
+
+    def invoke(self, context, event):
+        self.area = context.area
+        self.region = find_window_region(self.area, event.mouse_x, event.mouse_y) or main_window_region(self.area)
+        if self.region is None:
+            return {'CANCELLED'}
+        self.rv3d = region_rv3d(self.region, self.area)
+        self.pts = []
+        self.hover = None
+        self._h = bpy.types.SpaceView3D.draw_handler_add(cp_pick_cb, (self,), 'WINDOW', 'POST_VIEW')
+        self.prompt()
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def cleanup(self):
+        if getattr(self, "_h", None) is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._h, 'WINDOW')
+            self._h = None
+        set_prompt(self.area, None)
+        try:
+            self.area.tag_redraw()
+        except ReferenceError:
+            pass
+
+    def done(self, context, frame, msg):
+        cp_set(self.rv3d, frame)
+        self.cleanup()
+        cmd_log(msg)
+        return {'FINISHED'}
+
+    def face_frame(self, context, mx, my):
+        coord = Vector((mx, my))
+        ro = region_2d_to_origin_3d(self.region, self.rv3d, coord)
+        rv = region_2d_to_vector_3d(self.region, self.rv3d, coord)
+        try:
+            ok, loc, nor, _i, _o, _m = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+        except (RuntimeError, TypeError, ValueError):
+            ok = False
+        if not ok:
+            return None
+        z = Vector(nor).normalized()
+        if z.dot(rv) > 0:
+            z = -z                                       # la normale regarde vers nous
+        up = Vector((0.0, 0.0, 1.0))
+        x = Vector((1.0, 0.0, 0.0)) if abs(z.dot(up)) > 0.999 else up.cross(z)    # face verticale : X horizontal
+        return cp_frame(loc, x, z.cross(x))
+
+    def modal(self, context, event):
+        if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+            self.cleanup()
+            return {'CANCELLED'}
+        if event.type in NAV_TYPES or event.type.startswith(('NUMPAD', 'TRACKPAD')):
+            return {'PASS_THROUGH'}
+        if event.value == 'PRESS' and event.type in {'THREE', 'V', 'W', 'O', 'U'} and not (event.ctrl or event.alt or event.oskey):
+            if event.type == 'W':
+                return self.done(context, None, "CPlane: world plane")
+            if event.type == 'U':
+                msg = "CPlane: previous plane" if cp_undo(self.rv3d) else "CPlane: nothing to undo"
+                self.cleanup()
+                cmd_log(msg)
+                return {'FINISHED'}
+            self.mode = {'THREE': '3PT', 'V': 'VERT', 'O': 'OBJECT'}[event.type]
+            self.pts = []
+            self.prompt()
+            return {'RUNNING_MODAL'}
+        region = find_window_region(self.area, event.mouse_x, event.mouse_y)
+        if region is None:
+            return {'RUNNING_MODAL'}
+        mx, my = event.mouse_x - region.x, event.mouse_y - region.y
+        if event.type == 'MOUSEMOVE':
+            if self.mode != 'OBJECT':
+                self.hover, _hit = cp_pick(context, region, self.rv3d, mx, my)
+                self.area.tag_redraw()
+            return {'RUNNING_MODAL'}
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self.region = region
+            if self.mode == 'OBJECT':
+                fr = self.face_frame(context, mx, my)
+                if fr is None:
+                    cmd_log("CPlane: click on a face (or press 3 / V)")
+                    return {'RUNNING_MODAL'}
+                return self.done(context, fr, "CPlane: aligned with the face")
+            p, _hit = cp_pick(context, region, self.rv3d, mx, my)
+            if p is None:
+                return {'RUNNING_MODAL'}
+            self.pts.append(p.copy())
+            need = 3 if self.mode == '3PT' else 2
+            if len(self.pts) < need:
+                self.prompt()
+                self.area.tag_redraw()
+                return {'RUNNING_MODAL'}
+            if self.mode == '3PT':
+                x = self.pts[1] - self.pts[0]
+                fr = cp_frame(self.pts[0], x, self.pts[2] - self.pts[0]) if x.length > 1e-9 else None
+            else:
+                ax = drawing_axis(self.rv3d)
+                n = plane_axes(ax)[2]
+                x = self.pts[1] - self.pts[0]
+                fr = cp_frame(self.pts[0], x, n) if x.length > 1e-9 else None
+            if fr is None:
+                cmd_log("CPlane: the points are aligned, pick them again")
+                self.pts = []
+                self.prompt()
+                return {'RUNNING_MODAL'}
+            return self.done(context, fr, "CPlane: " + ("3 points" if self.mode == '3PT' else "vertical plane"))
+        return {'RUNNING_MODAL'}
+
+
+class DESSIN_OT_cplane_elevation(bpy.types.Operator):
+    bl_idname = "dessin.cplane_elevation"
+    bl_label = "CPlane Elevation"
+    bl_description = "Moves the construction plane along its normal by a distance (keeps its orientation)"
+    bl_options = {'REGISTER'}
+
+    distance: bpy.props.FloatProperty(name="Distance", default=0.0, subtype='DISTANCE', unit='LENGTH')
+
+    @classmethod
+    def poll(cls, context):
+        return cp_current_rv3d(context) is not None
+
+    def invoke(self, context, event):
+        return context.window_manager.invoke_props_dialog(self, width=260)
+
+    def execute(self, context):
+        rv3d = cp_current_rv3d(context)
+        if rv3d is None:
+            return {'CANCELLED'}
+        st = cp_state(rv3d)
+        if st is not None and st["cur"] is not None:
+            o, x, y, z = st["cur"]
+        else:                                    # pas de plan personnalisé : on part du plan de la vue (XY, Front, Right...)
+            ax = drawing_axis(rv3d)
+            u, v, _n = plane_axes(ax)
+            o, x, y, z = cp_frame(plane_origin(ax), u, v)
+        cp_set(rv3d, (o + z * self.distance, x, y, z))
+        cmd_log("CPlane: moved along its normal")
+        return {'FINISHED'}
+
+
+def cp_apply_named(context, name):
+    rv3d = cp_current_rv3d(context)
+    if rv3d is None:
+        return "No 3D view"
+    if name == 'View':
+        rot = rv3d.view_rotation
+        st = cp_state(rv3d)
+        o = st["cur"][0] if st and st["cur"] is not None else Vector((0.0, 0.0, 0.0))
+        cp_set(rv3d, (o, rot @ Vector((1, 0, 0)), rot @ Vector((0, 1, 0)), rot @ Vector((0, 0, 1))))
+        return "CPlane: parallel to the view"
+    spec = CP_WORLD[name]
+    cp_set(rv3d, cp_frame(*spec) if spec is not None else None)
+    return "CPlane: world " + name.lower()
+
+
+def _act_cplane_named(name):
+    def run(context):
+        return cp_apply_named(context, name)
+    return run
+
+
+def _act_cplane_undo(context):
+    rv3d = cp_current_rv3d(context)
+    return "CPlane: previous plane" if rv3d is not None and cp_undo(rv3d) else "CPlane: nothing to undo"
+
+
+def _act_cplane_redo(context):
+    rv3d = cp_current_rv3d(context)
+    return "CPlane: next plane" if rv3d is not None and cp_redo(rv3d) else "CPlane: nothing to redo"
+
+
+def _act_cplane_mode(mode):
+    def run(context):
+        bpy.ops.dessin.cplane('INVOKE_DEFAULT', mode=mode)
+        return ""
+    return run
+
+
+# ---- PushPull : tirer / pousser une face d'un solide ou d'une surface le long de sa normale ----
+def pp_region(bm, f0):
+    """La face f0 et les faces coplanaires qui lui sont reliées (une face « visuelle », même triangulée)."""
+    n = f0.normal.copy()
+    d = n.dot(f0.verts[0].co)
+    tol = 1e-4 * max(1.0, abs(d))
+    seen = {f0}
+    stack = [f0]
+    while stack:
+        f = stack.pop()
+        for e in f.edges:
+            for g in e.link_faces:
+                if g not in seen and g.normal.dot(n) > 1.0 - 1e-6 and abs(n.dot(g.verts[0].co) - d) < tol:
+                    seen.add(g)
+                    stack.append(g)
+    return list(seen)
+
+
+def pp_boundary(faces):
+    """Arêtes du pourtour d'un groupe de faces."""
+    fs = set(faces)
+    return [e for f in faces for e in f.edges if sum(1 for g in e.link_faces if g in fs) == 1]
+
+
+def push_pull_mesh(obj, face_index, dist):
+    """Tire (dist > 0) ou pousse (dist < 0) la face visée de `dist` (unités de la scène) le long de sa normale.
+    Un solide reste un solide ; une surface seule devient un volume fermé. Retourne un message d'erreur ou ''."""
+    me = obj.data
+    if face_index < 0 or face_index >= len(me.polygons):
+        return "Face not found"
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(me)
+        bm.faces.ensure_lookup_table()
+        bm.normal_update()
+        f0 = bm.faces[face_index]
+        faces = pp_region(bm, f0)
+        bound = pp_boundary(faces)
+        open_surface = bool(bound) and all(len(e.link_faces) == 1 for e in bound)
+        nw = (obj.matrix_world.to_3x3() @ f0.normal).normalized()
+        vec = obj.matrix_world.to_3x3().inverted() @ (nw * dist)
+        ret = bmesh.ops.extrude_face_region(bm, geom=faces)
+        verts = [g for g in ret["geom"] if isinstance(g, bmesh.types.BMVert)]
+        bmesh.ops.translate(bm, vec=vec, verts=verts)
+        if not open_surface:
+            bmesh.ops.delete(bm, geom=faces, context='FACES')           # la face d'origine disparaît (avec ses diagonales) : le solide reste fermé
+        bm.normal_update()
+        if all(len(e.link_faces) == 2 for e in bm.edges):
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(me)
+        me.update()
+    finally:
+        bm.free()
+    return ""
+
+
+def pp_draw_cb(op):
+    if not _same_region(op) or not op.lines:
+        return
+    shader = get_shader('3D')
+    gpu.state.blend_set('ALPHA')
+    gpu.state.line_width_set(2.0)
+    shader.bind()
+    shader.uniform_float("color", (BOX_ORANGE[0], BOX_ORANGE[1], BOX_ORANGE[2], 1.0) if op.stage == 'DIST'
+                         else (BOX_BLUE[0], BOX_BLUE[1], BOX_BLUE[2], 1.0))
+    batch_for_shader(shader, 'LINES', {"pos": [tuple(p) for p in op.lines]}).draw(shader)
+    gpu.state.line_width_set(1.0)
+    gpu.state.blend_set('NONE')
+
+
+class DESSIN_OT_pushpull(bpy.types.Operator):
+    bl_idname = "dessin.pushpull"
+    bl_label = "PushPull"
+    bl_description = ("Pulls or pushes a face of a solid or a surface along its normal: click the face, then move the mouse "
+                      "(or type a distance) and click / Enter. A negative distance pushes the face into the solid")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == 'VIEW_3D' and context.mode == 'OBJECT'
+
+    def prompt(self):
+        if self.stage == 'PICK':
+            set_prompt(self.area, "PushPull: click the face to pull or push  |  Esc: cancel")
+        else:
+            t = f"  typed: {self.typed}" if self.typed else ""
+            set_prompt(self.area, f"PushPull: distance {self.fmt(self.dist)}{t}  |  move the mouse or type a value, click / Enter to confirm, Esc to cancel")
+
+    def fmt(self, value):
+        x = value / (self.unit_f or 1.0)
+        s = f"{x:.3f}".rstrip('0').rstrip('.')
+        return (f"{s} {self.unit_label}").strip()
+
+    def invoke(self, context, event):
+        self.area = context.area
+        self.region = find_window_region(self.area, event.mouse_x, event.mouse_y) or main_window_region(self.area)
+        if self.region is None:
+            return {'CANCELLED'}
+        self.rv3d = region_rv3d(self.region, self.area)
+        self.unit_f, self.unit_label = unit_info(context.scene)
+        self.stage = 'PICK'
+        self.lines = []
+        self.target = None            # (objet, indice de face, régions de faces, normale monde, point de départ)
+        self.hover_key = None
+        self.dist = 0.0
+        self.typed = ""
+        self._h = bpy.types.SpaceView3D.draw_handler_add(pp_draw_cb, (self,), 'WINDOW', 'POST_VIEW')
+        self.prompt()
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def cleanup(self):
+        if getattr(self, "_h", None) is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self._h, 'WINDOW')
+            self._h = None
+        set_prompt(self.area, None)
+        try:
+            self.area.tag_redraw()
+        except ReferenceError:
+            pass
+
+    def hit_face(self, context, region, mx, my):
+        coord = Vector((mx, my))
+        ro = region_2d_to_origin_3d(region, self.rv3d, coord)
+        rv = region_2d_to_vector_3d(region, self.rv3d, coord)
+        try:
+            dg = context.evaluated_depsgraph_get()
+            ok, loc, _nor, idx, obj, _m = context.scene.ray_cast(dg, ro, rv)
+        except (RuntimeError, TypeError, ValueError):
+            return None
+        if not ok or obj is None or obj.type != 'MESH':
+            return None
+        try:
+            if len(obj.evaluated_get(dg).data.polygons) != len(obj.data.polygons):
+                return ("modifiers", obj)             # un modificateur change les faces : l'indice ne correspond plus
+        except (RuntimeError, ReferenceError):
+            return None
+        return (obj, idx, loc)
+
+    def region_lines(self, obj, idx):
+        """Contour (en monde) de la face visée, pour la surbrillance, et sa normale monde."""
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+            bm.normal_update()
+            f0 = bm.faces[idx]
+            faces = pp_region(bm, f0)
+            mw = obj.matrix_world
+            segs = []
+            for e in pp_boundary(faces):
+                segs += [mw @ e.verts[0].co, mw @ e.verts[1].co]
+            nw = (mw.to_3x3() @ f0.normal).normalized()
+            return segs, nw
+        finally:
+            bm.free()
+
+    def update_dist(self, context, region, mx, my):
+        obj, idx, segs, nw, p0 = self.target
+        coord = Vector((mx, my))
+        ro = region_2d_to_origin_3d(region, self.rv3d, coord)
+        rv = region_2d_to_vector_3d(region, self.rv3d, coord)
+        hit = geometry.intersect_line_line(ro, ro + rv, p0, p0 + nw)
+        if hit is not None:
+            self.dist = (hit[1] - p0).dot(nw)
+
+    def refresh_preview(self):
+        obj, idx, segs, nw, p0 = self.target
+        off = nw * self.dist
+        lines = list(segs) + [p + off for p in segs]
+        for i in range(0, len(segs), 2):
+            lines += [segs[i], segs[i] + off, segs[i + 1], segs[i + 1] + off]
+        self.lines = lines
+
+    def finish(self, context):
+        obj, idx, _segs, _nw, _p0 = self.target
+        d = self.dist
+        t = None
+        if self.typed not in ("", "-", ".", "-."):
+            try:
+                t = float(self.typed) * self.unit_f
+            except ValueError:
+                t = None
+        if t is not None:
+            d = t if (t < 0 or d >= 0) else -t         # une valeur saisie garde le sens de la souris, sauf si on tape un signe
+        self.cleanup()
+        if abs(d) < 1e-9:
+            return {'CANCELLED'}
+        try:
+            msg = push_pull_mesh(obj, idx, d)
+        except (RuntimeError, ReferenceError, ValueError) as err:
+            msg = str(err)
+        if msg:
+            self.report({'WARNING'}, "PushPull: " + msg)
+            return {'CANCELLED'}
+        cmd_log("PushPull: " + self.fmt(d))
+        return {'FINISHED'}
+
+    def modal(self, context, event):
+        if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+            self.cleanup()
+            return {'CANCELLED'}
+        if event.type in NAV_TYPES or event.type.startswith('TRACKPAD'):
+            return {'PASS_THROUGH'}
+        region = find_window_region(self.area, event.mouse_x, event.mouse_y)
+        if self.stage == 'DIST' and event.value == 'PRESS':
+            if event.type in {'RET', 'NUMPAD_ENTER', 'SPACE'}:
+                return self.finish(context)
+            if event.type == 'BACK_SPACE':
+                self.typed = self.typed[:-1]
+                self.prompt()
+                return {'RUNNING_MODAL'}
+            ch = event.unicode
+            if ch and (ch.isdigit() or ch in '.-,'):
+                self.typed += '.' if ch == ',' else ch
+                self.prompt()
+                return {'RUNNING_MODAL'}
+        if region is None:
+            return {'RUNNING_MODAL'}
+        mx, my = event.mouse_x - region.x, event.mouse_y - region.y
+        if event.type == 'MOUSEMOVE':
+            if self.stage == 'PICK':
+                h = self.hit_face(context, region, mx, my)
+                key = (h[0].name, h[1]) if h and h[0] != "modifiers" and len(h) == 3 else None
+                if key != self.hover_key:
+                    self.hover_key = key
+                    self.lines = self.region_lines(h[0], h[1])[0] if key is not None else []
+                    self.area.tag_redraw()
+            else:
+                self.region = region
+                self.update_dist(context, region, mx, my)
+                self.refresh_preview()
+                self.prompt()
+                self.area.tag_redraw()
+            return {'RUNNING_MODAL'}
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self.region = region
+            if self.stage == 'PICK':
+                h = self.hit_face(context, region, mx, my)
+                if h is None:
+                    cmd_log("PushPull: click on a face")
+                    return {'RUNNING_MODAL'}
+                if h[0] == "modifiers":
+                    cmd_log("PushPull: apply the modifiers of this object first")
+                    return {'RUNNING_MODAL'}
+                obj, idx, loc = h
+                segs, nw = self.region_lines(obj, idx)
+                self.target = (obj, idx, segs, nw, Vector(loc))
+                self.stage = 'DIST'
+                self.dist = 0.0
+                self.typed = ""
+                self.refresh_preview()
+                self.prompt()
+                self.area.tag_redraw()
+                return {'RUNNING_MODAL'}
+            return self.finish(context)
+        return {'RUNNING_MODAL'}
+
+
+# ---- Auto CPlane : le plan de construction suit la face / l'objet plan sélectionné (désactivé par défaut) ----
+_AUTOCP = {"sig": {}}
+
+
+def autocp_frame_object(obj):
+    """Repère (origine, X, Y, Z) en monde d'un objet maillage entièrement plan, sinon None."""
+    me = obj.data
+    n = len(me.polygons)
+    if n == 0 or n > 200000:
+        return None
+    nm = np.empty(n * 3, dtype=np.float64)
+    me.polygons.foreach_get("normal", nm)
+    nm = nm.reshape(-1, 3)
+    n0 = nm[0]
+    if np.any(nm @ n0 < 1.0 - 1e-5):
+        return None
+    mv = len(me.vertices)
+    co = np.empty(mv * 3, dtype=np.float64)
+    me.vertices.foreach_get("co", co)
+    co = co.reshape(-1, 3)
+    if float(np.ptp(co @ n0)) > 1e-4 * max(1.0, float(np.ptp(co, axis=0).max())):
+        return None
+    mw = obj.matrix_world
+    z = (mw.to_3x3() @ Vector(n0)).normalized()
+    c = mw @ Vector(co.mean(axis=0))
+    return autocp_make_frame(c, z)
+
+
+def autocp_make_frame(c, z):
+    up = Vector((0.0, 0.0, 1.0))
+    x = Vector((1.0, 0.0, 0.0)) if abs(z.dot(up)) > 0.999 else up.cross(z)    # face verticale : X horizontal
+    return cp_frame(c, x, z.cross(x))
+
+
+def autocp_frame_faces(obj):
+    """Repère des faces sélectionnées (mode Édition) si elles sont toutes dans un même plan, sinon None."""
+    bm = bmesh.from_edit_mesh(obj.data)
+    faces = [f for f in bm.faces if f.select]
+    if not faces:
+        return None
+    n0 = faces[0].normal
+    d0 = n0.dot(faces[0].verts[0].co)
+    for f in faces[1:]:
+        if f.normal.dot(n0) < 1.0 - 1e-5 or abs(n0.dot(f.verts[0].co) - d0) > 1e-4 * max(1.0, abs(d0)):
+            return None
+    mw = obj.matrix_world
+    c = sum((f.calc_center_median() for f in faces), Vector()) / len(faces)
+    return autocp_make_frame(mw @ c, (mw.to_3x3() @ n0).normalized())
+
+
+def autocp_apply(window, scene, mode):
+    """Calcule le plan de la sélection courante et l'applique aux vues 3D de la fenêtre. Retourne True si quelque chose a changé."""
+    st = scene.dessin
+    frame = None
+    try:
+        ctx_view_layer = window.view_layer
+        obj = ctx_view_layer.objects.active
+        if mode == 'EDIT_MESH' and obj is not None and obj.type == 'MESH':
+            frame = autocp_frame_faces(obj)
+        elif mode == 'OBJECT':
+            sel = [o for o in ctx_view_layer.objects if o.select_get()]
+            if len(sel) == 1 and sel[0].type == 'MESH':
+                frame = autocp_frame_object(sel[0])
+    except (ReferenceError, RuntimeError, AttributeError, ValueError):
+        frame = None
+    changed = False
+    for area in window.screen.areas:
+        if area.type != 'VIEW_3D':
+            continue
+        rv3d = area.spaces.active.region_3d
+        cs = cp_state(rv3d, create=True)
+        if frame is not None:
+            cp_set(rv3d, frame, auto=True)
+            changed = True
+        elif cs["cur"] is not None and cs.get("auto") and not st.auto_cplane_sticky:
+            cp_set(rv3d, None, auto=True)           # sans « Sticky » : plus de face plane, on revient au plan du sol
+            changed = True
+        if changed:
+            area.tag_redraw()
+    return changed
+
+
+def autocp_timer():
+    """Surveille la sélection (peu coûteux : un tuple comparé) seulement quand le bouton Auto CPlane est actif."""
+    try:
+        for win in bpy.context.window_manager.windows:
+            scene = win.scene
+            if not scene.dessin.auto_cplane:
+                _AUTOCP["sig"].pop(win.as_pointer(), None)
+                continue
+            vl = win.view_layer
+            act = vl.objects.active
+            mode = act.mode if act is not None else 'OBJECT'
+            if mode == 'EDIT':
+                mode = 'EDIT_MESH'
+            if mode == 'EDIT_MESH' and act is not None and act.type == 'MESH':
+                me = act.data
+                sig = (mode, act.name, me.total_face_sel, me.total_vert_sel)
+            elif mode == 'OBJECT':
+                names = tuple(o.name for o in vl.objects if o.select_get())
+                sig = (mode, names, act.name if act is not None else "", tuple(round(c, 5) for row in act.matrix_world for c in row) if act is not None and len(names) == 1 else None)
+            else:
+                continue
+            key = win.as_pointer()
+            if _AUTOCP["sig"].get(key) != sig:
+                first = key not in _AUTOCP["sig"]
+                _AUTOCP["sig"][key] = sig
+                if not first:                       # le premier relevé ne change pas le plan : seul un changement de sélection le fait
+                    autocp_apply(win, scene, mode)
+    except (ReferenceError, RuntimeError, AttributeError, ValueError):
+        pass
+    return 0.3
+
+
+class DESSIN_MT_auto_cplane(bpy.types.Menu):
+    bl_idname = "DESSIN_MT_auto_cplane"
+    bl_label = "Auto CPlane"
+
+    def draw(self, context):
+        lay = self.layout
+        st = context.scene.dessin
+        lay.prop(st, "auto_cplane", text="Auto CPlane")
+        lay.prop(st, "auto_cplane_sticky", text="Sticky (keep the plane of the last planar selection)")
+        lay.separator()
+        lay.operator(DESSIN_OT_cplane_named.bl_idname, text="World Top (back to the ground plane)").name = 'Top'
+        lay.operator(DESSIN_OT_cplane_named.bl_idname, text="Previous plane", icon='LOOP_BACK').name = 'UNDO'
+
+
+class DESSIN_OT_cplane_named(bpy.types.Operator):
+    bl_idname = "dessin.cplane_named"
+    bl_label = "CPlane"
+    bl_options = {'REGISTER'}
+
+    name: bpy.props.StringProperty(default='Top')
+
+    @classmethod
+    def poll(cls, context):
+        return cp_current_rv3d(context) is not None
+
+    def execute(self, context):
+        if self.name == 'UNDO':
+            cmd_log(_act_cplane_undo(context))
+        else:
+            cmd_log(cp_apply_named(context, self.name))
+        for win in context.window_manager.windows:
+            for a in win.screen.areas:
+                if a.type == 'VIEW_3D':
+                    a.tag_redraw()
+        return {'FINISHED'}
+
+
+def _act_auto_cplane(context):
+    st = context.scene.dessin
+    st.auto_cplane = not st.auto_cplane
+    return "Auto CPlane " + ("on" if st.auto_cplane else "off")
+
+
 CMD_ACTIONS = (
+    ("Auto CPlane", "acp autocplane", "", "Turn Auto CPlane on / off: the construction plane follows the planar object or face you select", _act_auto_cplane),
+    ("PushPull", "pp pushpull", "", "Pull or push a face of a solid or a surface along its normal: click the face, then move the mouse or type a distance", _act_invoke("dessin.pushpull")),
+    ("CPlane", "cpl cplane", "", "Set the construction plane: click a face to draw on it (3: three points, V: vertical, W: world, U: undo)", _act_cplane_mode('OBJECT')),
+    ("CPlane 3 Points", "cpl3 cplane3 cplane3pt", "", "Construction plane from three points: origin, X axis, Y side", _act_cplane_mode('3PT')),
+    ("CPlane Vertical", "cplv cplanevertical", "", "Vertical construction plane through two points, perpendicular to the current plane", _act_cplane_mode('VERT')),
+    ("CPlane View", "cplview cplaneview", "", "Construction plane parallel to the view", _act_cplane_named('View')),
+    ("CPlane Top", "cpltop cplaneworld cplworld", "", "Back to the world Top construction plane", _act_cplane_named('Top')),
+    ("CPlane Front", "cplfront", "", "World Front construction plane", _act_cplane_named('Front')),
+    ("CPlane Right", "cplright", "", "World Right construction plane", _act_cplane_named('Right')),
+    ("CPlane Back", "cplback", "", "World Back construction plane", _act_cplane_named('Back')),
+    ("CPlane Left", "cplleft", "", "World Left construction plane", _act_cplane_named('Left')),
+    ("CPlane Bottom", "cplbottom", "", "World Bottom construction plane", _act_cplane_named('Bottom')),
+    ("CPlane Elevation", "cple cplelev cplaneelevation", "", "Move the construction plane along its normal by a distance", _act_invoke("dessin.cplane_elevation")),
+    ("CPlane Undo", "cplundo cplaneundo", "", "Previous construction plane", _act_cplane_undo),
+    ("CPlane Redo", "cplredo cplaneredo", "", "Next construction plane", _act_cplane_redo),
     ("Undo", "undo", "ed.undo", "Undo the last action", _act_op("ed.undo")),
     ("Redo", "redo", "ed.redo", "Redo the last undone action", _act_op("ed.redo")),
     ("Delete", "e del delete erase", "", "Delete the selected objects", _act_op("object.delete")),
@@ -25327,6 +26372,8 @@ def cmd_click_idle(context, event):
             bpy.ops.dessin.command_line('INVOKE_DEFAULT')
         elif kind == 'key' and val == "Esc":
             bpy.ops.dessin.tool_exit()
+        elif kind == 'key' and val in ("F", "C") and DessinBase.active_tool_id(context) == "dessin.trim_tool":
+            bpy.ops.dessin.trim_mode(mode='FENCE' if val == "F" else 'CROSSING')
         elif kind == 'view':
             bpy.ops.dessin.view_restore('INVOKE_DEFAULT', name=val)
         elif kind == 'viewmenu':
@@ -25539,7 +26586,16 @@ def cmd_bar_cb():
         cls = cmd_tool_class(tid)
         name = cmd_clean_label(cls.bl_label) if cls is not None else tid
         hint = (getattr(cls, "dessin_hint", "") or (cls.bl_description if cls is not None else ""))
-        lines.append(([("t", name, "acc", True), ("t", hint, "dim")], [("c", "Esc", "leave", 'key')]))
+        chips_t = [("c", "Esc", "leave", 'key')]
+        if tid == "dessin.trim_tool":
+            try:
+                fence = bpy.context.scene.dessin.trim_mode == 'FENCE'
+            except (AttributeError, ReferenceError):
+                fence = True
+            hint = ("Drag a fence line across the parts to remove, or click one part" if fence else
+                    "Drag a crossing box over the parts to remove, or click one part") + "  ·  cutting curves: select them first (none: all)"
+            chips_t = [("c", "F", ("● " if fence else "") + "Fence", 'key'), ("c", "C", ("" if fence else "● ") + "Crossing", 'key')] + chips_t
+        lines.append(([("t", name, "acc", True), ("t", hint, "dim")], chips_t))
     else:
         last = cmd_by_key(_CMD["last"]) if _CMD["last"] else None
         key = pref("cmd_key")
@@ -25700,8 +26756,9 @@ MODE_BUTTONS = (("ortho", "Ortho", "Ortho (F8): the cursor stays horizontal or v
                 ("osnap_enable", "OSnap", "Object snaps on / off (End, Mid, Cen...)"),
                 ("smart_tracks", "SmartTrack", "Smart tracks on / off: alignment guides from points you hover"),
                 ("gumball", "Gumball", "Gumball on / off: move / rotate / scale handles on the selection (arrow: Gumball menu, orientation Global / Local / View...)"),
+                ("auto_cplane", "Auto CPlane", "Auto CPlane on / off: the construction plane follows the planar object or face you select (arrow: Sticky option, back to the ground plane)"),
                 ("cmd_type", "Quick Type", "Quick Type on / off: typing a letter starts the command line (letters then lose Blender's own shortcuts; Space still opens it)"))
-MODE_ARROWS = {"polar": "polarmenu", "gumball": "gumballmenu"}
+MODE_ARROWS = {"polar": "polarmenu", "gumball": "gumballmenu", "auto_cplane": "autocplanemenu"}
 
 
 def mode_state(context, key):
@@ -25724,6 +26781,9 @@ def mode_click(context, key):
         return
     if key == 'gumballmenu':
         call_menu_later(context, DESSIN_MT_gumball.bl_idname)
+        return
+    if key == 'autocplanemenu':
+        call_menu_later(context, DESSIN_MT_auto_cplane.bl_idname)
         return
     if key == "osnap_enable":
         vbar_toggle(context, "osnap_disable")
@@ -25850,6 +26910,9 @@ def draw_mode_icon(key, cx, cy, s, col):
         seg = [(cx - s, cy), (cx + s, cy), (cx, cy - s), (cx, cy + s), (cx + s, cy), (cx + s * 0.55, cy + s * 0.4),
                (cx + s, cy), (cx + s * 0.55, cy - s * 0.4), (cx, cy + s), (cx + s * 0.4, cy + s * 0.55),
                (cx, cy + s), (cx - s * 0.4, cy + s * 0.55)]
+    elif key == "auto_cplane":
+        loop = [(cx - s, cy - s * 0.6), (cx + s * 0.5, cy - s * 0.6), (cx + s, cy + s * 0.5), (cx - s * 0.5, cy + s * 0.5), (cx - s, cy - s * 0.6)]
+        seg = [(cx, cy + s * 0.5), (cx, cy + s), (cx - s * 0.25, cy + s * 0.7), (cx, cy + s), (cx + s * 0.25, cy + s * 0.7), (cx, cy + s)]
     elif key == "smart_tracks":
         seg = [(cx - s, cy), (cx - s * 0.45, cy), (cx + s * 0.45, cy), (cx + s, cy),
                (cx, cy - s), (cx, cy - s * 0.45), (cx, cy + s * 0.45), (cx, cy + s),
@@ -26165,6 +27228,32 @@ class DESSIN_OT_prefs_reset(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class DESSIN_OT_install_theme(bpy.types.Operator):
+    bl_idname = "dessin.install_theme"
+    bl_label = "Install theme"
+    bl_description = "Installs and applies the theme (dark blue-gray « Blueprint » or light « Vellum »). It changes Blender's colors and rounds the toolbar; pick another theme in Preferences > Themes to go back"
+    bl_options = {'REGISTER'}
+
+    which: bpy.props.EnumProperty(items=(('BLUEPRINT', "Wanderer Blueprint", "Dark theme"), ('VELLUM', "Wanderer Vellum", "Light theme")),
+                                  default='BLUEPRINT', options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        name = {'BLUEPRINT': "Wanderer_Blueprint", 'VELLUM': "Wanderer_Vellum"}[self.which]
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "themes", name + ".xml")
+        if not os.path.isfile(path):
+            self.report({'ERROR'}, "Theme file not found: " + path)
+            return {'CANCELLED'}
+        try:
+            res = bpy.ops.preferences.theme_install(filepath=path, overwrite=True)
+        except RuntimeError as e:
+            self.report({'ERROR'}, "Could not install the theme: " + str(e))
+            return {'CANCELLED'}
+        if 'FINISHED' not in res:
+            return {'CANCELLED'}
+        self.report({'INFO'}, name.replace("_", " ") + " installed and applied")
+        return {'FINISHED'}
+
+
 class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     bl_idname = __name__
 
@@ -26337,6 +27426,10 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
             abox.label(text="Restart Blender to apply the language", icon='INFO')
         abox.prop(self, "icon_palette")
         abox.prop(self, "rich_tooltips")
+        trow = abox.row(align=True)
+        trow.label(text="Theme")
+        trow.operator(DESSIN_OT_install_theme.bl_idname, text="Wanderer Blueprint").which = 'BLUEPRINT'
+        trow.operator(DESSIN_OT_install_theme.bl_idname, text="Wanderer Vellum").which = 'VELLUM'
         gbox = layout.box()
         gbox.label(text="Gumball")
         gcol = gbox.column(align=True)
@@ -26651,12 +27744,19 @@ classes = (
     DESSIN_OT_selection_lasso,
     DESSIN_OT_selection_rect,
     DESSIN_OT_selection_cercle,
+    DESSIN_OT_cplane,
+    DESSIN_OT_cplane_elevation,
+    DESSIN_OT_pushpull,
+    DESSIN_OT_cplane_named,
+    DESSIN_MT_auto_cplane,
     DESSIN_OT_select_loop,
     DESSIN_GGT_gumball,
     DESSIN_PT_gumball,
     DESSIN_PT_cotation,
     DESSIN_OT_shortcuts_clear,
     DESSIN_OT_prefs_reset,
+    DESSIN_OT_install_theme,
+    DESSIN_OT_trim_mode,
     DESSIN_AP_prefs,
     DESSIN_MT_polar_angle,
     DESSIN_PT_selfilter,
@@ -27142,6 +28242,10 @@ def register():
         _TRIM_HL["handle"] = bpy.types.SpaceView3D.draw_handler_add(trim_highlight_cb, (), 'WINDOW', 'POST_VIEW')
     if _CURVE_PTS["handle"] is None:
         _CURVE_PTS["handle"] = bpy.types.SpaceView3D.draw_handler_add(curve_points_cb, (), 'WINDOW', 'POST_VIEW')
+    if _CP_DRAW["handle"] is None:
+        _CP_DRAW["handle"] = bpy.types.SpaceView3D.draw_handler_add(cplane_draw_cb, (), 'WINDOW', 'POST_VIEW')
+    if not bpy.app.timers.is_registered(autocp_timer):
+        bpy.app.timers.register(autocp_timer, first_interval=0.5, persistent=True)
 
 
 def unregister():
@@ -27188,6 +28292,17 @@ def unregister():
         except (ValueError, RuntimeError):
             pass
         _CURVE_PTS["handle"] = None
+    if _CP_DRAW["handle"] is not None:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_CP_DRAW["handle"], 'WINDOW')
+        except (ValueError, RuntimeError):
+            pass
+        _CP_DRAW["handle"] = None
+    if bpy.app.timers.is_registered(autocp_timer):
+        bpy.app.timers.unregister(autocp_timer)
+    _AUTOCP["sig"].clear()
+    CPLANES.clear()
+    _CPLANE["cur"] = None
     _remove_toolbar_filter()
     _restore_native_tools()
     _CLIP["alive"] = False

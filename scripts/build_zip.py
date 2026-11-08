@@ -12,4 +12,8 @@ out = os.path.join(root, "dist", f"wanderer-{version}.zip")
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     for name in ("__init__.py", "blender_manifest.toml"):
         z.write(os.path.join(src, name), name)
+    themes = os.path.join(src, "themes")
+    for name in sorted(os.listdir(themes)):
+        if name.endswith(".xml"):
+            z.write(os.path.join(themes, name), "themes/" + name)
 print("Built", out)

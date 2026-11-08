@@ -1,11 +1,12 @@
 schema_version = "1.0.0"
 
 id = "wanderer"
-version = "2.96.114"
+version = "2.96.121"
 name = "Wanderer CAD"
 tagline = "Precision CAD modeling with snapping and a command line"
 maintainer = "Hostylmatic"
 type = "add-on"
+website = "https://github.com/Impressivetravel/wanderer-cad"
 
 tags = ["3D View", "Modeling", "Mesh", "Object", "User Interface"]
 
