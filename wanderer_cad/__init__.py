@@ -32,7 +32,7 @@ IDLE_TOOL = "dessin.selection_boite_tool"  # outil par défaut (Select / Move) r
 IDLE_FALLBACK = "builtin.select_box"
 
 # Réglages des préférences de l'add-on (valeurs utilisées aussi quand les préférences sont inaccessibles)
-PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "cmd_key": 'SPACE', "esc_deselect": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "cmd_key": 'SPACE', "esc_deselect": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "preview_style": 'CAD', "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -1104,6 +1104,23 @@ def _same_region(op):
         return False
 
 
+def preview_colors():
+    """(couleur du tracé en cours, couleur des points posés). Style CAD : trait blanc sur fond sombre (noir sur fond clair), poignées bleues ;
+    style classique : jaune / orange."""
+    try:
+        if pref("preview_style") == 'CLASSIC':
+            return (1.0, 0.8, 0.1, 1.0), (1.0, 0.5, 0.0, 1.0)
+    except (AttributeError, KeyError, TypeError):
+        pass
+    try:
+        bg = bpy.context.preferences.themes[0].view_3d.space.gradients.high_gradient
+        lum = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]
+    except (AttributeError, IndexError, TypeError):
+        lum = 0.2
+    line = (0.1, 0.11, 0.13, 1.0) if lum > 0.5 else (0.89, 0.89, 0.9, 1.0)
+    return line, (0.23, 0.52, 0.76, 1.0)
+
+
 def draw_view_cb(op):
     if not _same_region(op):
         return
@@ -1166,19 +1183,20 @@ def draw_view_cb(op):
         draw_px_points(pts, 8.0 * px_scale(0.35), (0.15, 1.0, 0.45, 1.0))
         shader.bind()
 
+    line_col, point_col = preview_colors()
     gpu.state.line_width_set(2.0 * px_scale())
     for strip in getattr(op, "preview_extra", ()):
         if len(strip) >= 2:
             batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": [tuple(p) for p in strip]})
-            shader.uniform_float("color", (1.0, 0.8, 0.1, 1.0))
+            shader.uniform_float("color", line_col)
             batch.draw(shader)
     if len(op.preview) >= 2:
         batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": [tuple(p) for p in op.preview]})
-        shader.uniform_float("color", (1.0, 0.8, 0.1, 1.0))
+        shader.uniform_float("color", line_col)
         batch.draw(shader)
 
     if op.points and not getattr(op, "HIDE_POINTS", False):
-        draw_px_points(op.points, 8.0 * px_scale(0.35), (1.0, 0.5, 0.0, 1.0))
+        draw_px_points(op.points, 8.0 * px_scale(0.35), point_col)
         shader.bind()
 
     gpu.state.line_width_set(1.0)
@@ -27303,6 +27321,11 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     gumball_line: bpy.props.FloatProperty(
         name="Arc thickness", default=3.0, min=1.0, max=8.0, precision=1,
         description="Line thickness of the Gumball rotation arcs, in pixels")
+    preview_style: bpy.props.EnumProperty(
+        name="Drawing preview", default='CAD',
+        items=(('CAD', "CAD (white / black line, blue points)", "The line being drawn is white on a dark viewport (black on a light one), the points you placed are blue"),
+               ('CLASSIC', "Classic (yellow line, orange points)", "The previous colors")),
+        description="Colors of the line and the points while you draw")
     rich_tooltips: bpy.props.BoolProperty(
         name="Detailed tool tooltips", default=True, update=_update_icon_palette,
         description="Hovering a tool shows how to use it step by step, its command line alias and the useful keys. Changing it reloads the add-on")
@@ -27425,6 +27448,7 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         if self.language != pref_applied_language():
             abox.label(text="Restart Blender to apply the language", icon='INFO')
         abox.prop(self, "icon_palette")
+        abox.prop(self, "preview_style")
         abox.prop(self, "rich_tooltips")
         trow = abox.row(align=True)
         trow.label(text="Theme")
