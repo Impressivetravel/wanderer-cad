@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Wanderer CAD",
     "author": "Hostylmatic",
-    "version": (2, 96, 121),
+    "version": (2, 96, 122),
     "blender": (4, 2, 0),
     "location": "3D Viewport > Left toolbar (Object and Edit mode)  |  Add > Wanderer  |  Sidebar > Wanderer",
     "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, and run every command from a command line.",
@@ -32,7 +32,7 @@ IDLE_TOOL = "dessin.selection_boite_tool"  # outil par défaut (Select / Move) r
 IDLE_FALLBACK = "builtin.select_box"
 
 # Réglages des préférences de l'add-on (valeurs utilisées aussi quand les préférences sont inaccessibles)
-PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "cmd_key": 'SPACE', "esc_deselect": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "preview_style": 'CAD', "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "cmd_key": 'SPACE', "esc_deselect": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -79,7 +79,7 @@ FR_LABELS = {
     "Lasso Select": "Sélection au lasso", "Leave the tool": "Quitter l'outil", "Loft": "Lissage", "Make 2D": "Créer le 2D",
     "Match Surface": "Adapter la surface", "Material": "Matériau", "Mirror": "Miroir", "Move": "Déplacer",
     "Move (base → destination)": "Déplacer (base → destination)", "Named Views": "Vues nommées",
-    "Offset Edge": "Décaler l'arête", "Offset Surface": "Décaler la surface", "Overkill": "Nettoyer",
+    "Offset Edge": "Décaler l'arête", "Offset Surface": "Décaler la surface", "Overkill": "Nettoyer", "Inset": "Incruster", "SubD Loft": "Lissage SubD", "SubD Sweep 1": "Balayage SubD 1 rail", "SubD Sweep 2": "Balayage SubD 2 rails", "SubD Revolve": "Révolution SubD", "Through the curves": "Par les courbes", "Points per curve": "Points par courbe", "SubD Box": "Boîte SubD", "SubD Sphere": "Sphère SubD", "SubD Cylinder": "Cylindre SubD", "SubD Cone": "Cône SubD", "SubD Torus": "Tore SubD", "SubD Plane": "Plan SubD", "To SubD": "Vers SubD", "SubD to Mesh": "SubD vers maillage", "Toggle SubD Display": "Affichage SubD lisse / cage", "Crease": "Pli", "Remove Crease": "Retirer le pli", "Insert Edge": "Insérer une arête", "Slide": "Glisser", "Bridge": "Pont", "Fill": "Remplir", "Append Face": "Ajouter une face", "Merge Faces": "Fusionner les faces", "Weld": "Souder", "Stitch": "Coudre", "Extract Faces": "Extraire les faces", "Select Loop": "Sélectionner la boucle", "Select Ring": "Sélectionner l'anneau", "Symmetry X": "Symétrie X", "Symmetry Y": "Symétrie Y", "Symmetry Z": "Symétrie Z", "SubD faces": "Faces SubD", "Pipe radius": "Rayon des tubes", "ID Point": "Point ID", "Show Edges": "Afficher les arêtes",
     "Patch": "Remplissage", "Pick object": "Choisir un objet", "Planar Surface": "Surface plane", "Plane": "Plan",
     "Plane (first corner → opposite corner)": "Plan (premier coin → coin opposé)", "Point Light": "Lumière ponctuelle",
     "Polygon: Area": "Polygone : aire", "Polygon: Center, Radius": "Polygone : centre, rayon",
@@ -90,7 +90,7 @@ FR_LABELS = {
     "Reset to defaults": "Valeurs par défaut", "Restore Named View": "Restaurer la vue nommée", "Revolve": "Révolution",
     "Rotate": "Rotation", "Rotate (center, reference, angle)": "Rotation (centre, référence, angle)",
     "Save Current View": "Enregistrer la vue actuelle", "Scale": "Échelle", "Scale 1D": "Échelle 1D", "Scale 2D": "Échelle 2D",
-    "Scale (base, reference 1, reference 2)": "Échelle (base, référence 1, référence 2)", "Select": "Sélectionner",
+    "Select": "Sélectionner",
     "Select Loop": "Sélectionner la boucle", "Shell": "Coque", "Show / Hide Tab": "Afficher / masquer l'onglet",
     "Sphere": "Sphère", "Split Face": "Diviser la face", "Spot Light": "Projecteur", "Stretch": "Étirer", "Sun Light": "Soleil",
     "Sweep 1 Rail": "Balayage 1 rail", "Sweep 2 Rails": "Balayage 2 rails", "Thicken": "Épaissir", "Torus": "Tore", "Track To": "Pointer vers", "Trim": "Ajuster",
@@ -125,7 +125,7 @@ FR_ALIASES = {
     "poly_center_tool": "polygone", "cercle_tool": "c cercle", "cercle_diametre_tool": "cercled", "ellipse_centre_tool": "el ellipse",
     "arc_cse_tool": "a arc", "arc_3pts_tool": "arc3", "boite_tool": "boite", "cylindre_tool": "cyl cylindre", "cone_tool": "cone",
     "pyramide_tool": "pyramide", "tube_tool": "tube", "sphere_tool": "sphere", "tore_tool": "tore", "cotation_tool": "cote cotation",
-    "cotation_rayon_tool": "coterayon", "mesure_aire_tool": "ai aire", "cotation_angle_tool": "cotangle cotationangle", "annotation_tool": "repere annotation texte", "curve_cp_tool": "courbe", "extrude_path_tool": "extrudersurcourbe", "srf_corners_tool": "surfacepoints srfpt", "curve_interp_tool": "interpoler courbeinterp", "sketch_tool": "croquis", "pen_tool": "plume bezier", "point_tool": "pt point", "trim_tool": "aj ajuster",
+    "cotation_rayon_tool": "coterayon", "mesure_aire_tool": "ai aire", "subd_loft_tool": "subdlissage", "subd_sweep1_tool": "subdbalayage1", "subd_sweep2_tool": "subdbalayage2", "subd_revolve_tool": "subdrevolution", "subd_box_tool": "subdboite", "subd_sphere_tool": "subdsphere", "subd_cylinder_tool": "subdcylindre", "subd_cone_tool": "subdcone", "subd_torus_tool": "subdtore", "subd_plane_tool": "subdplan", "text_tool": "texte tx dt", "dist_tool": "di dist distance", "id_point_tool": "id coordonnees", "cotation_angle_tool": "cotangle cotationangle", "annotation_tool": "repere annotation", "curve_cp_tool": "courbe", "extrude_path_tool": "extrudersurcourbe", "srf_corners_tool": "surfacepoints srfpt", "curve_interp_tool": "interpoler courbeinterp", "sketch_tool": "croquis", "pen_tool": "plume bezier", "point_tool": "pt point", "trim_tool": "aj ajuster",
     "join_tool": "j joindre jonction", "explode_tool": "decomposer", "align_tool": "ali aligner", "make2d_tool": "creer2d", "revolve_tool": "revolution",
     "loft_tool": "lissage", "sweep1_tool": "balayage1", "sweep2_tool": "balayage2", "light_point_tool": "lumiere lumierepoint", "light_spot_tool": "projecteur",
     "light_sun_tool": "soleil", "light_area_tool": "lumieresurface", "camera_tool": "camera", "camera_target_tool": "cameracible",
@@ -144,6 +144,12 @@ FR_ACTION_ALIASES = {
 
 # phrases de l'invite de commande (traduites à l'affichage, après analyse du texte : l'ordre des segments ne change pas)
 FR_PHRASES = (
+    ("insertion point (bottom left of the text)", "point d'insertion (en bas à gauche du texte)"),
+    ("type the text   (Enter: next line, Enter on an empty line: finish, Backspace: erase, Esc: finish)", "taper le texte   (Entrée : ligne suivante, Entrée sur une ligne vide : terminer, Retour arrière : effacer, Échap : terminer)"),
+    ("Angle in plane", "Angle dans le plan"), ("From plane", "Depuis le plan"),
+    ("From: base point", "From : point de base"), ("Esc: cancel From", "Échap : annuler From"), ("From: offset", "From : décalage"),
+    ("type @x,y  @distance<angle  or a distance along the cursor, Enter", "taper @x,y  @distance<angle  ou une distance vers le curseur, Entrée"), ("Shift+F: From", "Maj+F : From"),
+    ("Aligned", "Alignée"), ("Horizontal", "Horizontale"), ("Vertical", "Verticale"),
     ("first point of the cutting line (or click an existing line)", "premier point de la ligne de coupe (ou cliquer une ligne existante)"),
     ("first corner of the crossing window", "premier coin de la fenêtre de capture"),
     ("opposite corner of the window", "coin opposé de la fenêtre"),
@@ -190,7 +196,7 @@ FR_PHRASES = (
     ("cut height from the center", "hauteur de coupe depuis le centre"),
     ("radius of the cone at the target (drag, or type the radius then Enter)", "rayon du cône à la cible (glisser, ou taper le rayon puis Entrée)"),
     ("radius (drag, or type the radius then Enter)", "rayon (glisser, ou taper le rayon puis Entrée)"),
-    ("major radius", "grand rayon"), ("outer radius", "rayon extérieur"), ("inner radius", "rayon intérieur"),
+    ("major radius", "grand rayon"), ("outer radius", "rayon extérieur"), ("second radius (inside or outside the first)", "second rayon (dans ou hors du premier)"), ("invalid second radius", "second rayon invalide"), ("Invalid shape", "Forme invalide"), ("inner radius", "rayon intérieur"),
     ("top radius", "rayon supérieur"), ("tube radius", "rayon du tube"), ("radius", "rayon"),
     ("area and perimeter of the selection", "aire et périmètre de la sélection"),
     ("angle (type then Enter) or first reference point", "angle (taper puis Entrée) ou premier point de référence"),
@@ -218,10 +224,10 @@ FR_PHRASES = (
     ("Shift: orthogonal", "Maj : orthogonal"), ("Shift: free aim", "Maj : visée libre"),
     ("Shift: 15° steps", "Maj : pas de 15°"), ("Shift: circle", "Maj : cercle"), ("Shift: square", "Maj : carré"),
     ("Shift: cube", "Maj : cube"),
-    ("top view: type the height then Enter", "vue de dessus : taper la hauteur puis Entrée"),
-    ("top view: type the spacing then Enter", "vue de dessus : taper l'espacement puis Entrée"),
-    ("top view: type c then Enter", "vue de dessus : taper c puis Entrée"),
-    ("top view: type the value then Enter", "vue de dessus : taper la valeur puis Entrée"),
+    ("or type the height then Enter", "ou taper la hauteur puis Entrée"),
+    ("or type the spacing then Enter", "ou taper l'espacement puis Entrée"),
+    ("or type c then Enter", "ou taper c puis Entrée"),
+    ("or type the value then Enter", "ou taper la valeur puis Entrée"),
     ("type width, Tab, height, Enter", "taper la largeur, Tab, la hauteur, Entrée"),
     ("type width, Tab, depth, Tab, height, Enter", "taper la largeur, Tab, la profondeur, Tab, la hauteur, Entrée"),
     ("type count, Tab, spacing, Enter", "taper le nombre, Tab, l'espacement, Entrée"),
@@ -241,7 +247,7 @@ FR_PHRASES = (
     ("keep one side", "garder un côté"), ("keep the other side", "garder l'autre côté"),
     ("F: swap sides", "F : inverser les côtés"), ("F: other direction", "F : autre direction"), ("F: other side", "F : autre côté"),
     ("F: flip direction", "F : inverser la direction"), ("F: flip the light direction", "F : inverser la direction de la lumière"),
-    ("C: copy / replace", "C : copier / remplacer"), ("C: from center", "C : depuis le centre"), ("R: free reference", "R : référence libre"),
+    ("C: copy / replace", "C : copier / remplacer"), ("C: from center", "C : depuis le centre"), ("R: free reference", "R : référence libre"), ("R: reference by two points", "R : référence par deux points"), ("R: reference / free reference", "R : référence / référence libre"), ("R: next mode", "R : mode suivant"), ("R: back to normal", "R : retour au mode normal"), ("reference angle: first point", "angle de référence : premier point"), ("reference angle: second point", "angle de référence : second point"), ("new angle: point, or type the angle then Enter", "nouvel angle : point, ou taper l'angle puis Entrée"), ("reference length: first point", "longueur de référence : premier point"), ("reference length: second point", "longueur de référence : second point"), ("new length: point (distance from the base point), or type the length then Enter", "nouvelle longueur : point (distance depuis le point de base), ou taper la longueur puis Entrée"), ("R: reference", "R : référence"),
     ("R: back to normal", "R : retour à la normale"),
     ("C: cap the ends", "C : boucher les extrémités"), ("D: delete the input", "D : supprimer l'entrée"),
     ("Esc: cancel", "Échap : annuler"), ("Enter/Space: quit", "Entrée/Espace : quitter"), ("Enter/Space: confirm", "Entrée/Espace : valider"),
@@ -800,6 +806,10 @@ def circle_info(c, P):
     rm = float(r.mean())
     if rm < 1e-9 or float(r.std()) > 0.03 * rm:
         return None
+    if float(r.max() - r.min()) < 1e-3 * rm:
+        # cercle en Bézier (4 arcs cubiques) : les nœuds sont exactement sur le cercle, les échantillons entre eux
+        # légèrement à l'extérieur (jusqu'à 0,03 %) ; le plus petit rayon est le vrai (cote R400 et non R400.05)
+        rm = float(r.min())
     cr = np.cross(d[0], d)
     j = int(np.argmax(np.linalg.norm(cr, axis=1)))
     n = cr[j]
@@ -822,6 +832,40 @@ def circle_info(c, P):
 
 
 _SNAP_CACHE = {}    # nom d'objet -> (clé, points, types, segments, cercles, nb segments) : évite de recalculer les objets inchangés
+
+
+def curve_snap_key(obj, mw):
+    """Signature d'une courbe pour le cache des accroches (points, poignées, réglages, position) ; None si illisible."""
+    import zlib
+    try:
+        if len(obj.modifiers):
+            return None            # forme évaluée qui dépend des modificateurs : pas de cache
+        cu = obj.data
+        h = zlib.crc32(mw.tobytes())
+        meta = [cu.as_pointer(), cu.resolution_u, cu.dimensions, repr(obj.get("dessin_centre")), len(cu.splines),
+                cu.bevel_depth, cu.extrude, cu.offset, cu.bevel_mode, bool(cu.bevel_object), bool(cu.taper_object)]
+        for sp in cu.splines:
+            meta += [sp.type, sp.use_cyclic_u, sp.order_u, sp.resolution_u, sp.use_endpoint_u, sp.use_bezier_u]
+            if sp.type == 'BEZIER':
+                n = len(sp.bezier_points)
+                a = np.empty(n * 9, dtype=np.float32)
+                b = np.empty(n * 3, dtype=np.float32)
+                c = np.empty(n * 3, dtype=np.float32)
+                sp.bezier_points.foreach_get('co', b)
+                sp.bezier_points.foreach_get('handle_left', c)
+                a[:n * 3] = b
+                a[n * 3:n * 6] = c
+                sp.bezier_points.foreach_get('handle_right', c)
+                a[n * 6:] = c
+            else:
+                n = len(sp.points)
+                a = np.empty(n * 4, dtype=np.float32)
+                sp.points.foreach_get('co', a)
+            meta.append(n)
+            h = zlib.crc32(a.tobytes(), h)
+        return (tuple(meta), h)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return None
 
 
 def collect_snap_points(context, exclude=None, only=None):
@@ -920,6 +964,17 @@ def collect_snap_points(context, exclude=None, only=None):
                 add_edges(w[ev[:, 0]], w[ev[:, 1]])
 
         elif obj.type == 'CURVE':
+            ckey = curve_snap_key(obj, mw)
+            if ckey is not None:
+                seen_names.add(obj.name)
+                hit = _SNAP_CACHE.get(obj.name)
+                if hit is not None and hit[0] == ckey:
+                    chunks.extend(hit[1])
+                    kinds.extend(hit[2])
+                    edge_chunks.extend(hit[3])
+                    circles.extend(hit[4])
+                    edge_total[0] += hit[5]
+                    continue
             for sp in obj.data.splines:
                 if sp.type == 'BEZIER':
                     bp = sp.bezier_points
@@ -928,7 +983,16 @@ def collect_snap_points(context, exclude=None, only=None):
                         continue
                     trip = [(to_world([tuple(p.co)])[0], to_world([tuple(p.handle_left)])[0],
                              to_world([tuple(p.handle_right)])[0]) for p in bp]
-                    add([t[0] for t in trip], 0)
+                    if obj.get("dessin_centre") is not None:
+                        # cercle / arc / ellipse : seules les extrémités d'un arc ouvert sont des End ; les nœuds intérieurs
+                        # (quadrants de la construction en Bézier) sont des Knot, les vrais quadrants viennent de Quad
+                        if sp.use_cyclic_u:
+                            add([t[0] for t in trip], 6)
+                        else:
+                            add([trip[0][0], trip[-1][0]], 0)
+                            add([t[0] for t in trip[1:-1]], 6)
+                    else:
+                        add([t[0] for t in trip], 0)
                     add([t[1] for t in trip] + [t[2] for t in trip], 6)
                     segs = n if sp.use_cyclic_u else n - 1
                     mids = []
@@ -949,11 +1013,7 @@ def collect_snap_points(context, exclude=None, only=None):
                     if n == 0:
                         continue
                     wp = to_world(pts)
-                    if sp.use_cyclic_u:
-                        add(wp, 6)
-                    else:
-                        add(wp[[0, -1]], 0)
-                        add(wp[1:-1], 6)
+                    add(wp, 0)          # End : sommets d'une polyligne (extrémités de chaque segment, comme Rhino)
                     segs = n if sp.use_cyclic_u else n - 1
                     mids = [
                         (np.array(pts[i]) + np.array(pts[(i + 1) % n])) * 0.5
@@ -1105,13 +1165,7 @@ def _same_region(op):
 
 
 def preview_colors():
-    """(couleur du tracé en cours, couleur des points posés). Style CAD : trait blanc sur fond sombre (noir sur fond clair), poignées bleues ;
-    style classique : jaune / orange."""
-    try:
-        if pref("preview_style") == 'CLASSIC':
-            return (1.0, 0.8, 0.1, 1.0), (1.0, 0.5, 0.0, 1.0)
-    except (AttributeError, KeyError, TypeError):
-        pass
+    """(couleur du tracé en cours, couleur des points posés) : trait blanc sur fond sombre (noir sur fond clair), points bleus."""
     try:
         bg = bpy.context.preferences.themes[0].view_3d.space.gradients.high_gradient
         lum = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]
@@ -1209,19 +1263,22 @@ def draw_px_points(pts, size, color):
     try:
         ctx = bpy.context
         region, rv3d = ctx.region, ctx.region_data
-        if region is None or rv3d is None or not pts or region.width < 2 or region.height < 2:
+        if region is None or rv3d is None or pts is None or len(pts) == 0 or region.width < 2 or region.height < 2:
             return
-        from bpy_extras.view3d_utils import location_3d_to_region_2d
         h = size / 2.0
-        tris = []
-        for p in pts:
-            q = location_3d_to_region_2d(region, rv3d, Vector(p))
-            if q is None:
-                continue
-            x, y = q.x, q.y
-            tris += [(x - h, y - h), (x + h, y - h), (x + h, y + h), (x - h, y - h), (x + h, y + h), (x - h, y + h)]
-        if not tris:
+        P = np.asarray([tuple(p) for p in pts] if not isinstance(pts, np.ndarray) else pts, dtype=np.float64).reshape(-1, 3)
+        M = np.array(rv3d.perspective_matrix, dtype=np.float64)
+        clip = np.hstack((P, np.ones((len(P), 1)))) @ M.T
+        w_ = clip[:, 3]
+        ok = w_ > 1e-9                      # derrière la caméra : pas dessiné (comme location_3d_to_region_2d)
+        if not ok.any():
             return
+        clip = clip[ok]
+        xy = np.empty((len(clip), 2))
+        xy[:, 0] = (clip[:, 0] / clip[:, 3] * 0.5 + 0.5) * region.width
+        xy[:, 1] = (clip[:, 1] / clip[:, 3] * 0.5 + 0.5) * region.height
+        off = np.array(((-h, -h), (h, -h), (h, h), (-h, -h), (h, h), (-h, h)))
+        tris = (xy[:, None, :] + off[None, :, :]).reshape(-1, 2).astype(np.float32)
         w, ht = float(region.width), float(region.height)
         proj = Matrix(((2.0 / w, 0.0, 0.0, -1.0), (0.0, 2.0 / ht, 0.0, -1.0), (0.0, 0.0, 1.0, 0.0), (0.0, 0.0, 0.0, 1.0)))
         sh = get_shader('2D')
@@ -1957,6 +2014,58 @@ def region_rv3d(region, area):
 # Opérateur de base
 # --------------------------------------------------------------------------
 
+def view_height(base, o, n, ro, rv, rv3d):
+    """Hauteur (le long de n, mesurée depuis o) désignée par le rayon souris. Si la hauteur est dans l'axe de la vue
+    (vue de dessus pour une normale Z), comme Rhino / AutoCAD : distance du curseur au point de base, positive
+    au-dessus de lui à l'écran, négative en dessous."""
+    if abs(rv.normalized().dot(n)) > 0.98:
+        hit = geometry.intersect_line_plane(ro, ro + rv, base, n)
+        if hit is None:
+            return None
+        d = hit - base
+        try:
+            up = rv3d.view_rotation @ Vector((0.0, 1.0, 0.0))
+        except (AttributeError, TypeError):
+            up = d
+        side = d.dot(up)
+        return (base - o).dot(n) + math.copysign(d.length, side if abs(side) > 1e-12 else 1.0)
+    res = geometry.intersect_line_line(base, base + n, ro, ro + rv)
+    return (res[0] - o).dot(n) if res else None
+
+
+def parse_coord(text, unit_f=1.0):
+    """Saisie de coordonnées style Rhino/AutoCAD.
+    '#x,y[,z]' ou 'x;y' : absolu (repère du plan) ; '@x,y[,z]' : relatif au dernier point ;
+    'd<a' ou '@d<a' : polaire relatif (distance d, angle a en degrés depuis l'axe X du plan) ; '#d<a' : polaire absolu.
+    Avec ';' comme séparateur, la virgule redevient décimale. Retourne (absolu, (x, y, z)) ou None si incomplet."""
+    s = text.strip().replace(' ', '')
+    if not s:
+        return None
+    absolute = True
+    if s[0] == '#':
+        s = s[1:]
+    elif s[0] == '@':
+        absolute, s = False, s[1:]
+    elif '<' in s:
+        absolute = False
+    if ';' in s:
+        sep, s = ';', s.replace(',', '.')
+    else:
+        sep = ','
+    try:
+        if '<' in s:
+            d, a = s.split('<', 1)
+            d, a = float(d), math.radians(float(a))
+            return absolute, (d * math.cos(a) * unit_f, d * math.sin(a) * unit_f, 0.0)
+        parts = [float(x) for x in s.split(sep)]
+    except ValueError:
+        return None
+    if not 2 <= len(parts) <= 3:
+        return None
+    parts += [0.0] * (3 - len(parts))
+    return absolute, tuple(x * unit_f for x in parts)
+
+
 class DessinBase(bpy.types.Operator):
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -1967,6 +2076,7 @@ class DessinBase(bpy.types.Operator):
     HAS_FLIP = False
     HAS_MODE = False
     EDIT_OK = True  # la commande fonctionne aussi en mode édition (maillage) : elle ajoute alors de la géométrie
+    COORD_OK = True  # saisie #x,y / @x,y / d<angle
     LOCK_OK = True  # X / Y / Z : verrouille le déplacement du curseur sur un axe à partir du dernier point posé
     PLANAR = True  # False : les points accrochés gardent leur vraie position 3D
     PROP = ()      # étapes (nb de points posés) où Maj impose des proportions : 1 = base carrée, 2 = hauteur = côté (cube)
@@ -2021,6 +2131,11 @@ class DessinBase(bpy.types.Operator):
         self.points = []
         self.typed = ['', '', '']
         self.field = 0
+        self.coord = ''
+        self.coord_pt = None
+        self.from_state = None     # From (AutoCAD) : None, 'BASE' (on attend le point de base), 'OFFSET' (on tape le décalage)
+        self.from_base = None
+        self._from_dir = None
         self.preview = []
         self.guides = []
         self.info = ""
@@ -2136,6 +2251,11 @@ class DessinBase(bpy.types.Operator):
 
     def go_idle(self):
         """Quitte l'outil : on retrouve Select / Move (ou la sélection de Blender si l'add-on n'est pas complet)."""
+        try:     # les puces de la commande qui se termine ne doivent plus capter les clics de Select
+            _CMD["hit"].pop(self.area.as_pointer(), None)
+            self.area.tag_redraw()
+        except (AttributeError, ReferenceError, NameError):
+            pass
         if not getattr(self, "tool_id", None) or not pref("auto_idle"):
             return
         for name in (IDLE_TOOL, IDLE_FALLBACK):
@@ -2171,6 +2291,10 @@ class DessinBase(bpy.types.Operator):
         return find_snap_in(data, mx, my, region, rv3d, ref=self.points[-1] if self.points else None)
 
     def update_cursor(self, context, event):
+        if self.coord_pt is not None:
+            self.cur = self.coord_pt.copy()
+            self.refresh(context)
+            return
         region = find_window_region(self.area, event.mouse_x, event.mouse_y)
         if region is None or self.mouse_over_ui(event):
             self.snap_screen = None
@@ -2424,13 +2548,26 @@ class DessinBase(bpy.types.Operator):
             if side > 1e-12:
                 self.cur = base + n * math.copysign(side, h if h else 1.0)
 
+    def prompt_tail(self):
+        """Fin d'invite commune (S: snap, Shift+F: From, Esc, Enter/Space) : masquée quand les touches servent à autre chose."""
+        return True
+
     def refresh(self, context):
         self.constrain_proportional()
         if self.cur is not None:
             self.preview, self.guides, self.info, _ = self.compute()
+        fs = getattr(self, "from_state", None)
+        if fs == 'OFFSET' and self.from_base is not None and self.cur is not None:
+            self.guides = list(self.guides or []) + [[self.from_base, self.cur]]
         txt = f"{self.TITLE} : {self.prompt()}"
+        if fs == 'BASE':
+            txt = f"{self.TITLE} : From: base point   (Esc: cancel From)"
+        elif fs == 'OFFSET':
+            txt = f"{self.TITLE} : From: offset   (type @x,y  @distance<angle  or a distance along the cursor, Enter)"
         if self.info:
             txt += f"   |   {self.info}"
+        if self.coord:
+            txt += f"   |   coords: {self.coord}" + ("" if self.coord_pt is not None else " _")
         if any(self.typed):
             txt += "   |   typed: " + " / ".join(s or "_" for s in self.typed[:max(1, self.NUMFIELDS)])
         if getattr(self, "track_label", ""):
@@ -2442,7 +2579,8 @@ class DessinBase(bpy.types.Operator):
         snap_txt = "ON" if self.snap_on else "OFF"
         if self.snap_on and self.snap_kind is not None and self.snap_screen is not None:
             snap_txt += f" [{SNAP_NAMES[self.snap_kind]}]"
-        txt += f"   |   S: snap {snap_txt}   |   Esc: cancel   Enter/Space: quit"
+        if self.prompt_tail():
+            txt += f"   |   S: snap {snap_txt}" + ("   |   Shift+F: From" if self.COORD_OK and fs is None else "") + "   |   Esc: cancel   Enter/Space: quit"
         if self.tool_id and not self.points and not any(self.typed):
             # invite « au repos » de l'outil : réaffichée dès qu'on le sélectionne, avant même que la souris entre dans la vue
             _CMD.setdefault("tool_prompt", {})[self.tool_id] = f"{self.TITLE} : {self.prompt()}   |   S: snap ON   |   Esc: cancel   Enter/Space: quit"
@@ -2487,6 +2625,139 @@ class DessinBase(bpy.types.Operator):
         if self.typed[i].startswith('-'):
             return -abs(t)
         return abs(t) if mouse_for_sign >= 0 else -abs(t)
+
+    # ---- saisie de coordonnées / angles ----
+    def coord_target(self):
+        u, v, n = plane_axes(self.axis)
+        fb = self.from_base if getattr(self, "from_state", None) == 'OFFSET' else None
+        if fb is not None:
+            txt = self.coord.strip().replace(' ', '')
+            body = txt[1:] if txt[:1] == '@' else txt
+            try:            # distance seule : le long de la direction base -> curseur (comme la distance directe d'AutoCAD)
+                d = float(body.replace(',', '.')) * self.unit_f if body and not any(c in body for c in ',;<#') else None
+            except ValueError:
+                d = None
+            if d is not None:
+                ref = self._from_dir if self._from_dir is not None else fb + u
+                w = ref - fb
+                w = w - n * w.dot(n)
+                w = w.normalized() if w.length > 1e-9 else u.copy()
+                return fb + w * d
+        r = parse_coord(self.coord, self.unit_f)
+        if r is None:
+            return None
+        absolute, (x, y, z) = r
+        if fb is not None and not self.coord.strip().startswith('#'):
+            base = fb             # From : le décalage part du point de base choisi (avec ou sans @)
+        else:
+            base = plane_origin(self.axis) if (absolute or not self.points) else self.points[-1]
+        return base + u * x + v * y + n * z
+
+    def coord_update(self):
+        self.coord_pt = self.coord_target()
+        if self.coord_pt is not None:
+            self.cur = self.coord_pt.copy()
+
+    def handle_coord(self, event):
+        if event.value != 'PRESS' or event.ctrl or event.alt or event.oskey:
+            return False
+        if event.type == 'ESC' and self.coord:
+            self.coord, self.coord_pt = '', None
+            return True
+        if event.type == 'BACK_SPACE' and self.coord:
+            self.coord = self.coord[:-1]
+            self.coord_update()
+            if not self.coord:
+                self.coord_pt = None
+            return True
+        ch = event.unicode
+        if not ch:
+            return False
+        if not self.coord:
+            if ch in '#@':
+                self.coord = ch
+                self._from_dir = self.cur.copy() if self.cur is not None else None
+                return True
+            if getattr(self, "from_state", None) == 'OFFSET' and ch in "0123456789.-":
+                self._from_dir = self.cur.copy() if self.cur is not None else None
+                self.coord = ch
+                self.coord_update()
+                return True
+            t = self.typed[self.field]
+            if ch in '<;' and self.points and t not in ('', '-'):
+                self.coord, self.typed, self.field = t + ch, ['', '', ''], 0
+                self.coord_update()
+                return True
+            return False
+        if ch not in "0123456789.,-;<":
+            return False
+        self.coord += ch
+        self.coord_update()
+        return True
+
+    def coord_pre(self, context, event):
+        """Saisie de coordonnées et From, traitées avant le modal propre à chaque outil (sinon la polyligne, par
+        exemple, prendrait Entrée ou les chiffres pour elle). Retourne un résultat de modal, ou None pour continuer."""
+        if not self.COORD_OK or getattr(self, "area", None) is None or event.value != 'PRESS':
+            return None
+        et = event.type
+        if et in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE', 'TIMER'} or getattr(self, "selecting", False):
+            return None
+        try:
+            if find_window_region(self.area, event.mouse_x, event.mouse_y) is None or self.mouse_over_ui(event):
+                return None
+            if et == 'LEFTMOUSE' and cmd_hit(self.area, event.mouse_x, event.mouse_y) is not None:
+                return None          # clic sur la barre de commande : pour elle
+        except (ReferenceError, AttributeError):
+            return None
+        if (et == 'LEFTMOUSE' and self.from_state == 'OFFSET' and not self.coord
+                and not (event.ctrl or event.alt or event.oskey)):
+            self.from_state, self.from_base = None, None   # clic pendant le décalage : point cliqué normal
+            return None
+        if (self.COORD_OK and et == 'F' and event.value == 'PRESS' and event.shift
+                and not (event.ctrl or event.alt or event.oskey)):
+            # Maj+F : From (AutoCAD) : point de base temporaire, puis décalage tapé (@x,y, @d<angle ou distance)
+            if self.from_state is None:
+                self.from_state, self.from_base = 'BASE', None
+            else:
+                self.from_state, self.from_base = None, None
+            self.coord, self.coord_pt = '', None
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+        if self.from_state is not None and et == 'ESC' and event.value == 'PRESS' and not self.coord:
+            self.from_state, self.from_base = None, None     # Échap : on quitte seulement From
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+        if (self.from_state == 'BASE' and et == 'LEFTMOUSE' and event.value == 'PRESS'
+                and not (event.ctrl or event.alt or event.oskey)):
+            self.update_cursor(context, event)
+            if self.cur is not None:
+                self.from_base = self.cur.copy()
+                self.from_state = 'OFFSET'
+                self.refresh(context)
+            return {'RUNNING_MODAL'}
+
+        if self.COORD_OK and self.handle_coord(event):
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+
+        if self.COORD_OK and self.coord and et in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS':
+            if self.coord_confirm(context) and self.finished:
+                return self.exit(context)
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+        return None
+
+    def coord_confirm(self, context):
+        pt = self.coord_target()
+        if pt is None:
+            self.report({'WARNING'}, "Incomplete coordinates (#x,y  @x,y  d<angle)")
+            return False
+        self.cur = pt
+        self.coord, self.coord_pt = '', None
+        self.from_state, self.from_base = None, None
+        self.click(context)
+        return True
 
     def handle_typing(self, event):
         if event.value != 'PRESS' or event.ctrl or event.alt or event.oskey:
@@ -2591,7 +2862,7 @@ class DessinBase(bpy.types.Operator):
     def finish_shape(self, context):
         _, _, _, spec = self.compute()
         if spec is None:
-            self.report({'WARNING'}, "Forme invalide")
+            self.report({'WARNING'}, "Invalid shape")
             return
         self.build(context, spec)
         self.finished = True
@@ -2699,6 +2970,8 @@ class DessinBase(bpy.types.Operator):
             if event.value == 'PRESS' and not event.ctrl:
                 self.update_cursor(context, event)
                 if self.cur is not None:
+                    self.coord, self.coord_pt = '', None
+                    self.from_state, self.from_base = None, None
                     self.click(context)
                     if self.finished:
                         return self.exit(context)
@@ -2785,7 +3058,7 @@ class DESSIN_OT_rectangle(DessinBase):
         return corners + [corners[0]], [], info, ("rect", corners)
 
 
-class DESSIN_OT_plan(DessinBase):
+class _PlanBody(DessinBase):
     bl_idname = "dessin.plan"
     bl_label = "Plane"
     bl_description = ("Draws a plane (one face): first corner then opposite corner, with snapping (C: from center, or type width / Tab / height)")
@@ -2818,6 +3091,13 @@ class DESSIN_OT_plan(DessinBase):
                 idle_tool()
             except (RuntimeError, TypeError):
                 pass
+
+
+class DESSIN_OT_plan(_PlanBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _PlanBody.bl_idname
+    bl_label = _PlanBody.bl_label
+    bl_description = _PlanBody.bl_description
 
 
 class PolylineBase(DessinBase):
@@ -4492,9 +4772,7 @@ class DessinSolid(DessinBase):
             coord = Vector((mx, my))
             ro = region_2d_to_origin_3d(region, rv3d, coord)
             rv = region_2d_to_vector_3d(region, rv3d, coord)
-            res = geometry.intersect_line_line(base, base + n, ro, ro + rv)
-            if res:
-                h = (res[0] - o).dot(n)
+            h = view_height(base, o, n, ro, rv, rv3d)
         if h is not None:
             self.cur = base + n * h
         elif self.cur is None:
@@ -4523,7 +4801,7 @@ class DessinSolid(DessinBase):
             self.reset_state()
             return
         if last_stage:
-            self.report({'WARNING'}, "Forme invalide")
+            self.report({'WARNING'}, "Invalid shape")
             return
         self.points.append(self.cur.copy())
         self.lock = None
@@ -4592,7 +4870,7 @@ class DessinSolid(DessinBase):
         return [], [], "", None
 
 
-class DESSIN_OT_boite(DessinSolid):
+class _BoiteBody(DessinSolid):
     bl_idname = "dessin.boite"
     bl_label = "Box"
     bl_description = ("Box: first corner, opposite corner, then height (C: from center, or type width / Tab / depth / Tab / height)")
@@ -4611,7 +4889,7 @@ class DESSIN_OT_boite(DessinSolid):
             return "first corner" + (" (center)" if self.center else "") + "   [C: from center]"
         if len(self.points) == 1:
             return "opposite corner   (Shift: square, or type width, Tab, depth, Tab, height, Enter)"
-        return "height   (Shift: cube, top view: type the height then Enter)"
+        return "height   (Shift: cube, or type the height then Enter)"
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -4641,6 +4919,13 @@ class DESSIN_OT_boite(DessinSolid):
         return prev, guides, info, spec
 
 
+class DESSIN_OT_boite(_BoiteBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _BoiteBody.bl_idname
+    bl_label = _BoiteBody.bl_label
+    bl_description = _BoiteBody.bl_description
+
+
 class DessinFrustum(DessinSolid):
     """Cylindre, cône, tronc de cône, pyramide, tronc de pyramide (classe non enregistrée)."""
 
@@ -4657,7 +4942,7 @@ class DessinFrustum(DessinSolid):
         if n == 1:
             return "radius" + ("  (circumscribed circle)" if self.SIDES else "") + side + "   (or type the radius, Tab, the height, Enter)"
         if n == 2:
-            return "height   (top view: type the height then Enter)"
+            return "height   (or type the height then Enter)"
         return "top radius" + side + "   (or type, then Enter)"
 
     def compute(self):
@@ -4714,7 +4999,7 @@ class DessinFrustum(DessinSolid):
         return prev, guides, info, spec
 
 
-class DESSIN_OT_cylindre(DessinFrustum):
+class _CylindreBody(DessinFrustum):
     bl_idname = "dessin.cylindre"
     bl_label = "Cylinder"
     bl_description = "Cylinder: base center, radius then height (or type radius / Tab / height)"
@@ -4723,13 +5008,27 @@ class DESSIN_OT_cylindre(DessinFrustum):
     KIND = 'cyl'
 
 
-class DESSIN_OT_cone(DessinFrustum):
+class DESSIN_OT_cylindre(_CylindreBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _CylindreBody.bl_idname
+    bl_label = _CylindreBody.bl_label
+    bl_description = _CylindreBody.bl_description
+
+
+class _ConeBody(DessinFrustum):
     bl_idname = "dessin.cone"
     bl_label = "Cone"
     bl_description = "Cone: base center, radius then apex height (or type radius / Tab / height)"
     TITLE = "Cone"
     SOLID_NAME = "Cone"
     KIND = 'cone'
+
+
+class DESSIN_OT_cone(_ConeBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _ConeBody.bl_idname
+    bl_label = _ConeBody.bl_label
+    bl_description = _ConeBody.bl_description
 
 
 class DESSIN_OT_cone_tronque(DessinFrustum):
@@ -4775,7 +5074,7 @@ def _sphere_wire(c, U, V, N):
     return eq, [m1, m2]
 
 
-class DESSIN_OT_sphere(DessinSolid):
+class _SphereBody(DessinSolid):
     bl_idname = "dessin.sphere"
     bl_label = "Sphere"
     bl_description = "Sphere: center then radius (or type the radius)"
@@ -4799,6 +5098,13 @@ class DESSIN_OT_sphere(DessinSolid):
             ("solid", self.SOLID_NAME, sphere_geo, (o, u * r, v * r, n * r, 48, 24, None))
 
 
+class DESSIN_OT_sphere(_SphereBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _SphereBody.bl_idname
+    bl_label = _SphereBody.bl_label
+    bl_description = _SphereBody.bl_description
+
+
 class DESSIN_OT_sphere_tronquee(DessinSolid):
     bl_idname = "dessin.sphere_tronquee"
     bl_label = "Truncated Sphere"
@@ -4814,7 +5120,7 @@ class DESSIN_OT_sphere_tronquee(DessinSolid):
             return "center"
         if len(self.points) == 1:
             return "radius   (or type the radius, Tab, the cut height, Enter)"
-        return "cut height from the center   (top view: type the value then Enter)"
+        return "cut height from the center   (or type the value then Enter)"
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -4856,7 +5162,7 @@ class DESSIN_OT_ellipsoide(DessinSolid):
             return "end of the first axis   (or type a, Tab, b, Tab, c, Enter)"
         if k == 2:
             return "end of the second axis"
-        return "end of the third axis (height)   (top view: type c then Enter)"
+        return "end of the third axis (height)   (or type c then Enter)"
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -4896,7 +5202,7 @@ class DESSIN_OT_ellipsoide(DessinSolid):
         return eq, guides, info, ("solid", self.SOLID_NAME, sphere_geo, (o, A, B, N, 48, 24, None))
 
 
-class DESSIN_OT_tore(DessinSolid):
+class _ToreBody(DessinSolid):
     bl_idname = "dessin.tore"
     bl_label = "Torus"
     bl_description = "Torus: center, major radius then tube radius (type R / Tab / r)"
@@ -4939,6 +5245,13 @@ class DESSIN_OT_tore(DessinSolid):
         return prev, guides, info, ("solid", self.SOLID_NAME, torus_geo, (o, u, v, n, R, r, 48, 24))
 
 
+class DESSIN_OT_tore(_ToreBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _ToreBody.bl_idname
+    bl_label = _ToreBody.bl_label
+    bl_description = _ToreBody.bl_description
+
+
 class DESSIN_OT_tube(DessinSolid):
     bl_idname = "dessin.tube"
     bl_label = "Tube"
@@ -4956,8 +5269,8 @@ class DESSIN_OT_tube(DessinSolid):
         if k == 1:
             return "outer radius   (or type Ro, Tab, Ri, Tab, height, Enter)"
         if k == 2:
-            return "inner radius"
-        return "height   (top view: type the height then Enter)"
+            return "second radius (inside or outside the first)"
+        return "height   (or type the height then Enter)"
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -4977,8 +5290,12 @@ class DESSIN_OT_tube(DessinSolid):
             ri = abs(t) if t is not None else None
         if ri is None:
             return prev, [], info, None
-        if ri < 1e-9 or ri >= ro:
-            return prev, [], info + "   (invalid inner radius)", None
+        if ri < 1e-9 or abs(ri - ro) < 1e-9:
+            return prev, [], info + "   (invalid second radius)", None
+        if ri > ro:     # comme Rhino : le second rayon peut être à l'extérieur du premier (paroi vers l'extérieur)
+            ro, ri = ri, ro
+            prev = arc_samples(o, u, v, ro, 0.0, TAU, 96)
+            info = f"Outer radius {self.fmt(ro)}"
         guides = [arc_samples(o, u, v, ri, 0.0, TAU, 96)]
         info += f"   Inner radius {self.fmt(ri)}"
         h = self.vert(2, pts[3], o, n) if stage >= 3 else (self.typed_height(2) or 0.0)
@@ -4992,6 +5309,732 @@ class DESSIN_OT_tube(DessinSolid):
             guides.append([o + d * ro, tc + d * ro])
         info += f"   Height {self.fmt(abs(h))}"
         return prev, guides, info, ("solid", self.SOLID_NAME, tube_geo, (o, u, v, n, ro, ri, h, 48))
+
+
+# --------------------------------------------------------------------------
+# SubD (comme Rhino) : une SubD est un maillage de contrôle (cage) + un modificateur Subdivision Surface « SubD »
+# --------------------------------------------------------------------------
+
+SUBD_MOD = "SubD"
+
+
+def subd_modifier(obj, create=False):
+    """Modificateur de subdivision de l'objet (celui nommé SubD, sinon le premier Subdivision Surface)."""
+    if obj is None or obj.type != 'MESH':
+        return None
+    mods = [m_ for m_ in obj.modifiers if m_.type == 'SUBSURF']
+    mod = next((m_ for m_ in mods if m_.name == SUBD_MOD), mods[0] if mods else None)
+    if mod is None and create:
+        mod = obj.modifiers.new(SUBD_MOD, 'SUBSURF')
+        mod.levels = 2
+        mod.render_levels = 3
+        try:
+            mod.boundary_smooth = 'PRESERVE_CORNERS'
+            mod.use_limit_surface = True
+        except (AttributeError, TypeError):
+            pass
+        mod.show_in_editmode = True
+        mod.show_on_cage = False
+    return mod
+
+
+def _subd_grid_cube(k):
+    """Cube unité [-0,5 ; 0,5]^3 découpé en k x k faces par côté : (sommets, faces) en quads."""
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    if k > 1:
+        bmesh.ops.subdivide_edges(bm, edges=bm.edges[:], cuts=k - 1, use_grid_fill=True)
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+    V = [v.co.copy() for v in bm.verts]
+    F = [[v.index for v in f.verts] for f in bm.faces]
+    bm.free()
+    return V, F
+
+
+def _subd_outward(verts, faces):
+    """Faces orientées de façon cohérente, normales vers l'extérieur (maillage fermé)."""
+    bm = bmesh.new()
+    try:
+        vs = [bm.verts.new(p) for p in verts]
+        for f in faces:
+            try:
+                bm.faces.new([vs[i] for i in f])
+            except ValueError:
+                pass
+        bm.verts.index_update()
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        return [[v.index for v in f.verts] for f in bm.faces]
+    finally:
+        bm.free()
+
+
+def subd_cage(fn, args, k):
+    """Cage de contrôle d'une primitive SubD (faces orientées vers l'extérieur)."""
+    res = _subd_cage_raw(fn, args, k)
+    if res is None:
+        return None
+    verts, faces = res
+    return verts, _subd_outward(verts, faces)
+
+
+def _subd_cage_raw(fn, args, k):
+    """Cage de contrôle d'une primitive SubD à partir de la spécification du solide équivalent : (sommets monde, faces)."""
+    if fn is box_geo:
+        o, u, v, n, w, d, h, center = args
+        a0, b0 = (-w / 2.0, -d / 2.0) if center else (0.0, 0.0)
+        V, F = _subd_grid_cube(k)
+        pts = [o + u * (a0 + (p.x + 0.5) * w) + v * (b0 + (p.y + 0.5) * d) + n * ((p.z + 0.5) * h) for p in V]
+        if (w * d * h) < 0:
+            F = [list(reversed(f)) for f in F]
+        return pts, F
+    if fn is sphere_geo:
+        o, U, V_, N = args[:4]
+        V, F = _subd_grid_cube(max(2, k))
+        pts = []
+        for p in V:
+            q = p.normalized()
+            pts.append(o + U * q.x + V_ * q.y + N * q.z)
+        return pts, F
+    if fn is torus_geo:
+        o, u, v, n, R, r = args[:6]
+        return torus_geo(o, u, v, n, R, r, 4 * max(2, k), 2 * max(2, k))[:2]
+    if fn is frustum_geo:
+        o, u, v, n, r1, r2, h, seg, start = args
+        seg = 4 * max(2, k)
+        rings = max(1, k)
+        verts, faces = [], []
+        apex = r2 < 1e-9
+        nr = rings + 1 if not apex else rings
+        for j in range(nr):                       # anneaux du flanc, du bas vers le haut
+            t = j / rings
+            rr = r1 + (r2 - r1) * t
+            verts += ring_pts(o + n * (h * t), u, v, rr, seg, start)
+        for j in range(nr - 1):
+            for i in range(seg):
+                i2 = (i + 1) % seg
+                faces.append([j * seg + i, j * seg + i2, (j + 1) * seg + i2, (j + 1) * seg + i])
+        # bouchons : un anneau intérieur (faces en quads) puis un polygone central
+        def cap(ring0, rr, z, flip):
+            b = len(verts)
+            verts.extend(ring_pts(o + n * z, u, v, rr * 0.55, seg, start))
+            for i in range(seg):
+                i2 = (i + 1) % seg
+                f = [ring0 + i, ring0 + i2, b + i2, b + i]
+                faces.append(list(reversed(f)) if flip else f)
+            c = list(range(b, b + seg))
+            faces.append(c if flip else list(reversed(c)))
+        cap(0, r1, 0.0, True)
+        if apex:
+            top = len(verts)
+            verts.append(o + n * h)
+            base = (nr - 1) * seg
+            for i in range(seg):
+                faces.append([base + i, base + (i + 1) % seg, top])
+        else:
+            cap((nr - 1) * seg, r2, h, False)
+        if h < 0:
+            faces = [list(reversed(f)) for f in faces]
+        return verts, faces
+    return None
+
+
+def _subd_frame_coords(P, o, axes):
+    A = np.array([tuple(a) for a in axes], dtype=np.float64)          # (3, 3) : lignes = axes
+    return (np.asarray(P, dtype=np.float64) - np.array(tuple(o))) @ A.T
+
+
+def subd_fit(context, obj, target_pts, o, axes, passes=2):
+    """Comme une primitive SubD de Rhino : la surface lisse (et non la cage) a les dimensions demandées.
+    On met la cage à l'échelle, axe par axe, jusqu'à ce que la surface subdivisée remplisse la boîte voulue."""
+    T = _subd_frame_coords(target_pts, o, axes)
+    tmin, tmax = T.min(0), T.max(0)
+    for _ in range(passes):
+        context.view_layer.update()          # matrix_world à jour (l'objet vient d'être placé)
+        mw = obj.matrix_world.copy()
+        inv = mw.inverted()
+        dg = context.evaluated_depsgraph_get()
+        ev = obj.evaluated_get(dg)
+        me = ev.to_mesh()
+        try:
+            co = np.empty(len(me.vertices) * 3, dtype=np.float64)
+            me.vertices.foreach_get('co', co)
+        finally:
+            ev.to_mesh_clear()
+        W = co.reshape(-1, 3) @ np.array(mw, dtype=np.float64)[:3, :3].T + np.array(mw.translation)
+        E = _subd_frame_coords(W, o, axes)
+        emin, emax = E.min(0), E.max(0)
+        ext_e, ext_t = emax - emin, tmax - tmin
+        s = np.where(ext_e > 1e-9, ext_t / np.where(ext_e > 1e-9, ext_e, 1.0), 1.0)
+        ce, ct = (emin + emax) / 2.0, (tmin + tmax) / 2.0
+        if np.allclose(s, 1.0, atol=1e-5) and np.allclose(ce, ct, atol=1e-7 + 1e-6 * float(np.abs(ext_t).max())):
+            break
+        me0 = obj.data
+        C = np.empty(len(me0.vertices) * 3, dtype=np.float64)
+        me0.vertices.foreach_get('co', C)
+        Wc = C.reshape(-1, 3) @ np.array(mw, dtype=np.float64)[:3, :3].T + np.array(mw.translation)
+        L = _subd_frame_coords(Wc, o, axes)
+        L = ct + (L - ce) * s
+        A = np.array([tuple(a) for a in axes], dtype=np.float64)
+        Wn = np.array(tuple(o)) + L @ A
+        loc = np.hstack((Wn, np.ones((len(Wn), 1)))) @ np.array(inv, dtype=np.float64).T
+        me0.vertices.foreach_set('co', loc[:, :3].astype(np.float32).ravel())
+        me0.update()
+
+
+class SubDMixin:
+    """Primitives SubD : même saisie que le solide équivalent ; on construit une cage de contrôle + le modificateur SubD."""
+
+    def build(self, context, spec):
+        if spec is None or spec[0] != "solid":
+            return super().build(context, spec)
+        _kind, name, fn, args = spec
+        try:
+            k = int(context.scene.dessin.subd_faces)
+        except (AttributeError, TypeError, ValueError):
+            k = 2
+        cage = subd_cage(fn, args, k)
+        if cage is None:
+            return super().build(context, spec)
+        verts, faces = cage
+        if context.mode == 'EDIT_MESH':
+            return edit_add_geometry(context, verts, [], faces)      # en édition : la cage s'ajoute au maillage édité
+        origin = self.points[0].copy()
+        obj = build_solid(context, self.SOLID_NAME, verts, faces, [True] * len(faces), origin)
+        obj["wd_subd"] = True
+        subd_modifier(obj, create=True)
+        target = fn(*args)[0]
+        _o, u, v, n = self.frame()
+        try:
+            subd_fit(context, obj, target, origin, (u, v, n))
+        except (RuntimeError, ValueError, AttributeError, ReferenceError):
+            pass
+        return obj
+
+
+class DESSIN_OT_subd_box(SubDMixin, _BoiteBody):
+    bl_idname = "dessin.subd_box"
+    bl_label = "SubD Box"
+    bl_description = ("SubD box like SubDBox: first corner, opposite corner, then height. Smooth surface over a quad control cage "
+                      "(faces per side: SubD faces), editable in Edit Mode")
+    TITLE = "SubD Box"
+    SOLID_NAME = "SubD Box"
+
+
+class DESSIN_OT_subd_sphere(SubDMixin, _SphereBody):
+    bl_idname = "dessin.subd_sphere"
+    bl_label = "SubD Sphere"
+    bl_description = "SubD sphere like SubDSphere (quad ball): center then radius. Smooth surface over a quad control cage"
+    TITLE = "SubD Sphere"
+    SOLID_NAME = "SubD Sphere"
+
+
+class DESSIN_OT_subd_cylinder(SubDMixin, _CylindreBody):
+    bl_idname = "dessin.subd_cylinder"
+    bl_label = "SubD Cylinder"
+    bl_description = "SubD cylinder like SubDCylinder: center, radius, then height. Smooth surface over a quad control cage"
+    TITLE = "SubD Cylinder"
+    SOLID_NAME = "SubD Cylinder"
+
+
+class DESSIN_OT_subd_cone(SubDMixin, _ConeBody):
+    bl_idname = "dessin.subd_cone"
+    bl_label = "SubD Cone"
+    bl_description = "SubD cone like SubDCone: center, radius, then height. Smooth surface over a control cage"
+    TITLE = "SubD Cone"
+    SOLID_NAME = "SubD Cone"
+
+
+class DESSIN_OT_subd_torus(SubDMixin, _ToreBody):
+    bl_idname = "dessin.subd_torus"
+    bl_label = "SubD Torus"
+    bl_description = "SubD torus like SubDTorus: center, first radius, second radius. Smooth surface over a quad control cage"
+    TITLE = "SubD Torus"
+    SOLID_NAME = "SubD Torus"
+
+
+class DESSIN_OT_subd_plane(_PlanBody):
+    bl_idname = "dessin.subd_plane"
+    bl_label = "SubD Plane"
+    bl_description = "SubD plane like SubDPlane: first corner then opposite corner. A grid of quads (SubD faces per side), smooth, with sharp corners"
+    TITLE = "SubD Plane"
+
+    def build(self, context, spec):
+        if spec[0] != 'rect':
+            return super().build(context, spec)
+        try:
+            k = max(1, int(context.scene.dessin.subd_faces)) * 2
+        except (AttributeError, TypeError, ValueError):
+            k = 4
+        c = [Vector(p) for p in spec[1]]
+        verts = []
+        for j in range(k + 1):
+            for i in range(k + 1):
+                a, b = i / k, j / k
+                verts.append(c[0] + (c[1] - c[0]) * a + (c[3] - c[0]) * b)
+        faces = [[j * (k + 1) + i, j * (k + 1) + i + 1, (j + 1) * (k + 1) + i + 1, (j + 1) * (k + 1) + i]
+                 for j in range(k) for i in range(k)]
+        if (c[1] - c[0]).cross(c[3] - c[0]).dot(plane_axes(self.axis)[2]) < 0:
+            faces = [list(reversed(f)) for f in faces]
+        if context.mode == 'EDIT_MESH':
+            return edit_add_geometry(context, verts, [], faces)
+        origin = self.points[0].copy()
+        obj = build_solid(context, "SubD Plane", verts, faces, [True] * len(faces), origin)
+        obj["wd_subd"] = True
+        subd_modifier(obj, create=True)        # coins conservés (bord lisse, angles vifs) : le plan garde ses dimensions
+        return obj
+
+
+SUBD_ACTIONS = (
+    ('TO_SUBD', "To SubD", "Turn the selected meshes into SubD (smooth surface over their faces as control cage), like ToSubD"),
+    ('TO_MESH', "SubD to Mesh", "Apply the subdivision: the smooth surface becomes the mesh (the control cage is lost)"),
+    ('DISPLAY', "Toggle SubD Display", "Smooth / box display of the SubD, like ToggleSubDDisplay"),
+    ('CREASE', "Crease", "Sharp crease on the selected edges (Edit Mode)"),
+    ('UNCREASE', "Remove Crease", "Remove the crease from the selected edges (Edit Mode)"),
+    ('INSERT_EDGE', "Insert Edge", "Insert an edge loop across the faces, like InsertEdge (Edit Mode)"),
+    ('SLIDE', "Slide", "Slide the selected edges or points along the surface (Edit Mode)"),
+    ('BRIDGE', "Bridge", "Bridge two edge chains with faces (Edit Mode)"),
+    ('FILL', "Fill", "Fill the selected hole with quads (Edit Mode)"),
+    ('APPEND', "Append Face", "Create a face from the selected points or edges, like Append (Edit Mode)"),
+    ('BEVEL', "Bevel", "Bevel the selected edges (Edit Mode)"),
+    ('INSET', "Inset", "Inset the selected faces: a smaller copy of each face surrounded by a ring of faces (Edit Mode)"),
+    ('MERGE_FACES', "Merge Faces", "Merge the selected faces into one (Edit Mode)"),
+    ('WELD', "Weld", "Weld the points that are at the same place (Edit Mode)"),
+    ('STITCH', "Stitch", "Stitch the selected points / edges together, on the last selected (Edit Mode)"),
+    ('EXTRACT', "Extract Faces", "Extract the selected faces into a separate object (Edit Mode)"),
+    ('SEL_LOOP', "Select Loop", "Select the edge loop of the selected edges (Edit Mode)"),
+    ('SEL_RING', "Select Ring", "Select the edge ring of the selected edges (Edit Mode)"),
+    ('REFLECT_X', "Symmetry X", "Symmetry across the X axis of the object, live (Mirror before the SubD), like Reflect"),
+    ('REFLECT_Y', "Symmetry Y", "Symmetry across the Y axis of the object, live"),
+    ('REFLECT_Z', "Symmetry Z", "Symmetry across the Z axis of the object, live"),
+    ('MULTIPIPE', "MultiPipe", "SubD pipes along the selected curves or wire meshes, joined at the nodes, like MultiPipe"),
+)
+SUBD_EDIT_ONLY = {'CREASE', 'UNCREASE', 'INSERT_EDGE', 'SLIDE', 'BRIDGE', 'FILL', 'APPEND', 'BEVEL', 'INSET', 'MERGE_FACES', 'WELD',
+                  'STITCH', 'EXTRACT', 'SEL_LOOP', 'SEL_RING'}
+
+
+def _subd_targets(context):
+    if context.mode == 'EDIT_MESH':
+        return [o for o in context.objects_in_mode_unique_data if o.type == 'MESH']
+    return [o for o in context.selected_objects if o.type == 'MESH']
+
+
+class DESSIN_OT_subd(bpy.types.Operator):
+    bl_idname = "dessin.subd"
+    bl_label = "SubD"
+    bl_description = "SubD tools like the SubD commands of Rhino"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    action: bpy.props.EnumProperty(name="Action", items=[(a, n, d) for a, n, d in SUBD_ACTIONS], default='TO_SUBD')
+
+    @classmethod
+    def description(cls, context, props):
+        return next((d for a, _n, d in SUBD_ACTIONS if a == props.action), cls.bl_description)
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode in {'OBJECT', 'EDIT_MESH'} and context.area is not None and context.area.type == 'VIEW_3D'
+
+    def invoke(self, context, event):
+        return self.execute(context)
+
+    def done(self, msg, level='INFO'):
+        cmd_log(msg)
+        self.report({level}, msg)
+        return {'FINISHED'}
+
+    def execute(self, context):
+        a = self.action
+        label = next(n for k, n, _d in SUBD_ACTIONS if k == a)
+        if a in SUBD_EDIT_ONLY and context.mode != 'EDIT_MESH':
+            self.report({'WARNING'}, f"{label}: select edges, faces or points in Edit Mode (Tab) first")
+            return {'CANCELLED'}
+        try:
+            meth = "do_reflect" if a.startswith("REFLECT_") else "do_" + a.lower()
+            return getattr(self, meth)(context, label)
+        except RuntimeError as e:
+            self.report({'WARNING'}, f"{label}: {str(e).splitlines()[-1] if str(e) else 'not possible here'}")
+            return {'CANCELLED'}
+
+    # ---- objets ----
+    def do_to_subd(self, context, label):
+        objs = _subd_targets(context)
+        if not objs:
+            self.report({'WARNING'}, "To SubD: select meshes first")
+            return {'CANCELLED'}
+        n = 0
+        for o in objs:
+            if subd_modifier(o) is None:
+                subd_modifier(o, create=True)
+                o["wd_subd"] = True
+                n += 1
+            else:
+                subd_modifier(o).show_viewport = True
+        return self.done(f"To SubD: {n} object(s) converted" + ("" if n == len(objs) else f", {len(objs) - n} already SubD"))
+
+    def do_to_mesh(self, context, label):
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        objs = [o for o in context.selected_objects if subd_modifier(o) is not None]
+        if not objs:
+            self.report({'WARNING'}, "SubD to Mesh: select SubD objects first")
+            return {'CANCELLED'}
+        for o in objs:
+            mod = subd_modifier(o)
+            # les modificateurs avant la SubD (Symétrie...) sont appliqués d'abord, dans l'ordre de la pile
+            upto = list(o.modifiers)[:list(o.modifiers).index(mod) + 1]
+            with context.temp_override(object=o, active_object=o, selected_objects=[o], selected_editable_objects=[o]):
+                for md in upto:
+                    if md.name == mod.name:
+                        md.show_viewport = True          # affichage « cage » : on applique quand même la surface lisse
+                    if md.show_viewport:
+                        bpy.ops.object.modifier_apply(modifier=md.name)
+            if "wd_subd" in o.keys():
+                del o["wd_subd"]
+        return self.done(f"SubD to Mesh: {len(objs)} object(s)")
+
+    def do_display(self, context, label):
+        mods = [subd_modifier(o) for o in _subd_targets(context)]
+        mods = [m_ for m_ in mods if m_ is not None]
+        if not mods:
+            self.report({'WARNING'}, "Toggle SubD Display: no SubD in the selection")
+            return {'CANCELLED'}
+        on = not all(m_.show_viewport for m_ in mods)
+        for m_ in mods:
+            m_.show_viewport = on
+        return self.done("SubD display: " + ("smooth" if on else "box (control cage)"))
+
+    def do_reflect(self, context, label):
+        """Symétrie (comme Symmetry / Reflect de Rhino) : la cage est coupée en son milieu sur l'axe, la moitié négative
+        est supprimée et un Mirror (avant la SubD) recrée l'autre moitié, soudée au plan. Relancée : la symétrie est
+        appliquée (les deux moitiés deviennent la cage) et retirée."""
+        axis = "XYZ".index(self.action[-1])
+        objs = _subd_targets(context)
+        if not objs:
+            self.report({'WARNING'}, "Symmetry: select a mesh first")
+            return {'CANCELLED'}
+        was_edit = context.mode == 'EDIT_MESH'
+        if was_edit:
+            bpy.ops.object.mode_set(mode='OBJECT')
+        msgs = []
+        try:
+            for o in objs:
+                mm = next((m_ for m_ in o.modifiers if m_.type == 'MIRROR' and m_.name.startswith("Symmetry")), None)
+                if mm is not None and mm.use_axis[axis]:
+                    with context.temp_override(object=o, active_object=o, selected_objects=[o], selected_editable_objects=[o]):
+                        try:
+                            o.modifiers.move(list(o.modifiers).index(mm), 0)
+                        except (AttributeError, RuntimeError, ValueError):
+                            pass
+                        bpy.ops.object.modifier_apply(modifier=mm.name)
+                    msgs.append("applied (both halves kept)")
+                    continue
+                e = Vector((0.0, 0.0, 0.0))
+                e[axis] = 1.0
+                me = o.data
+                co = [v.co[axis] for v in me.vertices]
+                if not co:
+                    continue
+                c = (min(co) + max(co)) / 2.0
+                if abs(c) > 1e-9:
+                    # le plan de symétrie passe par le milieu de l'objet : l'origine y est ramenée (l'objet ne bouge pas)
+                    me.transform(Matrix.Translation(-e * c))
+                    o.matrix_world = o.matrix_world @ Matrix.Translation(e * c)
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                bmesh.ops.bisect_plane(bm, geom=bm.verts[:] + bm.edges[:] + bm.faces[:], dist=1e-6,
+                                       plane_co=(0.0, 0.0, 0.0), plane_no=tuple(e), clear_inner=True)
+                for v in bm.verts:
+                    if abs(v.co[axis]) < 1e-6:
+                        v.co[axis] = 0.0
+                bm.to_mesh(me)
+                bm.free()
+                me.update()
+                if mm is None:
+                    mm = o.modifiers.new("Symmetry", 'MIRROR')
+                    mm.use_axis = (False, False, False)
+                    mm.use_clip = True
+                    mm.use_mirror_merge = True
+                    mm.merge_threshold = 1e-4
+                    try:
+                        o.modifiers.move(len(o.modifiers) - 1, 0)       # avant la subdivision : la jonction reste lisse
+                    except (AttributeError, RuntimeError):
+                        pass
+                ax = list(mm.use_axis)
+                ax[axis] = True
+                mm.use_axis = ax
+                msgs.append("on")
+        finally:
+            if was_edit:
+                bpy.ops.object.mode_set(mode='EDIT')
+        state = msgs[0] if len(set(msgs)) == 1 and msgs else ", ".join(msgs)
+        return self.done(f"Symmetry {'XYZ'[axis]}: {state}" + ("  (the cage is cut in the middle, edit one half)" if "on" in msgs else ""))
+
+    def do_multipipe(self, context, label):
+        """Un seul réseau de tubes (comme MultiPipe) : toutes les courbes sélectionnées, soudées aux extrémités communes
+        et aux jonctions en T (une extrémité posée sur une autre courbe)."""
+        if context.mode != 'OBJECT':
+            bpy.ops.object.mode_set(mode='OBJECT')
+        srcs = [o for o in context.selected_objects if o.type in {'CURVE', 'MESH'}]
+        dg = context.evaluated_depsgraph_get()
+        P, chains = [], []          # points monde, et pour chaque courbe la liste ordonnée de ses arêtes
+        for src in srcs:
+            ev = src.evaluated_get(dg)
+            try:
+                me = ev.to_mesh()
+            except RuntimeError:
+                continue
+            try:
+                if me is None or len(me.polygons) or not len(me.edges):
+                    continue
+                mw = src.matrix_world
+                base = len(P)
+                P += [mw @ v.co for v in me.vertices]
+                chains.append([(base + e.vertices[0], base + e.vertices[1]) for e in me.edges])
+            finally:
+                ev.to_mesh_clear()
+        if not chains:
+            self.report({'WARNING'}, "MultiPipe: select curves or wire meshes (edges without faces) first")
+            return {'CANCELLED'}
+        Pn = np.array([tuple(p) for p in P], dtype=np.float64)
+        size = float(np.linalg.norm(Pn.max(0) - Pn.min(0))) or 1.0
+        tol = 1e-5 * size + 1e-7
+        # croisements entre courbes différentes (X, T, extrémité ou sommet posé sur une autre courbe) : on coupe les arêtes
+        # concernées au point de rencontre, pour que le réseau soit relié comme avec MultiPipe
+        owner = [ci for ci, c in enumerate(chains) for _e in c]
+        edges = [e for c in chains for e in c]
+        A = np.array([tuple(P[a]) for a, _b in edges], dtype=np.float64)
+        B = np.array([tuple(P[b]) for _a, b in edges], dtype=np.float64)
+        lo, hi = np.minimum(A, B) - tol * 10, np.maximum(A, B) + tol * 10
+        splits = {}
+        for i in range(len(edges)):
+            cand = np.nonzero(np.all(lo[i + 1:] <= hi[i], axis=1) & np.all(hi[i + 1:] >= lo[i], axis=1))[0] + i + 1
+            for j in cand:
+                if owner[j] == owner[i]:
+                    continue
+                res = geometry.intersect_line_line(P[edges[i][0]], P[edges[i][1]], P[edges[j][0]], P[edges[j][1]])
+                if res is None:
+                    continue
+                q1, q2 = res
+                if (q1 - q2).length > tol * 10:
+                    continue
+                ok = True
+                ts = []
+                for k, q in ((i, q1), (j, q2)):
+                    a_, b_ = P[edges[k][0]], P[edges[k][1]]
+                    ab = b_ - a_
+                    L2 = ab.length_squared
+                    t = (q - a_).dot(ab) / L2 if L2 > 1e-24 else 0.0
+                    if t < -1e-6 or t > 1.0 + 1e-6:
+                        ok = False
+                    ts.append(t)
+                if not ok:
+                    continue
+                pq = (q1 + q2) * 0.5
+                idx = len(P)
+                P.append(pq)
+                for k, t in zip((i, j), ts):
+                    if 1e-6 < t < 1.0 - 1e-6:
+                        splits.setdefault(k, []).append((t, idx))
+        new_edges = []
+        for k, (a, b) in enumerate(edges):
+            pts_ = [a] + [ix for _t, ix in sorted(splits.get(k, []))] + [b]
+            new_edges += list(zip(pts_[:-1], pts_[1:]))
+        edges = new_edges
+        # soudure des points confondus
+        key, remap, V = {}, {}, []
+        for i, p in enumerate(P):
+            q = (round(p.x / tol), round(p.y / tol), round(p.z / tol))
+            if q not in key:
+                key[q] = len(V)
+                V.append(p)
+            remap[i] = key[q]
+        E = sorted({tuple(sorted((remap[a], remap[b]))) for a, b in edges if remap[a] != remap[b]})
+        me = bpy.data.meshes.new("MultiPipe")
+        me.from_pydata([tuple(v) for v in V], E, [])
+        me.update()
+        obj = bpy.data.objects.new("MultiPipe", me)
+        context.collection.objects.link(obj)
+        sk = obj.modifiers.new("MultiPipe", 'SKIN')
+        sk.use_smooth_shade = True
+        r = context.scene.dessin.subd_radius or max(size * 0.03, 1e-4)
+        for sv in me.skin_vertices[0].data:
+            sv.radius = (r, r)
+        subd_modifier(obj, create=True)
+        obj["wd_subd"] = True
+        for o in context.selected_objects:
+            o.select_set(False)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        return self.done(f"MultiPipe: {len(E)} segment(s), radius {r:.4g}  (Pipe radius in the SubD panel, 0 = automatic)")
+
+    # ---- mode édition ----
+    def _bm(self, context):
+        out = []
+        for o in _subd_targets(context):
+            out.append((o, bmesh.from_edit_mesh(o.data)))
+        return out
+
+    def do_crease(self, context, label, value=1.0):
+        n = 0
+        for o, bm in self._bm(context):
+            lay = bm.edges.layers.float.get('crease_edge') or bm.edges.layers.float.new('crease_edge')
+            for e in bm.edges:
+                if e.select:
+                    e[lay] = value
+                    n += 1
+            bmesh.update_edit_mesh(o.data, loop_triangles=False, destructive=False)
+        if not n:
+            self.report({'WARNING'}, f"{label}: select edges first")
+            return {'CANCELLED'}
+        return self.done(f"{label}: {n} edge(s)")
+
+    def do_uncrease(self, context, label):
+        return self.do_crease(context, label, 0.0)
+
+    def do_insert_edge(self, context, label):
+        bpy.ops.mesh.loopcut_slide('INVOKE_DEFAULT')
+        return {'FINISHED'}
+
+    def do_slide(self, context, label):
+        if context.tool_settings.mesh_select_mode[1] or context.tool_settings.mesh_select_mode[2]:
+            bpy.ops.transform.edge_slide('INVOKE_DEFAULT')
+        else:
+            bpy.ops.transform.vert_slide('INVOKE_DEFAULT')
+        return {'FINISHED'}
+
+    def _counts(self, context):
+        f = v = 0
+        for o in _subd_targets(context):
+            bm = bmesh.from_edit_mesh(o.data)
+            f += len(bm.faces)
+            v += len(bm.verts)
+        return f, v
+
+    def _checked(self, context, label, run, hint, what="faces"):
+        """Lance l'opération et dit honnêtement ce qui a changé (Blender ne renvoie pas toujours d'erreur)."""
+        f0, v0 = self._counts(context)
+        try:
+            run()
+        except RuntimeError as e:
+            self.report({'WARNING'}, f"{label}: {hint}")
+            return {'CANCELLED'}
+        f1, v1 = self._counts(context)
+        if what == "add" and f1 <= f0:
+            self.report({'WARNING'}, f"{label}: no face created ({hint})")
+            return {'CANCELLED'}
+        if what == "add":
+            what = "faces"
+        if what == "faces" and f1 == f0:
+            self.report({'WARNING'}, f"{label}: nothing done ({hint})")
+            return {'CANCELLED'}
+        if what == "verts" and v1 == v0:
+            self.report({'WARNING'}, f"{label}: nothing done ({hint})")
+            return {'CANCELLED'}
+        if what == "faces":
+            return self.done(f"{label}: {abs(f1 - f0)} face(s) {'added' if f1 > f0 else 'removed'}")
+        return self.done(f"{label}: {v0 - v1} point(s) merged")
+
+    def do_bridge(self, context, label):
+        return self._checked(context, label, lambda: bpy.ops.mesh.bridge_edge_loops(),
+                             "select two separate edge loops or chains with the same number of edges", what="add")
+
+    def do_fill(self, context, label):
+        def run():
+            try:
+                bpy.ops.mesh.fill_grid()
+            except RuntimeError:
+                bpy.ops.mesh.edge_face_add()
+        return self._checked(context, label, run, "select the closed border of a hole", what="add")
+
+    def do_append(self, context, label):
+        return self._checked(context, label, lambda: bpy.ops.mesh.edge_face_add(),
+                             "select at least three points or two edges", what="add")
+
+    def do_inset(self, context, label):
+        if not any(f.select for o in _subd_targets(context) for f in bmesh.from_edit_mesh(o.data).faces):
+            self.report({'WARNING'}, "Inset: select faces first")
+            return {'CANCELLED'}
+        bpy.ops.mesh.inset('INVOKE_DEFAULT')
+        return {'FINISHED'}
+
+    def do_bevel(self, context, label):
+        bpy.ops.mesh.bevel('INVOKE_DEFAULT', affect='EDGES')
+        return {'FINISHED'}
+
+    def do_merge_faces(self, context, label):
+        return self._checked(context, label, lambda: bpy.ops.mesh.dissolve_faces(), "select at least two adjacent faces")
+
+    def do_weld(self, context, label):
+        before = sum(len(bmesh.from_edit_mesh(o.data).verts) for o in _subd_targets(context))
+        bpy.ops.mesh.remove_doubles(threshold=1e-4)
+        after = sum(len(bmesh.from_edit_mesh(o.data).verts) for o in _subd_targets(context))
+        return self.done(f"Weld: {before - after} point(s) welded")
+
+    def do_stitch(self, context, label):
+        def run():
+            try:
+                bpy.ops.mesh.merge(type='LAST')
+            except (RuntimeError, TypeError):
+                bpy.ops.mesh.merge(type='CENTER')
+        return self._checked(context, label, run, "select at least two points or edges", what="verts")
+
+    def do_extract(self, context, label):
+        bpy.ops.mesh.separate(type='SELECTED')
+        return self.done("Extract Faces: the selected faces are now a separate object")
+
+    def do_sel_loop(self, context, label):
+        if hasattr(bpy.ops.mesh, "select_edge_loop_multi"):
+            bpy.ops.mesh.select_edge_loop_multi()
+        else:
+            bpy.ops.mesh.loop_multi_select(ring=False)
+        return {'FINISHED'}
+
+    def do_sel_ring(self, context, label):
+        if hasattr(bpy.ops.mesh, "select_edge_ring_multi"):
+            bpy.ops.mesh.select_edge_ring_multi()
+        else:
+            bpy.ops.mesh.loop_multi_select(ring=True)
+        return {'FINISHED'}
+
+
+class DESSIN_PT_subd(bpy.types.Panel):
+    bl_label = "SubD"
+    bl_idname = "DESSIN_PT_subd"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "Wanderer"
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode in {'OBJECT', 'EDIT_MESH'}
+
+    def draw(self, context):
+        lay = self.layout
+        st = context.scene.dessin
+        col = lay.column(align=True)
+        if context.mode == 'OBJECT':
+            g = col.grid_flow(row_major=True, columns=2, even_columns=True, align=True)
+            for tid, txt in (("dessin.subd_box_tool", "Box"), ("dessin.subd_sphere_tool", "Sphere"),
+                             ("dessin.subd_cylinder_tool", "Cylinder"), ("dessin.subd_cone_tool", "Cone"),
+                             ("dessin.subd_torus_tool", "Torus"), ("dessin.subd_plane_tool", "Plane")):
+                g.operator("wm.tool_set_by_id", text=txt).name = tid
+            col.prop(st, "subd_faces")
+            col.separator()
+        acts = (('TO_SUBD', 'TO_MESH'), ('DISPLAY',), ('REFLECT_X', 'REFLECT_Y', 'REFLECT_Z'))
+        if context.mode == 'EDIT_MESH':
+            acts = (('CREASE', 'UNCREASE'), ('INSERT_EDGE', 'SLIDE'), ('BEVEL', 'INSET'), ('BRIDGE', 'FILL'), ('APPEND',),
+                    ('MERGE_FACES', 'EXTRACT'), ('WELD', 'STITCH'), ('SEL_LOOP', 'SEL_RING'), ('DISPLAY',),
+                    ('REFLECT_X', 'REFLECT_Y', 'REFLECT_Z'))
+        names = {a: n for a, n, _d in SUBD_ACTIONS}
+        for row_acts in acts:
+            row = col.row(align=True)
+            for a in row_acts:
+                row.operator(DESSIN_OT_subd.bl_idname, text=names[a]).action = a
+        if context.mode == 'OBJECT':
+            col.separator()
+            row = col.row(align=True)
+            row.operator(DESSIN_OT_subd.bl_idname, text="MultiPipe").action = 'MULTIPIPE'
+            row.prop(st, "subd_radius", text="Radius")
 
 
 def expand_groups(context, objs):
@@ -5923,23 +6966,67 @@ class DESSIN_OT_rotation(DessinTransform):
     LIGHT_OK = True
     bl_idname = "dessin.rotation"
     bl_label = "Rotate"
-    bl_description = ("Rotates the selection: center, reference point then target point, or typed angle (Shift: 15° steps, C: copy)")
+    bl_description = ("Rotates the selection: center, reference point then target point, or typed angle (R: Reference = reference angle by two points then new angle; Shift: 15° steps, C: copy)")
 
     TITLE = "Rotate"
     NEEDED = 3
     LOCK_OK = False
     NO_SELECTION = "Select the objects to rotate first"
 
+    def invoke(self, context, event):
+        self.refrot = False
+        self.NEEDED = 3
+        return super().invoke(context, event)
+
+    def reset_state(self):
+        self.refrot = False
+        self.NEEDED = 3
+        DessinTransform.reset_state(self)
+
     def can_confirm_typed(self):
+        if getattr(self, "refrot", False):
+            return len(self.points) == 3       # Entrée valide le nouvel angle tapé
         return len(self.points) >= 1
+
+    def handle_typing(self, event):
+        if getattr(self, "refrot", False) and len(self.points) < 3:
+            if event.value == 'PRESS' and event.unicode and event.unicode in "0123456789.,-":
+                return True        # pas de saisie avant l'étape « nouvel angle » (les chiffres n'atteignent pas Blender)
+            return False
+        return DessinTransform.handle_typing(self, event)
+
+    def click(self, context):
+        if getattr(self, "refrot", False) and len(self.points) < 3:
+            self.typed = ['', '', '']
+        DessinTransform.click(self, context)
+
+    def modal(self, context, event):
+        # R : Référence (comme AutoCAD) : l'angle de référence est donné par deux points quelconques
+        if (event.type == 'R' and event.value == 'PRESS'
+                and not (event.ctrl or event.alt or event.oskey or event.shift)
+                and find_window_region(self.area, event.mouse_x, event.mouse_y) is not None
+                and not self.mouse_over_ui(event)):
+            if not getattr(self, "selecting", False) and len(self.points) <= 1 and not any(self.typed):
+                self.refrot = not getattr(self, "refrot", False)
+                self.NEEDED = 4 if self.refrot else 3
+                self.refresh(context)
+            return {'RUNNING_MODAL'}
+        return DessinTransform.modal(self, context, event)
 
     def prompt(self):
         suffix = " (copy)" if self.center else ""
         n = len(self.points)
+        ref = getattr(self, "refrot", False)
         if n == 0:
-            return "center of rotation" + suffix + "   [C: copy]"
+            return "center of rotation" + suffix + "   [C: copy, R: reference " + ("ON" if ref else "off") + "]"
+        if ref:
+            if n == 1:
+                return "reference angle: first point   [R: back to normal]"
+            if n == 2:
+                return "reference angle: second point"
+            return "new angle: point, or type the angle then Enter   (Shift: 15° steps)"
         if n == 1:
-            return "angle (type then Enter) or first reference point"
+            return "angle (type then Enter) or first reference point   [R: reference by two points]"
         return "second point   (Shift: 15° steps, or type the angle then Enter)"
 
     def compute(self):
@@ -5950,6 +7037,38 @@ class DESSIN_OT_rotation(DessinTransform):
         u, v, _ = plane_axes(self.axis)
         axis_vec = u.cross(v).normalized()
         typed = self.typed_raw(0)  # degrés
+
+        if getattr(self, "refrot", False) and n >= 2:
+            # Référence (AutoCAD) : angle de référence = direction p1 -> p2, nouvel angle = direction centre -> curseur
+            # (ou angle tapé, absolu, depuis l'axe X du plan) ; la rotation est leur différence
+            p1 = self.points[1]
+            if n == 2:
+                d = self.cur - p1
+                info = f"Reference angle {math.degrees(math.atan2(d.dot(v), d.dot(u))) % 360:.2f}°" if d.length > 1e-9 else ""
+                return [], [[p1, self.cur]], info, None
+            d0 = self.points[2] - p1
+            if math.hypot(d0.dot(u), d0.dot(v)) < 1e-9:
+                return [], [], "", None
+            ref_a = math.atan2(d0.dot(v), d0.dot(u))
+            e = self.cur - c
+            new_a = math.atan2(e.dot(v), e.dot(u))
+            if self.ortho:
+                step = math.radians(15.0)
+                new_a = round(new_a / step) * step
+            if typed is not None:
+                new_a = math.radians(typed)
+            angle = (new_a - ref_a + math.pi) % TAU - math.pi
+            radius = max(math.hypot(e.dot(u), e.dot(v)), d0.length, 1e-6)
+            guides = [[p1, self.points[2]], [c, c + (u * math.cos(new_a) + v * math.sin(new_a)) * radius]]
+            if abs(angle) < 1e-9:
+                return [], guides, "", None
+            xform = Matrix.Translation(c) @ Matrix.Rotation(angle, 4, axis_vec) @ Matrix.Translation(-c)
+            prev = arc_samples(c, u, v, radius, ref_a, angle)
+            info = (f"Reference {math.degrees(ref_a) % 360:.2f}°  ->  new {math.degrees(new_a) % 360:.2f}°"
+                    f"   Rotation {math.degrees(angle):.2f}°")
+            return prev, guides, info, ("xform", xform)
+        if getattr(self, "refrot", False) and n == 1:
+            return [], [[c, self.cur]], "", None
 
         if n == 1:
             if typed is None:
@@ -6000,21 +7119,23 @@ class ScaleBase(DessinTransform):
     def invoke(self, context, event):
         self.mode = self.START_MODE
         self.refmode = False
+        self.acadref = False
         self.NEEDED = 3
         return super().invoke(context, event)
 
     def reset_state(self):
         self.refmode = False
+        self.acadref = False
         self.NEEDED = 3
         DessinTransform.reset_state(self)
 
     def can_confirm_typed(self):
-        if self.refmode:
+        if self.refmode or getattr(self, "acadref", False):
             return len(self.points) == 3   # Entrée valide la nouvelle longueur tapée
         return len(self.points) >= 1
 
     def handle_typing(self, event):
-        if self.refmode and len(self.points) < 3:
+        if (self.refmode or getattr(self, "acadref", False)) and len(self.points) < 3:
             # pas de saisie avant l'étape « nouvelle longueur » (on avale les chiffres pour ne pas déclencher Blender)
             if event.value == 'PRESS' and event.unicode and event.unicode in "0123456789.,-":
                 return True
@@ -6022,7 +7143,7 @@ class ScaleBase(DessinTransform):
         return DessinTransform.handle_typing(self, event)
 
     def click(self, context):
-        if self.refmode and len(self.points) < 3:
+        if (self.refmode or getattr(self, "acadref", False)) and len(self.points) < 3:
             self.typed = ['', '', '']
         DessinTransform.click(self, context)
 
@@ -6033,18 +7154,35 @@ class ScaleBase(DessinTransform):
                 and find_window_region(self.area, event.mouse_x, event.mouse_y) is not None
                 and not self.mouse_over_ui(event)):
             if not getattr(self, "selecting", False) and len(self.points) <= 1 and not any(self.typed):
-                self.refmode = not self.refmode
-                self.NEEDED = 4 if self.refmode else 3
+                # R : normal -> Référence (AutoCAD : longueur de référence par deux points) -> référence libre -> normal
+                if not self.refmode and not getattr(self, "acadref", False):
+                    self.acadref = True
+                elif getattr(self, "acadref", False):
+                    self.acadref, self.refmode = False, True
+                else:
+                    self.refmode = False
+                self.NEEDED = 4 if (self.refmode or self.acadref) else 3
                 self.refresh(context)
             return {'RUNNING_MODAL'}
         return DessinTransform.modal(self, context, event)
+
+    def ref_label(self):
+        if getattr(self, "acadref", False):
+            return "reference"
+        return "free reference" if self.refmode else "off"
 
     def prompt(self):
         suffix = " (copy)" if self.center else ""
         n = len(self.points)
         if n == 0:
-            return ("base point" + suffix + "   [C: copy, " + ("D: 3D / 2D / 1D, " if self.HAS_MODE else "") + "R: free reference "
-                    + ("ON" if self.refmode else "off") + "]")
+            return ("base point" + suffix + "   [C: copy, " + ("D: 3D / 2D / 1D, " if self.HAS_MODE else "") + "R: "
+                    + self.ref_label() + "]")
+        if getattr(self, "acadref", False):
+            if n == 1:
+                return "reference length: first point   [R: next mode]"
+            if n == 2:
+                return "reference length: second point"
+            return "new length: point (distance from the base point), or type the length then Enter" + ("   [D: 3D / 2D / 1D]" if self.HAS_MODE else "")
         if self.refmode:
             if n == 1:
                 return "first reference point (end of the reference length)   [R: back to normal]"
@@ -6052,7 +7190,7 @@ class ScaleBase(DessinTransform):
                 return "second base point (where the first base point goes)"
             return "second reference point (new length from the second base point), or type the length" + ("   [D: 3D / 2D / 1D]" if self.HAS_MODE else "")
         if n == 1:
-            return "factor (type then Enter) or first reference point   [R: free reference]"
+            return "factor (type then Enter) or first reference point   [R: reference by two points]"
         return "second reference point, or type the new length" + ("   [D: 3D / 2D / 1D]" if self.HAS_MODE else "")
 
     def measure(self, d, direction=None):
@@ -6072,7 +7210,27 @@ class ScaleBase(DessinTransform):
         u, v, _ = plane_axes(self.axis)
 
         dest = c   # point où arrive le point de base (second point de base en mode référence)
-        if self.refmode:
+        if getattr(self, "acadref", False):
+            # Référence (AutoCAD) : longueur de référence = distance p1 -> p2 (deux points quelconques),
+            # nouvelle longueur = distance base -> curseur, ou valeur tapée ; facteur = nouvelle / référence
+            if n == 1:
+                return [], [[c, self.cur]], "", None
+            r1pt = self.points[1]
+            if n == 2:
+                return [], [[r1pt, self.cur]], f"Reference length {self.fmt(self.measure(self.cur - r1pt))}", None
+            d0 = self.points[2] - r1pt
+            r0 = self.measure(d0)
+            if r0 < 1e-9:
+                return [], [], "", None
+            direction = d0.normalized()
+            r1 = self.measure(self.cur - c, direction)
+            typed = self.typed_value(0)
+            if typed is not None:
+                r1 = abs(typed)
+            factor = r1 / r0
+            guides = [[r1pt, self.points[2]], [c, self.cur]]
+            extra = f"   Reference {self.fmt(r0)} -> {self.fmt(r1)}"
+        elif self.refmode:
             if n == 1:
                 return [], [[c, self.cur]], "", None
             r1pt = self.points[1]
@@ -6132,7 +7290,7 @@ class DESSIN_OT_echelle(ScaleBase):
     bl_idname = "dessin.echelle"
     bl_label = "Scale"
     bl_description = ("Scales the selection: base point, two reference points, or typed factor "
-                      "(R: reference mode = base point, reference point, then second base point and second reference point; D: 3D / 2D / 1D, C: copy)")
+                      "(R: Reference = reference length by two points then new length; R again: free reference with a second base point; D: 3D / 2D / 1D, C: copy)")
 
     TITLE = "Scale"
 
@@ -6141,7 +7299,7 @@ class DESSIN_OT_echelle_2d(ScaleBase):
     bl_idname = "dessin.echelle_2d"
     bl_label = "Scale 2D"
     bl_description = ("Scales the selection in the construction plane only (uniform in X and Y of the plane), like Scale2D: "
-                      "base point, two reference points or typed factor. R: free reference, C: copy")
+                      "base point, two reference points or typed factor. R: reference by two points (again: free reference), C: copy")
 
     TITLE = "Scale 2D"
     HAS_MODE = False
@@ -6153,7 +7311,7 @@ class DESSIN_OT_echelle_1d(ScaleBase):
     bl_idname = "dessin.echelle_1d"
     bl_label = "Scale 1D"
     bl_description = ("Scales the selection in one direction only (the one from the base point to the reference point; "
-                      "X of the plane if a factor is typed), like Scale1D: base point, two reference points or typed factor. R: free reference, C: copy")
+                      "X of the plane if a factor is typed), like Scale1D: base point, two reference points or typed factor. R: reference by two points (again: free reference), C: copy")
 
     TITLE = "Scale 1D"
     HAS_MODE = False
@@ -6574,7 +7732,7 @@ class DESSIN_OT_array_rect(DessinArray):
         if len(self.points) == 1:
             return (f"opposite corner of the unit cell ({cnt})   "
                     "(arrows: ←→ X count, ↑↓ Y count, PgUp/PgDn Z count; or type counts with Tab)")
-        return "Z spacing   (top view: type the spacing then Enter)"
+        return "Z spacing   (or type the spacing then Enter)"
 
     def update_cursor(self, context, event):
         if not self.height_stage():
@@ -6607,9 +7765,7 @@ class DESSIN_OT_array_rect(DessinArray):
             coord = Vector((mx, my))
             ro = region_2d_to_origin_3d(region, rv3d, coord)
             rv = region_2d_to_vector_3d(region, rv3d, coord)
-            res = geometry.intersect_line_line(base, base + n, ro, ro + rv)
-            if res:
-                h = (res[0] - o).dot(n)
+            h = view_height(base, o, n, ro, rv, rv3d)
         if h is not None:
             self.cur = base + n * h
         elif self.cur is None:
@@ -7103,31 +8259,67 @@ class DessinEdgeRound(DessinBase):
         W, H = self.region.width, self.region.height
         mx, my = self._mouse
         limit = self.PICK_PX * px_scale()
-        best = None
-        for obj in self.candidates(context):
-            g = self.geometry(obj)
-            if g is None:
+        cands = self.candidates(context)
+        vkey = (P.tobytes(), W, H, id(self.geo))
+        pc = getattr(self, "_pick_cache", None)
+        if pc is None or pc[0] != vkey:
+            pc = self._pick_cache = (vkey, {})         # arêtes projetées par objet, tant que la vue ne bouge pas
+        per_obj = pc[1]
+        r_ = limit + 2.0
+        names = tuple(o.name for o in cands)
+        bounds = getattr(self, "_pick_bounds", None)
+        if bounds is None or bounds[0] != (vkey, names):
+            bounds = self._pick_bounds = ((vkey, names), objects_screen_bounds(cands, P, self.region))
+        bo, xmn, xmx, ymn, ymx, _sure = bounds[1]
+        hitb = (xmx >= mx - r_) & (xmn <= mx + r_) & (ymx >= my - r_) & (ymn <= my + r_)
+        near_objs = [bo[i] for i in np.nonzero(hitb)[0]]
+        objs, parts = [], []
+        for obj in near_objs:
+            d = per_obj.get(obj.name)
+            if d is None:
+                g = self.geometry(obj)
+                if g is None or not len(g[1]):
+                    per_obj[obj.name] = False
+                    continue
+                wco, ed = g
+                clip = np.hstack((wco, np.ones((len(wco), 1)))) @ P.T
+                w = clip[:, 3]
+                ok = w > 1e-9
+                ws = np.where(ok, w, 1.0)
+                sx = (clip[:, 0] / ws * 0.5 + 0.5) * W
+                sy = (clip[:, 1] / ws * 0.5 + 0.5) * H
+                zn = np.clip(clip[:, 2] / ws, -1.0, 1.0)  # profondeur écran : départage aussi les arêtes superposées en vue orthogonale
+                a, b = ed[:, 0], ed[:, 1]
+                d = per_obj[obj.name] = (sx[a], sy[a], sx[b], sy[b], ok[a] & ok[b],
+                                         0.01 * (ws[a] + ws[b]) * 0.5 + 0.25 * (zn[a] + zn[b]))
+            if d is False:
                 continue
-            wco, ed = g
-            clip = np.hstack((wco, np.ones((len(wco), 1)))) @ P.T
-            w = clip[:, 3]
-            ok = w > 1e-9
-            ws = np.where(ok, w, 1.0)
-            sx = (clip[:, 0] / ws * 0.5 + 0.5) * W
-            sy = (clip[:, 1] / ws * 0.5 + 0.5) * H
-            a, b = ed[:, 0], ed[:, 1]
-            ax, ay, bx, by = sx[a], sy[a], sx[b], sy[b]
-            dx, dy = bx - ax, by - ay
-            L2 = dx * dx + dy * dy
-            t = np.where(L2 > 1e-12, ((mx - ax) * dx + (my - ay) * dy) / np.where(L2 > 1e-12, L2, 1.0), 0.0)
-            t = np.clip(t, 0.0, 1.0)
-            dist = np.hypot(ax + dx * t - mx, ay + dy * t - my)
-            dist = np.where(ok[a] & ok[b], dist, np.inf)
-            score = dist + 0.01 * (ws[a] + ws[b]) * 0.5
-            i = int(np.argmin(score))
-            if dist[i] <= limit and (best is None or score[i] < best[0]):
-                best = (float(score[i]), obj, i)
-        return None if best is None else (best[1], best[2])
+            objs.append(obj)
+            parts.append(d)
+        if not objs:
+            return None
+        owner = np.concatenate([np.full(len(d[0]), i, dtype=np.int32) for i, d in enumerate(parts)])
+        local = np.concatenate([np.arange(len(d[0]), dtype=np.int64) for d in parts])
+        ax, ay, bx, by, valid, depth = (np.concatenate([d[k] for d in parts]) for k in range(6))
+        self._pick_data = (objs, owner, local, ax, ay, bx, by, valid, depth)
+        m_ = limit + 1.0       # on ne calcule la distance que pour les arêtes dont la boîte écran est proche du curseur
+        near = valid & (np.minimum(ax, bx) <= mx + m_) & (np.maximum(ax, bx) >= mx - m_) \
+            & (np.minimum(ay, by) <= my + m_) & (np.maximum(ay, by) >= my - m_)
+        idx = np.nonzero(near)[0]
+        if not len(idx):
+            return None
+        ax, ay, bx, by = ax[idx], ay[idx], bx[idx], by[idx]
+        dx, dy = bx - ax, by - ay
+        L2 = dx * dx + dy * dy
+        t = np.where(L2 > 1e-12, ((mx - ax) * dx + (my - ay) * dy) / np.where(L2 > 1e-12, L2, 1.0), 0.0)
+        t = np.clip(t, 0.0, 1.0)
+        dist = np.hypot(ax + dx * t - mx, ay + dy * t - my)
+        score = dist + depth[idx]
+        j = int(np.argmin(score))
+        if dist[j] > limit:
+            return None
+        k = int(idx[j])
+        return objs[int(owner[k])], int(local[k])
 
     def box_select(self, context, remove):
         """Zone vers la droite : arêtes entièrement dedans ; vers la gauche : arêtes touchées (comme la sélection Rhino)."""
@@ -7442,8 +8634,11 @@ def curve_edge_geometry(obj):
     """(sommets monde, arêtes) de la courbe évaluée, ou None."""
     try:
         dg = bpy.context.evaluated_depsgraph_get()
-        me = bpy.data.meshes.new_from_object(obj.evaluated_get(dg))
+        ev = obj.evaluated_get(dg)
+        me = ev.to_mesh()      # maillage temporaire (pas un bloc de données : rien à supprimer de bpy.data, qui ralentit avec la taille du fichier)
     except (RuntimeError, ReferenceError, TypeError):
+        return None
+    if me is None:
         return None
     try:
         nv, ne = len(me.vertices), len(me.edges)
@@ -7454,7 +8649,10 @@ def curve_edge_geometry(obj):
         ed = np.empty(ne * 2, dtype=np.int32)
         me.edges.foreach_get('vertices', ed)
     finally:
-        bpy.data.meshes.remove(me)
+        try:
+            ev.to_mesh_clear()
+        except (RuntimeError, ReferenceError):
+            pass
     mw = np.array(obj.matrix_world, dtype=np.float64)
     wco = co.reshape(-1, 3).astype(np.float64) @ mw[:3, :3].T + mw[:3, 3]
     return wco, ed.reshape(-1, 2)
@@ -7538,7 +8736,56 @@ def chain_normal(P, closed, fallback):
 
 
 def offset_polyline(P, closed, n, d):
-    """Décale la chaîne P (plan de normale n) de d vers la gauche du sens de parcours (angles en onglet)."""
+    """Décale la chaîne P (plan de normale n) de d vers la gauche du sens de parcours (angles en onglet).
+    Les segments devenus trop courts pour la distance (un petit chanfrein, une facette d'arc plus petite que d) disparaissent,
+    leurs voisins se rejoignent : le décalage ne se retourne pas sur lui-même."""
+    pts = [Vector(p) for p in P]
+    for _ in range(4 * len(pts) + 8):
+        m = len(pts)
+        cnt = m if closed else m - 1
+        if m < 4 or cnt < 3:
+            break
+        T, ln = [], []
+        for i in range(cnt):
+            t = pts[(i + 1) % m] - pts[i]
+            ln.append(t.length)
+            if t.length < 1e-12:
+                return _offset_raw(pts, closed, n, d)
+            t.normalize()
+            T.append(t)
+        Lf = [n.cross(t) for t in T]
+        M = {}
+        for i in range(m):
+            if not closed and (i == 0 or i == m - 1):
+                continue
+            l0, l1 = Lf[(i - 1) % cnt], Lf[i % cnt]
+            den = 1.0 + l0.dot(l1)
+            if den >= 0.1:
+                M[i] = (l0 + l1) * (d / den)
+        bad = None
+        for i in range(cnt):
+            a_, b_ = i, (i + 1) % m
+            if a_ in M and b_ in M and ln[i] + (M[b_] - M[a_]).dot(T[i]) < -1e-9:
+                bad = i
+                break
+        if bad is None:
+            break
+        ia, ib = (bad - 1) % cnt, (bad + 1) % cnt
+        hit = _line_meet(pts[ia], T[ia], pts[ib], T[ib])
+        if hit is None:
+            break
+        a_, b_ = bad, (bad + 1) % m
+        new = []
+        for j, p in enumerate(pts):
+            if j == a_:
+                new.append(hit[0])
+            elif j != b_:
+                new.append(p)
+        pts = new
+    return _offset_raw(pts, closed, n, d)
+
+
+def _offset_raw(P, closed, n, d):
     m = len(P)
     cnt = m if closed else m - 1
     L = []
@@ -7561,6 +8808,30 @@ def offset_polyline(P, closed, n, d):
             else:
                 out.append(P[i] + (l0 + l1) * (d / den))
     return out
+
+
+def offset_collapsed(P, closed, Q, d):
+    """Le décalage Q (à la distance d) de la chaîne P s'est-il effondré ? Un décalage valide reste partout à au moins d de P ;
+    s'il se rapproche (distance trop grande pour la forme), il se retourne sur lui-même. Contrôle sur les sommets et les milieux."""
+    A = np.array([tuple(p) for p in P], dtype=np.float64)
+    B = np.array([tuple(q) for q in Q], dtype=np.float64)
+    if len(A) < 2 or len(B) < 2 or d < 1e-12 or len(A) * len(B) > 4e7:
+        return False
+    Bn = np.roll(B, -1, axis=0) if closed else B[1:]
+    Bc = B if closed else B[:-1]
+    S = np.vstack([B, (Bc + Bn) * 0.5, Bc * 0.75 + Bn * 0.25, Bc * 0.25 + Bn * 0.75])
+    A1 = np.roll(A, -1, axis=0) if closed else A[1:]
+    A0 = A if closed else A[:-1]
+    ab = A1 - A0
+    l2 = np.einsum('ij,ij->i', ab, ab)
+    best = np.full(len(S), np.inf)
+    for i in range(0, len(S), 512):
+        chunk = S[i:i + 512]
+        w = chunk[:, None, :] - A0[None, :, :]
+        t = np.clip(np.einsum('kij,ij->ki', w, ab) / np.where(l2 > 1e-18, l2, 1.0), 0.0, 1.0)
+        proj = A0[None, :, :] + t[:, :, None] * ab[None, :, :]
+        best[i:i + 512] = np.linalg.norm(chunk[:, None, :] - proj, axis=2).min(axis=1)
+    return bool(best.min() < d * (1.0 - 2e-3) - 1e-9)
 
 
 def nearest_on_chain(P, closed, q):
@@ -7673,6 +8944,7 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
         fallback = plane_axes(self.axis)[2]
         t = self.typed_value(0)
         res = []
+        self._collapsed = False
         for name, P, closed in self.source_chains():
             n = chain_normal(P, closed, fallback)
             seg, c = nearest_on_chain(P, closed, self.cur)
@@ -7689,6 +8961,9 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
             if d < 1e-9:
                 continue
             Q = offset_polyline(P, closed, n, side * d)
+            if offset_collapsed(P, closed, Q, d):      # distance trop grande pour la forme : pas de décalage (comme « Cannot offset »)
+                self._collapsed = True
+                continue
             res.append((name, Q, closed, d))
         return res
 
@@ -7704,7 +8979,7 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
         for _nm, Q, closed, _d in res:
             self.preview_extra.append(Q + [Q[0]] if closed else Q)
         guides = self.edge_lines((nm, s) for nm, s in self.sel.items())[:3000]
-        info = f"distance {self.fmt(res[0][3])}" if res else "distance 0"
+        info = f"distance {self.fmt(res[0][3])}" if res else ("distance too large: the shape would collapse" if getattr(self, "_collapsed", False) else "distance 0")
         return [], guides, info, ("offset", res) if res else None
 
     def apply_preview(self):
@@ -7718,7 +8993,7 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
             return
         res = self.offset_chains()
         if not res:
-            self.report({'WARNING'}, "Distance is zero")
+            self.report({'WARNING'}, "Cannot offset: the distance is too large for this shape" if getattr(self, "_collapsed", False) else "Distance is zero")
             return
         self.STATE["dist"] = res[0][3]
         by_obj = {}
@@ -8138,8 +9413,124 @@ def _segments_hit_rect(x0, y0, x1, y1, xmin, ymin, xmax, ymax):
     return alive & (t0 <= t1)
 
 
+def objects_screen_bounds(objs, persp, region):
+    """Boîtes englobantes écran de plusieurs objets en un passage : (objs, xmin, xmax, ymin, ymax, sûr).
+    sûr = False : boîte inexploitable (vide, lumière, objet derrière la caméra...), l'objet doit rester candidat."""
+    objs = list(objs)
+    n = len(objs)
+    xmn, xmx = np.full(n, -np.inf), np.full(n, np.inf)
+    ymn, ymx = np.full(n, -np.inf), np.full(n, np.inf)
+    sure = np.zeros(n, dtype=bool)
+    bbs, ids, mws = [], [], []
+    for i, o in enumerate(objs):
+        if o.type in {'EMPTY', 'LIGHT', 'CAMERA', 'SPEAKER', 'LIGHT_PROBE'}:
+            continue
+        try:
+            bbs.append([tuple(c) for c in o.bound_box])
+            mws.append(np.array(o.matrix_world, dtype=np.float64))
+            ids.append(i)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            continue
+    if bbs:
+        bb = np.array(bbs, dtype=np.float64)
+        M = np.array(mws)
+        w = np.einsum('nij,nkj->nki', M[:, :3, :3], bb) + M[:, None, :3, 3]
+        hom = np.concatenate((w, np.ones(w.shape[:2] + (1,))), axis=2) @ persp.T
+        ww = hom[..., 3]
+        ok = (ww > 1e-9).all(axis=1) & np.isfinite(hom).all(axis=(1, 2))
+        ws = np.where(ww > 1e-9, ww, 1.0)
+        sx = (hom[..., 0] / ws * 0.5 + 0.5) * region.width
+        sy = (hom[..., 1] / ws * 0.5 + 0.5) * region.height
+        ids = np.array(ids)
+        good = ids[ok]
+        xmn[good], xmx[good] = sx.min(1)[ok], sx.max(1)[ok]
+        ymn[good], ymx[good] = sy.min(1)[ok], sy.max(1)[ok]
+        sure[good] = True
+    return objs, xmn, xmx, ymn, ymx, sure
+
+
+def objects_near_rect(objs, persp, region, rect, margin=2.0):
+    """Objets dont la boîte englobante projetée peut toucher le rectangle écran (calcul groupé : un seul passage numpy).
+    Les objets sans boîte exploitable (vides, lumières, derrière la caméra...) sont gardés."""
+    objs = list(objs)
+    if not objs:
+        return objs
+    bbs, idx, keep = [], [], []
+    for i, o in enumerate(objs):
+        if o.type in {'EMPTY', 'LIGHT', 'CAMERA', 'SPEAKER', 'LIGHT_PROBE'}:
+            keep.append(i)
+            continue
+        try:
+            bbs.append([tuple(c) for c in o.bound_box])
+            idx.append((i, np.array(o.matrix_world, dtype=np.float64)))
+        except (AttributeError, ReferenceError, RuntimeError, TypeError):
+            keep.append(i)
+    if bbs:
+        bb = np.array(bbs, dtype=np.float64)                         # (n, 8, 3)
+        M = np.array([mw for _i, mw in idx])                          # (n, 4, 4)
+        w = np.einsum('nij,nkj->nki', M[:, :3, :3], bb) + M[:, None, :3, 3]
+        hom = np.concatenate((w, np.ones(w.shape[:2] + (1,))), axis=2) @ persp.T
+        ww = hom[..., 3]
+        ok = (ww > 1e-9).all(axis=1) & np.isfinite(hom).all(axis=(1, 2))
+        ws = np.where(ww > 1e-9, ww, 1.0)
+        sx = (hom[..., 0] / ws * 0.5 + 0.5) * region.width
+        sy = (hom[..., 1] / ws * 0.5 + 0.5) * region.height
+        xmin, ymin, xmax, ymax = rect
+        out = ok & ((sx.max(1) < xmin - margin) | (sx.min(1) > xmax + margin)
+                    | (sy.max(1) < ymin - margin) | (sy.min(1) > ymax + margin))
+        keep += [i for (i, _mw), o_ in zip(idx, out) if not o_]
+    keep.sort()
+    return [objs[i] for i in keep]
+
+
+def bbox_vs_rect(obj, persp, region, rect, margin=2.0):
+    """Boîte englobante projetée contre un rectangle écran : 'out' (entièrement dehors), 'in' (entièrement dedans)
+    ou None (on ne peut pas conclure sans la géométrie)."""
+    if obj.type in {'EMPTY', 'LIGHT', 'CAMERA', 'SPEAKER', 'LIGHT_PROBE'}:
+        return None
+    try:
+        bb = np.array([tuple(c) for c in obj.bound_box], dtype=np.float64)
+        mw = np.array(obj.matrix_world, dtype=np.float64)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return None
+    if bb.shape != (8, 3) or not np.isfinite(bb).all() or np.abs(bb).max() > 1e18:
+        return None
+    pts = bb @ mw[:3, :3].T + mw[:3, 3]
+    sx, sy, ok = _project_region(pts, persp, region)
+    if not ok.all():
+        return None
+    xmin, ymin, xmax, ymax = rect
+    if (sx.max() < xmin - margin or sx.min() > xmax + margin
+            or sy.max() < ymin - margin or sy.min() > ymax + margin):
+        return 'out'
+    if sx.min() >= xmin and sx.max() <= xmax and sy.min() >= ymin and sy.max() <= ymax:
+        return 'in'
+    return None
+
+
+def bbox_outside_rect(obj, persp, region, rect, margin=2.0):
+    """Test rapide : la boîte englobante de l'objet, projetée à l'écran, est-elle entièrement hors du rectangle ?
+    (False si on ne peut pas conclure : objet derrière la caméra, boîte vide...)."""
+    try:
+        bb = np.array([tuple(c) for c in obj.bound_box], dtype=np.float64)
+        mw = np.array(obj.matrix_world, dtype=np.float64)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return False
+    if bb.shape != (8, 3):
+        return False
+    pts = bb @ mw[:3, :3].T + mw[:3, 3]
+    sx, sy, ok = _project_region(pts, persp, region)
+    if not ok.all():
+        return False
+    xmin, ymin, xmax, ymax = rect
+    return (sx.max() < xmin - margin or sx.min() > xmax + margin
+            or sy.max() < ymin - margin or sy.min() > ymax + margin)
+
+
 def object_hit_box(obj, dg, persp, region, rect, crossing):
     """L'objet est-il entièrement dans la boîte (fenêtre) ou touché par elle (capture) ?"""
+    if obj.type not in {'EMPTY', 'LIGHT', 'CAMERA', 'SPEAKER', 'LIGHT_PROBE'} and bbox_outside_rect(obj, persp, region, rect):
+        return False
     xmin, ymin, xmax, ymax = rect
     return object_hit_shape(obj, dg, persp, region,
                             lambda sx, sy: (sx >= xmin) & (sx <= xmax) & (sy >= ymin) & (sy <= ymax),
@@ -8317,6 +9708,78 @@ def type_selectable(space, obj):
         return True
 
 
+def ray_cast_opaque(context, ro, rv, skip_locked=False):
+    """scene.ray_cast qui traverse les objets transparents (affichage filaire / boîte) et, si skip_locked, ceux qu'on ne peut pas
+    sélectionner (calque verrouillé). Même retour que scene.ray_cast : (ok, loc, normal, index, obj, matrix)."""
+    dg = context.evaluated_depsgraph_get()
+    org = ro
+    res = (False, None, None, -1, None, None)
+    for _ in range(12):
+        res = context.scene.ray_cast(dg, org, rv)
+        ok, loc, _n, _i, obj, _m = res
+        if not ok or obj is None:
+            return res
+        try:
+            skip = obj.display_type in {'WIRE', 'BOUNDS'} or not obj.visible_get() or (skip_locked and obj.hide_select)
+        except (RuntimeError, ReferenceError):
+            skip = False
+        if not skip:
+            return res
+        org = loc + Vector(rv).normalized() * 1e-4
+    return (False, None, None, -1, None, None)
+
+
+def _wire_pick_before(context, area, region, rv3d, mx, my, ro, rdir, max_dist, skip):
+    """Objet filaire (courbe, maillage sans face) à moins de 6 px du curseur et pas plus loin que la surface touchée
+    (distance max_dist de la caméra) : le plus proche du curseur, sinon None."""
+    dg = context.evaluated_depsgraph_get()
+    persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
+    r = 6.0 * px_scale()
+    rect = (mx - r, my - r, mx + r, my + r)
+    xmin, ymin, xmax, ymax = rect
+    org = np.array(ro, dtype=np.float64)
+    rd = np.array(rdir, dtype=np.float64)
+    best = None
+    cands = [o for o in context.view_layer.objects if o is not skip and o.type in {'MESH', 'CURVE', 'FONT'}]
+    for o in objects_near_rect(cands, persp, region, rect):
+        try:
+            if o.hide_select or not o.visible_get() or not type_selectable(area.spaces.active, o) or o.get("cad_noGrab"):
+                continue
+            ev = o.evaluated_get(dg)
+            me = ev.to_mesh()
+        except (RuntimeError, ReferenceError):
+            continue
+        try:
+            if me is None or len(me.polygons) or not len(me.edges):
+                continue
+            nv = len(me.vertices)
+            co = np.empty(nv * 3, dtype=np.float32)
+            me.vertices.foreach_get('co', co)
+            e = np.empty(len(me.edges) * 2, dtype=np.int32)
+            me.edges.foreach_get('vertices', e)
+        finally:
+            ev.to_mesh_clear()
+        mw = np.array(o.matrix_world, dtype=np.float64)
+        pts = co.reshape(-1, 3).astype(np.float64) @ mw[:3, :3].T + mw[:3, 3]
+        e = e.reshape(-1, 2)
+        sx, sy, okp = _project_region(pts, persp, region)
+        good = okp[e[:, 0]] & okp[e[:, 1]]
+        if not good.any():
+            continue
+        a, b = e[good, 0], e[good, 1]
+        hit = _segments_hit_rect(sx[a], sy[a], sx[b], sy[b], xmin, ymin, xmax, ymax)
+        if not hit.any():
+            continue
+        va = np.unique(np.concatenate([a[hit], b[hit]]))
+        dist = float(((pts[va] - org) @ rd).min())
+        if dist > max_dist + 1e-4 * max(abs(max_dist), 1.0):
+            continue                       # derrière la surface touchée : elle gagne
+        key = float(np.hypot(sx[va] - mx, sy[va] - my).min())
+        if best is None or key < best[0]:
+            best = (key, o)
+    return best[1] if best else None
+
+
 def pick_object_at(context, area, region, mx, my):
     """(objet, point 3D touché ou None) sous le curseur : lancer de rayon sur les maillages, sinon contact des arêtes."""
     rv3d = region_rv3d(region, area)
@@ -8327,17 +9790,38 @@ def pick_object_at(context, area, region, mx, my):
         wire = area.spaces.active.shading.type == 'WIREFRAME'
     except AttributeError:
         wire = False
+    ok, obj, loc, ro, rv = False, None, None, None, None
     try:
         if wire:
             raise ValueError
         ro = region_2d_to_origin_3d(region, rv3d, m)
         rv = region_2d_to_vector_3d(region, rv3d, m)
-        ok, loc, _n, _i, obj, _mat = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+        dg0 = context.evaluated_depsgraph_get()
+        org = ro
+        for _ in range(12):     # on traverse ce qui n'est pas sélectionnable (calque verrouillé) ou transparent (filaire, boîte)
+            ok, loc, _n, _i, obj, _mat = context.scene.ray_cast(dg0, org, rv)
+            if not ok or obj is None:
+                break
+            try:
+                skip = (obj.hide_select or not obj.visible_get() or not type_selectable(area.spaces.active, obj)
+                        or obj.display_type in {'WIRE', 'BOUNDS'})
+            except (RuntimeError, ReferenceError):
+                skip = True
+            if not skip:
+                break
+            org = loc + rv.normalized() * 1e-4
+            ok, obj = False, None
     except (RuntimeError, TypeError, ValueError):
         ok, obj = False, None
     if ok and obj is not None:
         try:
             if not obj.hide_select and obj.visible_get() and type_selectable(area.spaces.active, obj):
+                try:   # une courbe (sans faces) devant la surface touchée reste prioritaire : le rayon la traverse
+                    w = _wire_pick_before(context, area, region, rv3d, mx, my, ro, rv.normalized(), float((loc - ro).dot(rv.normalized())), obj)
+                except (RuntimeError, ValueError, AttributeError, TypeError, ReferenceError):
+                    w = None
+                if w is not None:
+                    return w, None
                 return obj, loc
         except (RuntimeError, ReferenceError):
             pass
@@ -8346,7 +9830,7 @@ def pick_object_at(context, area, region, mx, my):
         persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
         r = 6.0 * px_scale()
         rect = (mx - r, my - r, mx + r, my + r)
-        for o in context.view_layer.objects:
+        for o in objects_near_rect(context.view_layer.objects, persp, region, rect):
             try:
                 if o.hide_select or not o.visible_get() or o.type == 'EMPTY' or not type_selectable(area.spaces.active, o):
                     continue
@@ -8672,7 +10156,7 @@ def select_edit_shape(context, area, region, inside_fn, seg_fn, crossing, event)
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
 
 
-def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, event):
+def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, event, rect=None):
     """Sélection d'objets par une forme écran (boîte, lasso) : Maj ajoute, Ctrl retire."""
     rv3d = region_rv3d(region, area)
     persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
@@ -8685,6 +10169,13 @@ def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, eve
                 continue
         except RuntimeError:
             continue
+        if rect is not None:     # boîte : test rapide sur la boîte englobante avant la géométrie
+            q = bbox_vs_rect(obj, persp, region, rect, 0.0)
+            if q == 'out':
+                continue
+            if q == 'in':
+                hit.append(obj)
+                continue
         if object_hit_shape(obj, dg, persp, region, inside_fn, seg_fn, crossing):
             hit.append(obj)
     if not (event.shift or event.ctrl):
@@ -8701,6 +10192,8 @@ def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, eve
             pass
     if hit and not event.ctrl and context.view_layer.objects.active not in hit:
         context.view_layer.objects.active = hit[0]
+    if _SF["solo"] is not None:
+        sel_filter_restore(context)     # « seulement ce type » : valable pour une sélection, même si elle n'a rien trouvé
 
 
 class DESSIN_OT_selection_boite(bpy.types.Operator):
@@ -8975,6 +10468,8 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
                                       deselect_all=not (event.shift or event.ctrl))
         except (RuntimeError, TypeError):
             pass
+        if _SF["solo"] is not None and context.mode == 'OBJECT':
+            sel_filter_restore(context)
 
     def start_int(self):
         return (int(self.start[0]), int(self.start[1]))
@@ -8997,7 +10492,7 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
         select_objects_shape(context, self.area, self.region,
                              lambda sx, sy: (sx >= xmin) & (sx <= xmax) & (sy >= ymin) & (sy <= ymax),
                              lambda ax, ay, bx, by: _segments_hit_rect(ax, ay, bx, by, xmin, ymin, xmax, ymax),
-                             crossing, event)
+                             crossing, event, rect)
 
 
 def draw_lasso_cb(op):
@@ -9431,6 +10926,12 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     epaisseur_trait: bpy.props.FloatProperty(
         name="Line thickness", default=0.0, min=0.0, soft_max=5.0, update=_cotation_thickness_update,
         description="Line thickness multiplier (0 = single wire, no thickness: this is what keeps dimensions out of renders)")
+    subd_faces: bpy.props.IntProperty(
+        name="SubD faces", default=2, min=1, max=8,
+        description="SubD primitives: number of faces along each side of the control cage (like the face counts of SubDBox)")
+    subd_radius: bpy.props.FloatProperty(
+        name="Pipe radius", default=0.0, min=0.0, unit='LENGTH',
+        description="MultiPipe: radius of the pipes (0: automatic, 4 % of the size of the curves)")
     sortie_formes: bpy.props.EnumProperty(
         name="Shapes as", default='CURVE',
         items=(('MESH', "Mesh (edges)", "Rectangles, circles, ellipses, polygons, arcs and polylines are created as mesh edges"),
@@ -9635,7 +11136,7 @@ class DESSIN_OT_cotation(DessinBase):
     TITLE = "Dimension"
     NEEDED = 3
     HAS_MODE = True
-    MODES = ("Aligned", "Horizontale", "Verticale")
+    MODES = ("Aligned", "Horizontal", "Vertical")
     mode = 0
 
     def lock_allowed(self):
@@ -9702,7 +11203,7 @@ class DESSIN_OT_cotation(DessinBase):
             length = d.length
             if length < 1e-9:
                 return [], [], "", None
-            return [p0, self.cur], [], f"Longueur {self.text_for(length)}", None
+            return [p0, self.cur], [], f"Length {self.text_for(length)}", None
         p1 = self.points[1]
         d = p1 - p0
         du, dv = d.dot(u), d.dot(v)
@@ -10384,6 +11885,243 @@ class DESSIN_OT_annotation(DessinBase):
     def cleanup(self, context):
         self.dim_label = None
         super().cleanup(context)
+
+
+class DESSIN_OT_text(DessinBase):
+    bl_idname = "dessin.text"
+    bl_label = "Text"
+    bl_description = ("Single-line text like TEXT: click the insertion point (snaps and typed coordinates work), type the text; "
+                      "Enter: next line below, Enter on an empty line: finish. Height: text size of the dimension settings")
+
+    TITLE = "Text"
+    NEEDED = 2
+    PLANAR = False
+    LOCK_OK = False
+
+    text_height = DESSIN_OT_cotation.text_height
+    screen_right = DESSIN_OT_cotation.screen_right
+
+    def lock_allowed(self):
+        return False
+
+    def invoke(self, context, event):
+        self.note = ""
+        self.line = 0
+        self.dim_label = None
+        self.frame = None
+        return super().invoke(context, event)
+
+    def reset_state(self):
+        super().reset_state()
+        self.note = ""
+        self.line = 0
+        self.frame = None
+
+    def prompt(self):
+        if not self.points:
+            return "insertion point (bottom left of the text)"
+        return "type the text   (Enter: next line, Enter on an empty line: finish, Backspace: erase, Esc: finish)"
+
+    def prompt_tail(self):
+        return not self.points     # pendant la frappe, S, Maj+F et Espace sont du texte
+
+    def coord_pre(self, context, event):
+        if self.points:
+            return None        # on tape le texte : les chiffres, @, # ... font partie du texte
+        return DessinBase.coord_pre(self, context, event)
+
+    def text_frame(self, p):
+        """(X, Y, Z, hauteur) : X le long de l'écran dans le plan de construction, Z vers l'observateur."""
+        nrm = plane_axes(self.axis)[2]
+        right, towards = self.screen_right()
+        te = right - nrm * right.dot(nrm)
+        if te.length < 1e-6:
+            te = plane_axes(self.axis)[0].copy()
+        te = te.normalized()
+        Z = nrm * (1.0 if nrm.dot(towards) >= 0 else -1.0)
+        Y = Z.cross(te)
+        return te, Y, Z, self.text_height(p, te)
+
+    def line_origin(self):
+        X, Y, Z, h = self.frame
+        return self.points[0] - Y * (1.6 * h * self.line)
+
+    def compute(self):
+        self.dim_label = None
+        if not self.points:
+            return [], [], "", None
+        if self.frame is None:
+            self.frame = self.text_frame(self.points[0])
+        X, Y, Z, h = self.frame
+        o = self.line_origin()
+        text = self.note
+        w = len(text) * 0.62 * h
+        self.dim_label = (o + X * (w / 2.0) + Y * (h * 0.2), text + "|")
+        box = [o, o + X * max(w, h * 0.6), o + X * max(w, h * 0.6) + Y * h, o + Y * h, o]
+        return [], [box], f"Height {self.fmt(h)}", None
+
+    def click(self, context):
+        if self.cur is None:
+            return
+        if not self.points:
+            self.points.append(self.cur.copy())
+            self.frame = self.text_frame(self.points[0])
+            self.refresh(context)
+            return
+        self.commit_line(context)          # un clic pendant la saisie valide la ligne, comme Entrée
+
+    def commit_line(self, context):
+        """Crée la ligne tapée ; retourne False si elle était vide (fin de la commande)."""
+        if not self.note.strip():
+            return False
+        X, Y, Z, h = self.frame
+        o = self.line_origin()
+        fc = bpy.data.curves.new("Text", 'FONT')
+        fc.body = self.note
+        fc.size = h
+        fc.align_x = 'LEFT'
+        fc.align_y = 'BOTTOM_BASELINE'
+        obj = bpy.data.objects.new("Text", fc)
+        obj.matrix_world = Matrix(((X.x, Y.x, Z.x, o.x), (X.y, Y.y, Z.y, o.y), (X.z, Y.z, Z.z, o.z), (0.0, 0.0, 0.0, 1.0)))
+        obj["dessin_text"] = True
+        try:
+            context.collection.objects.link(obj)
+        except (AttributeError, RuntimeError):
+            context.scene.collection.objects.link(obj)
+        self.note = ""
+        self.line += 1
+        self.refresh(context)
+        return True
+
+    def modal(self, context, event):
+        if (self.points and event.value == 'PRESS' and not (event.ctrl or event.alt or event.oskey)
+                and self.area is not None and context.area is not None
+                and find_window_region(self.area, event.mouse_x, event.mouse_y) is not None
+                and not self.mouse_over_ui(event)):
+            if event.type in {'RET', 'NUMPAD_ENTER'}:
+                if not self.commit_line(context):
+                    self.finished = True
+                    self.dim_label = None
+                    return self.exit(context)
+                return {'RUNNING_MODAL'}
+            if event.type == 'ESC':
+                self.finished = self.line > 0
+                self.dim_label = None
+                return self.exit(context)
+            if event.type == 'BACK_SPACE':
+                self.note = self.note[:-1]
+                self.refresh(context)
+                return {'RUNNING_MODAL'}
+            ch = " " if event.type == 'SPACE' else event.unicode
+            if ch and ch.isprintable():
+                self.note += ch
+                self.refresh(context)
+                return {'RUNNING_MODAL'}
+        return super().modal(context, event)
+
+    def cleanup(self, context):
+        self.dim_label = None
+        super().cleanup(context)
+
+
+class DESSIN_OT_dist(DessinBase):
+    bl_idname = "dessin.dist"
+    bl_label = "Distance"
+    bl_description = ("Like DIST: distance, X / Y / Z deltas and angles between two points (snaps and typed coordinates work). "
+                      "Nothing is created; the result is copied to the clipboard")
+
+    TITLE = "Distance"
+    NEEDED = 2
+    PLANAR = False      # vraie distance 3D entre les points accrochés
+    NUMFIELDS = 0
+
+    def prompt(self):
+        return "first point" if not self.points else "second point"
+
+    def measure(self, a, b):
+        u, v, n = plane_axes(self.axis)
+        d = b - a
+        du, dv, dn = d.dot(u), d.dot(v), d.dot(n)
+        flat = math.hypot(du, dv)
+        ang = math.degrees(math.atan2(dv, du)) % 360.0 if flat > 1e-12 else 0.0
+        elev = math.degrees(math.atan2(dn, flat)) if d.length > 1e-12 else 0.0
+        return d.length, du, dv, dn, ang, elev
+
+    def compute(self):
+        if not self.points or self.cur is None:
+            return [], [], "", None
+        a = self.points[0]
+        L, du, dv, dn, ang, elev = self.measure(a, self.cur)
+        info = (f"Distance {self.fmt(L)}   dX {self.fmt(du)}   dY {self.fmt(dv)}   dZ {self.fmt(dn)}   "
+                f"Angle in plane {ang:.2f}°   From plane {elev:.2f}°")
+        return [a, self.cur], [], info, None
+
+    def click(self, context):
+        if self.cur is None:
+            return
+        if not self.points:
+            self.points.append(self.cur.copy())
+            self.refresh(context)
+            return
+        a, b = self.points[0], self.cur.copy()
+        L, du, dv, dn, ang, elev = self.measure(a, b)
+        msg = (f"Distance = {self.fmt(L)},  Angle in XY plane = {ang:.2f}°,  Angle from XY plane = {elev:.2f}°   "
+               f"Delta X = {self.fmt(du)},  Delta Y = {self.fmt(dv)},  Delta Z = {self.fmt(dn)}")
+        try:
+            context.window_manager.clipboard = f"{L / self.unit_f:.6g}"
+        except (AttributeError, RuntimeError):
+            pass
+        cmd_log(msg)
+        self.report({'INFO'}, msg)
+        self.finished = True
+
+
+class DESSIN_OT_id_point(DessinBase):
+    bl_idname = "dessin.id_point"
+    bl_label = "ID Point"
+    bl_description = ("Like ID: click a point (snaps work) to read its X, Y, Z coordinates (world, and construction plane if it is not the world). "
+                      "Nothing is created; the coordinates are copied to the clipboard")
+
+    TITLE = "ID"
+    NEEDED = 2
+    PLANAR = False
+    NUMFIELDS = 0
+    LOCK_OK = False
+
+    def lock_allowed(self):
+        return False
+
+    def prompt(self):
+        return "point"
+
+    def coords_text(self, p):
+        f = self.unit_f
+        txt = f"X = {p.x / f:.4f}   Y = {p.y / f:.4f}   Z = {p.z / f:.4f}"
+        if self.axis == 3:
+            u, v, n = plane_axes(self.axis)
+            o = plane_origin(self.axis)
+            d = p - o
+            txt += f"   (CPlane: x = {d.dot(u) / f:.4f}   y = {d.dot(v) / f:.4f}   z = {d.dot(n) / f:.4f})"
+        return txt + (f"   [{self.unit_label}]" if self.unit_label else "")
+
+    def compute(self):
+        if self.cur is None:
+            return [], [], "", None
+        return [], [], self.coords_text(self.cur), None
+
+    def click(self, context):
+        if self.cur is None:
+            return
+        p = self.cur.copy()
+        msg = self.coords_text(p)
+        f = self.unit_f
+        try:
+            context.window_manager.clipboard = f"{p.x / f:.6g}, {p.y / f:.6g}, {p.z / f:.6g}"
+        except (AttributeError, RuntimeError):
+            pass
+        cmd_log("ID: " + msg)
+        self.report({'INFO'}, "ID: " + msg)
+        self.finished = True
 
 
 class DESSIN_OT_dimstyle_add(bpy.types.Operator):
@@ -11794,10 +13532,11 @@ def tool_families():
                       DESSIN_TT_revolve, DESSIN_TT_rail_revolve, DESSIN_TT_loft, DESSIN_TT_sweep1, DESSIN_TT_sweep2]),
         ("Surface editing", [DESSIN_TT_blend_srf, DESSIN_TT_match_srf, DESSIN_TT_thicken, DESSIN_TT_cap, DESSIN_TT_shell]),
         ("Solids", between(DESSIN_TT_boite, DESSIN_TT_tore)),
+        ("SubD", between(DESSIN_TT_subd_box, DESSIN_TT_subd_plane)),
         ("Lights and cameras", [DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun, DESSIN_TT_light_area,
                                 DESSIN_TT_camera, DESSIN_TT_camera_target]),
-        ("Annotation", [DESSIN_TT_cotation, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation,
-                        DESSIN_TT_mesure_aire, DESSIN_TT_make2d, DESSIN_TT_clip_plane]),
+        ("Annotation", [DESSIN_TT_cotation, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_text,
+                        DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane]),
     ]
 
 
@@ -15502,6 +17241,21 @@ def extrude_info(context):
     return nf, ne
 
 
+def mirror_plane_cleanup(obj, bm, tol=1e-5):
+    """Après une extrusion : les faces posées sur un plan de symétrie (Mirror avec Clipping) sont supprimées, comme le fait
+    l'extrusion de Blender ; sinon elles deviennent des faces internes (arêtes non-manifold) une fois le miroir appliqué."""
+    axes = set()
+    for md in obj.modifiers:
+        if md.type == 'MIRROR' and md.show_viewport and md.use_clip and md.mirror_object is None:
+            axes |= {i for i in range(3) if md.use_axis[i]}
+    if not axes:
+        return 0
+    walls = [f for f in bm.faces if any(all(abs(v.co[a]) <= tol for v in f.verts) for a in axes)]
+    if walls:
+        bmesh.ops.delete(bm, geom=walls, context='FACES')
+    return len(walls)
+
+
 class DESSIN_OT_gumball_extrude(GumballBase):
     bl_idname = "dessin.gumball_extrude"
     bl_label = "Extrude"
@@ -15542,9 +17296,13 @@ class DESSIN_OT_gumball_extrude(GumballBase):
             self.backups.append((obj, tmp))
             if faces:
                 ret = bmesh.ops.extrude_face_region(bm, geom=faces)
+                # comme l'extrusion de Blender : les faces d'origine disparaissent (sinon elles restent à l'intérieur du volume)
+                bmesh.ops.delete(bm, geom=[f for f in faces if f.is_valid], context='FACES')
             else:
                 ret = bmesh.ops.extrude_edge_only(bm, edges=edges)
             geom = ret["geom"]
+            if mirror_plane_cleanup(obj, bm):
+                geom = [g for g in geom if g.is_valid]
             new_verts = [g for g in geom if isinstance(g, bmesh.types.BMVert)]
             for v in bm.verts:
                 v.select_set(False)
@@ -15797,7 +17555,7 @@ class DESSIN_OT_offset_surface(bpy.types.Operator):
             try:
                 ro = region_2d_to_origin_3d(region, rv3d, m)
                 rv = region_2d_to_vector_3d(region, rv3d, m)
-                ok, _loc, _nor, _idx, ob, _mat = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+                ok, _loc, _nor, _idx, ob, _mat = ray_cast_opaque(context, ro, rv, True)
                 hit = ob if ok and ob is not None and ob.type == 'MESH' else None
             except (AttributeError, RuntimeError, TypeError):
                 hit = None
@@ -16938,25 +18696,14 @@ def curve_points_cb():
         objs = [o for o in ctx.selected_objects if o.type == 'CURVE' and o.visible_get()]
         if not objs:
             return
-        pts, poly = [], []
-        for o in objs:
-            mw = o.matrix_world
-            for sp in o.data.splines:
-                if sp.type == 'BEZIER':
-                    pts += [mw @ bp.co for bp in sp.bezier_points]
-                else:
-                    cv = [mw @ Vector(p.co[:3]) for p in sp.points]
-                    pts += cv
-                    if sp.type == 'NURBS':      # polygone de contrôle
-                        for a, b in zip(cv, cv[1:]):
-                            poly += [tuple(a), tuple(b)]
-                        if sp.use_cyclic_u and len(cv) > 2:
-                            poly += [tuple(cv[-1]), tuple(cv[0])]
-                if len(pts) > 4000:
-                    break
-            if len(pts) > 4000:
-                break
-        if not pts:
+        key = (_HOVER["version"], tuple(o.name for o in objs))
+        cache = _CURVE_PTS.get("cache")
+        if cache is not None and cache[0] == key:
+            pts, poly = cache[1], cache[2]          # rien n'a changé depuis l'image précédente : on ne relit pas les courbes
+        else:
+            pts, poly = curve_points_collect(objs)
+            _CURVE_PTS["cache"] = (key, pts, poly)
+        if not len(pts):
             return
         shader = get_shader('3D')
         gpu.state.blend_set('ALPHA')
@@ -16971,6 +18718,29 @@ def curve_points_cb():
         gpu.state.blend_set('NONE')
     except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
         pass
+
+
+def curve_points_collect(objs):
+    """(points monde (n, 3), segments du polygone de contrôle) des courbes, 4000 points au plus."""
+    pts, poly = [], []
+    for o in objs:
+        mw = o.matrix_world
+        for sp in o.data.splines:
+            if sp.type == 'BEZIER':
+                pts += [mw @ bp.co for bp in sp.bezier_points]
+            else:
+                cv = [mw @ Vector(p.co[:3]) for p in sp.points]
+                pts += cv
+                if sp.type == 'NURBS':      # polygone de contrôle
+                    for a, b in zip(cv, cv[1:]):
+                        poly += [tuple(a), tuple(b)]
+                    if sp.use_cyclic_u and len(cv) > 2:
+                        poly += [tuple(cv[-1]), tuple(cv[0])]
+            if len(pts) > 4000:
+                break
+        if len(pts) > 4000:
+            break
+    return np.array([tuple(p) for p in pts], dtype=np.float64).reshape(-1, 3), poly
 
 
 _TRIM_HL = {"handle": None}
@@ -17020,6 +18790,177 @@ def trim_highlight_cb():
     gpu.state.line_width_set(1.0)
     gpu.state.depth_test_set('NONE')
     gpu.state.blend_set('NONE')
+
+
+# --------------------------------------------------------------------------
+# ShowEdges (comme Rhino) : arêtes nues (bord libre, une seule face) et non-manifold (plus de deux faces) surlignées
+# --------------------------------------------------------------------------
+
+_SHOWEDGES = {"handle": None, "on": False, "mode": 'NAKED', "objs": None, "key": None, "naked": None, "nonman": None,
+              "alle": None, "counts": (0, 0, 0)}
+SHOWEDGES_NAKED = (1.0, 0.0, 1.0, 1.0)        # magenta, comme les arêtes nues de Rhino
+SHOWEDGES_NONMAN = (1.0, 0.55, 0.0, 1.0)      # orange : arêtes partagées par plus de deux faces
+SHOWEDGES_ALL = (0.2, 0.75, 1.0, 1.0)
+
+
+def showedges_targets(context):
+    """Objets analysés : maillages à faces visibles (la sélection mémorisée, sinon tous)."""
+    names = _SHOWEDGES["objs"]
+    out = []
+    for o in context.view_layer.objects:
+        try:
+            if o.type != 'MESH' or not o.visible_get():
+                continue
+        except (RuntimeError, ReferenceError):
+            continue
+        if names is not None and o.name not in names:
+            continue
+        out.append(o)
+    return out
+
+
+def showedges_collect(context):
+    """(segments nus, segments non-manifold, toutes les arêtes, (nb nus, nb non-manifold, nb objets avec arêtes nues))."""
+    dg = context.evaluated_depsgraph_get()
+    naked, nonman, alle = [], [], []
+    n_naked = n_nm = n_obj = 0
+    edit = context.mode == 'EDIT_MESH'
+    for o in showedges_targets(context):
+        if edit and o.mode == 'EDIT':
+            try:
+                o.update_from_editmode()
+            except (RuntimeError, AttributeError):
+                pass
+        try:
+            ev = o.evaluated_get(dg)
+            me = ev.to_mesh()
+        except (RuntimeError, ReferenceError):
+            continue
+        if me is None:
+            continue
+        try:
+            nv, ne, nl = len(me.vertices), len(me.edges), len(me.loops)
+            if not nv or not ne or not len(me.polygons):
+                continue          # courbe / contour sans face : pas d'arêtes de surface (comme Rhino)
+            co = np.empty(nv * 3, dtype=np.float32)
+            me.vertices.foreach_get('co', co)
+            ev_ = np.empty(ne * 2, dtype=np.int32)
+            me.edges.foreach_get('vertices', ev_)
+            le = np.empty(nl, dtype=np.int32)
+            me.loops.foreach_get('edge_index', le)
+        finally:
+            ev.to_mesh_clear()
+        mw = np.array(o.matrix_world, dtype=np.float64)
+        W = co.reshape(-1, 3).astype(np.float64) @ mw[:3, :3].T + mw[:3, 3]
+        E = ev_.reshape(-1, 2)
+        use = np.bincount(le, minlength=ne)
+        nk = E[use == 1]
+        nm = E[use > 2]
+        if len(nk):
+            n_obj += 1
+        n_naked += len(nk)
+        n_nm += len(nm)
+        if len(nk):
+            naked.append(W[nk.reshape(-1)])
+        if len(nm):
+            nonman.append(W[nm.reshape(-1)])
+        if _SHOWEDGES["mode"] == 'ALL':
+            alle.append(W[E[use > 0].reshape(-1)])
+    cat = (lambda L: np.vstack(L).astype(np.float32) if L else None)
+    return cat(naked), cat(nonman), cat(alle), (n_naked, n_nm, n_obj)
+
+
+def _showedges_refresh(context):
+    key = (_HOVER["version"], context.mode, _SHOWEDGES["mode"], _SHOWEDGES["objs"])
+    if _SHOWEDGES["key"] == key:
+        return
+    _SHOWEDGES["key"] = key
+    _SHOWEDGES["naked"], _SHOWEDGES["nonman"], _SHOWEDGES["alle"], _SHOWEDGES["counts"] = showedges_collect(context)
+
+
+def _draw_segments(pts, color, width):
+    if pts is None or not len(pts):
+        return
+    try:
+        sh = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')       # trait épais aussi sur Mac (Metal)
+        sh.bind()
+        sh.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
+        sh.uniform_float("lineWidth", width)
+        sh.uniform_float("color", color)
+    except (ValueError, AttributeError, TypeError, SystemError):
+        sh = get_shader('3D')
+        sh.bind()
+        sh.uniform_float("color", color)
+        gpu.state.line_width_set(width)
+    batch_for_shader(sh, 'LINES', {"pos": pts}).draw(sh)
+    gpu.state.line_width_set(1.0)
+
+
+def showedges_cb():
+    if not _SHOWEDGES["on"]:
+        return
+    try:
+        ctx = bpy.context
+        if ctx.mode not in {'OBJECT', 'EDIT_MESH'}:
+            return
+        _showedges_refresh(ctx)
+        gpu.state.blend_set('ALPHA')
+        gpu.state.depth_test_set('NONE')          # visibles même derrière les faces, comme dans Rhino
+        w = 3.0 * px_scale(0.5)
+        if _SHOWEDGES["mode"] == 'ALL':
+            _draw_segments(_SHOWEDGES["alle"], SHOWEDGES_ALL, 1.5 * px_scale(0.5))
+        if _SHOWEDGES["mode"] in {'NAKED', 'ALL'}:
+            _draw_segments(_SHOWEDGES["naked"], SHOWEDGES_NAKED, w)
+        _draw_segments(_SHOWEDGES["nonman"], SHOWEDGES_NONMAN, w)
+        gpu.state.blend_set('NONE')
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        pass
+
+
+class DESSIN_OT_show_edges(bpy.types.Operator):
+    bl_idname = "dessin.show_edges"
+    bl_label = "Show Edges"
+    bl_description = ("Like ShowEdges: highlights the naked edges (open borders, magenta) and the non-manifold edges (orange) "
+                      "of the selected surfaces and solids (nothing selected: all of them). Run it again to hide them")
+    bl_options = {'REGISTER'}
+
+    mode: bpy.props.EnumProperty(name="Edges", items=(('NAKED', "Naked edges", "Open borders: edges used by a single face"),
+                                                     ('NONMANIFOLD', "Non-manifold edges", "Edges shared by more than two faces"),
+                                                     ('ALL', "All edges", "Every edge, naked ones in magenta")),
+                                 default='NAKED', options={'SKIP_SAVE'})
+    off: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE', 'HIDDEN'})
+
+    def execute(self, context):
+        sel = [o.name for o in context.selected_objects if o.type == 'MESH']
+        objs = tuple(sel) if sel else None
+        same = _SHOWEDGES["on"] and _SHOWEDGES["mode"] == self.mode and (objs is None or objs == _SHOWEDGES["objs"])
+        if self.off or same:       # relancée sans nouvelle sélection : on masque (une autre sélection : on l'analyse)
+            _SHOWEDGES["on"] = False
+            _SHOWEDGES["key"] = None
+            _redraw_all_areas()
+            cmd_log("Show Edges: off")
+            self.report({'INFO'}, "Show Edges: off")
+            return {'FINISHED'}
+        _SHOWEDGES["objs"] = objs
+        _SHOWEDGES["mode"] = self.mode
+        _SHOWEDGES["on"] = True
+        _SHOWEDGES["key"] = None
+        _showedges_refresh(context)
+        n_naked, n_nm, n_obj = _SHOWEDGES["counts"]
+        if n_naked == 0 and n_nm == 0:
+            msg = "Show Edges: no naked edge (closed solids)" if self.mode != 'NONMANIFOLD' else "Show Edges: no non-manifold edge"
+        else:
+            parts = []
+            if self.mode != 'NONMANIFOLD':
+                parts.append(f"{n_naked} naked edge(s) on {n_obj} object(s)")
+            if n_nm:
+                parts.append(f"{n_nm} non-manifold edge(s)")
+            msg = "Show Edges: " + ", ".join(parts)
+        msg += "   (ShowEdges again to hide)"
+        _redraw_all_areas()
+        cmd_log(msg)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
 
 
 class DESSIN_OT_trim(bpy.types.Operator):
@@ -17151,6 +19092,8 @@ class DESSIN_OT_trim(bpy.types.Operator):
             persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
             cand = []
             for obj, (verts, edges) in graphs.items():
+                if obj.hide_select:         # objet verrouillé : il peut servir de limite de coupe, pas être coupé
+                    continue
                 V = np.array([tuple(v) for v in verts], dtype=np.float64)
                 E = np.array(edges, dtype=np.int64)
                 sx, sy, ok = _project_region(V, persp, region)
@@ -17232,14 +19175,31 @@ class DESSIN_OT_trim(bpy.types.Operator):
         persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
         mx, my = event.mouse_x - region.x, event.mouse_y - region.y
         graphs = {}
-        for obj in context.visible_objects:
-            g = wire_graph(obj, dg)
-            if g is not None and g[1]:
-                graphs[obj] = g
+        # gros fichiers : seuls les objets dont la boîte écran touche le curseur (puis la cible) sont analysés
+        vis = list(context.visible_objects)
+        bo, xmn, xmx, ymn, ymx, _sure = objects_screen_bounds(vis, persp, region)
+        self._trim_bounds = (bo, xmn, xmx, ymn, ymx)
+
+        def fill(mask):
+            for i in np.nonzero(mask)[0]:
+                obj = bo[int(i)]
+                if obj in graphs or obj in self._no_graph:
+                    continue
+                g = wire_graph(obj, dg)
+                if g is not None and g[1]:
+                    graphs[obj] = g
+                else:
+                    self._no_graph.add(obj)
+        self._no_graph = set()
+        self._fill = fill
+        best_d = 14.0 * px_scale()
+        r_ = best_d + 2.0
+        fill((xmx >= mx - r_) & (xmn <= mx + r_) & (ymx >= my - r_) & (ymn <= my + r_))
         # arête cliquée : la plus proche du curseur à l'écran
         best = None
-        best_d = 14.0 * px_scale()
-        for obj, (verts, edges) in graphs.items():
+        for obj, (verts, edges) in list(graphs.items()):
+            if obj.hide_select:             # objet verrouillé : jamais coupé (mais il reste une limite de coupe)
+                continue
             V = np.array([tuple(v) for v in verts], dtype=np.float64)
             E = np.array(edges, dtype=np.int64)
             sx, sy, ok = _project_region(V, persp, region)
@@ -17255,10 +19215,29 @@ class DESSIN_OT_trim(bpy.types.Operator):
         if best is None:
             return self.try_surface(context, event, region, rv3d, graphs, "Click the part of a curve or of a surface to trim")
         target, e0, tcl = best
+        self.fill_overlapping(graphs, target)        # les coupants possibles : objets qui recouvrent la cible à l'écran
         res = self.trim_edge(context, dg, graphs, target, e0, tcl)
         if res is not True:
             return self.try_surface(context, event, region, rv3d, graphs, res or "Nothing to trim")
         return {'FINISHED'}
+
+    def fill_overlapping(self, graphs, target):
+        """Ajoute aux graphes les objets dont la boîte écran recouvre celle de la cible (sans cible connue : tous)."""
+        tb = getattr(self, "_trim_bounds", None)
+        fill = getattr(self, "_fill", None)
+        if tb is None or fill is None:
+            return
+        bo, xmn, xmx, ymn, ymx = tb
+        try:
+            i = bo.index(target)
+        except ValueError:
+            fill(np.ones(len(bo), dtype=bool))
+            return
+        if not (np.isfinite(xmn[i]) and np.isfinite(xmx[i]) and np.isfinite(ymn[i]) and np.isfinite(ymx[i])):
+            fill(np.ones(len(bo), dtype=bool))
+            return
+        m_ = 2.0
+        fill((xmx >= xmn[i] - m_) & (xmn <= xmx[i] + m_) & (ymx >= ymn[i] - m_) & (ymn <= ymx[i] + m_))
 
     def try_surface(self, context, event, region, rv3d, graphs, fallback_msg):
         """Trim d'une surface (maillage à faces) : les courbes de coupe sont projetées le long de la vue."""
@@ -17267,7 +19246,7 @@ class DESSIN_OT_trim(bpy.types.Operator):
         rd = region_2d_to_vector_3d(region, rv3d, Vector((mx, my)))
         best = None
         for obj in context.visible_objects:
-            if obj.type != 'MESH' or not len(obj.data.polygons) or obj in graphs:
+            if obj.type != 'MESH' or not len(obj.data.polygons) or obj in graphs or obj.hide_select:
                 continue
             inv = obj.matrix_world.inverted()
             ok, loc, _nor, _idx = obj.ray_cast(inv @ ro, inv.to_3x3() @ rd)[:4]
@@ -17279,6 +19258,7 @@ class DESSIN_OT_trim(bpy.types.Operator):
             self.report({'INFO'}, fallback_msg)
             return {'CANCELLED'}
         _d, target, loc = best
+        self.fill_overlapping(graphs, target)
         cutter_objs = [o for o in context.selected_objects if o in graphs] or list(graphs)
         paths = []
         for o in cutter_objs:
@@ -17423,6 +19403,7 @@ class DESSIN_OT_rclick_run(bpy.types.Operator):
     bl_options = {'INTERNAL'}
 
     cmd: bpy.props.StringProperty()
+    action: bpy.props.StringProperty(default="")
 
     def invoke(self, context, event):
         if not pref("rclick_enter") or context.area is None or context.area.type != 'VIEW_3D':
@@ -17446,8 +19427,11 @@ class DESSIN_OT_rclick_run(bpy.types.Operator):
             f = getattr(bpy.ops.dessin, self.cmd, None)
             if f is not None:
                 try:
-                    f('INVOKE_DEFAULT')
-                except RuntimeError:
+                    if self.action:
+                        f('INVOKE_DEFAULT', action=self.action)
+                    else:
+                        f('INVOKE_DEFAULT')
+                except (RuntimeError, TypeError):
                     pass
             return {'FINISHED'}
         if event.type == 'ESC':
@@ -18389,7 +20373,7 @@ def revolve_surface(paths, origin, axis, angle_deg, cap=True):
     return np.vstack(allV), allF
 
 
-class DESSIN_OT_revolve(DessinTransform):
+class _RevolveBody(DessinTransform):
     bl_idname = "dessin.revolve"
     bl_label = "Revolve"
     bl_description = ("Revolves curves around an axis defined by two points: select the curves, Enter, "
@@ -18524,6 +20508,13 @@ class DESSIN_OT_revolve(DessinTransform):
         context.view_layer.objects.active = made[-1]
         self.committed = True
         return None
+
+
+class DESSIN_OT_revolve(_RevolveBody):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _RevolveBody.bl_idname
+    bl_label = _RevolveBody.bl_label
+    bl_description = _RevolveBody.bl_description
 
 
 # ---- Extrude (mode objet) : courbes / contours / faces -> volume ou surface ----
@@ -18704,11 +20695,11 @@ class ExtrudeCrvLogic(DessinTransform):
             rv = region_2d_to_vector_3d(region, rv3d, coord)
             n = self.height_axis()
             p0 = self.points[0]
-            hit = geometry.intersect_line_line(ro, ro + rv, p0, p0 + n)
+            h = view_height(p0, p0, n, ro, rv, rv3d)     # vue dans l'axe de la hauteur : distance du curseur (Rhino / AutoCAD)
         except (AttributeError, ReferenceError, TypeError, RuntimeError):
             return
-        if hit is not None:
-            self.cur = hit[1].copy()
+        if h is not None:
+            self.cur = p0 + n * h
             self.refresh(context)
 
     def height_vec(self):
@@ -19075,11 +21066,56 @@ def _point_in_poly(pt, poly):
     return inside
 
 
+def chain_open_paths(paths, tol=None):
+    """Raccorde, comme PlanarSrf de Rhino, les courbes ouvertes dont les extrémités se touchent (à tol près),
+    même si elles viennent d'objets différents. paths : [(P, closed)] -> ([(P, closed)], nb de chaînes restées ouvertes)."""
+    closed_out = [(P, c) for P, c in paths if c]
+    pieces = [np.asarray(P, dtype=np.float64) for P, c in paths if not c and len(P) >= 2]
+    if not pieces:
+        return closed_out, 0
+    allp = np.vstack(pieces)
+    scale = float(np.ptp(allp, axis=0).max()) or 1.0
+    if tol is None:
+        tol = max(1e-4 * scale, 1e-7)
+    unused = list(range(len(pieces)))
+    open_left = 0
+    while unused:
+        chain = pieces[unused.pop(0)]
+        grew = True
+        while grew and unused:
+            grew = False
+            best = None
+            for end in (1, 0):
+                pt = chain[-1] if end else chain[0]
+                for k in unused:
+                    Q = pieces[k]
+                    for qa, rev in ((Q[0], False), (Q[-1], True)):
+                        d = float(np.linalg.norm(qa - pt))
+                        if d <= tol and (best is None or d < best[0]):
+                            best = (d, end, k, rev)
+            if best:
+                _d, end, k, rev = best
+                Q = pieces[k][::-1] if rev else pieces[k]
+                if end:
+                    chain = np.vstack([chain, Q[1:] if np.linalg.norm(Q[0] - chain[-1]) <= tol else Q])
+                else:
+                    Qr = Q[::-1]
+                    chain = np.vstack([Qr[:-1] if np.linalg.norm(Qr[-1] - chain[0]) <= tol else Qr, chain])
+                unused.remove(k)
+                grew = True
+        if len(chain) >= 3 and float(np.linalg.norm(chain[0] - chain[-1])) <= tol:
+            closed_out.append((chain[:-1], True))
+        else:
+            open_left += 1
+    return closed_out, open_left
+
+
 def planar_surfaces(paths):
     """Contours fermés -> surfaces planes (trous gérés par imbrication paire / impaire).
+    Les courbes ouvertes qui se touchent par leurs extrémités sont d'abord raccordées (sans les joindre).
     Retourne ([(sommets, faces)], nb de contours ignorés)."""
     loops = []
-    skipped = 0
+    paths, skipped = chain_open_paths(paths)
     for P, closed in paths:
         if not closed or len(P) < 3:
             skipped += 1
@@ -19158,7 +21194,7 @@ class DESSIN_OT_planar_srf(_ProfileOp, bpy.types.Operator):
             return {'CANCELLED'}
         made, skipped = planar_surfaces(paths)
         if not made:
-            self.report({'WARNING'}, "Planar Surface needs closed, planar curves")
+            self.report({'WARNING'}, "Planar Surface needs closed planar curves (or curves whose ends touch)")
             return {'CANCELLED'}
         deselect_all_objects(context)
         last = None
@@ -19181,6 +21217,294 @@ def resample_path(P, n):
     s = np.concatenate([[0.0], np.cumsum(seg)])
     t = np.linspace(0.0, s[-1], n + 1)
     return np.stack([np.interp(t, s, P[:, k]) for k in range(3)], axis=1)
+
+
+# ---- SubD à partir de courbes (SubDLoft, SubDSweep1, SubDSweep2, SubD Revolve) ----
+
+def subd_section(P, closed, k=None):
+    """Points de cage d'une courbe : une polyligne à peu de sommets les garde (ses angles), une courbe dense
+    (cercle, Bézier...) est rééchantillonnée régulièrement à k points."""
+    P = np.asarray(P, dtype=np.float64)
+    if k is None:
+        try:
+            f = int(bpy.context.scene.dessin.subd_faces)
+        except (AttributeError, TypeError, ValueError):
+            f = 2
+        k = 4 * max(2, f) if closed else 2 * max(2, f) + 1
+    if len(P) <= 24:
+        return P.copy()
+    if closed:
+        Q = resample_path(np.vstack([P, P[:1]]), k)
+        return Q[:-1]
+    return resample_path(P, k - 1)
+
+
+def subd_rail(R, closed, step):
+    """Rail de la cage : ses sommets s'il en a peu, sinon des points espacés d'environ `step`."""
+    R = np.asarray(R, dtype=np.float64)
+    if len(R) <= 24:
+        return R.copy()
+    L = path_length(R, closed)
+    n = int(max(3, min(64, round(L / max(step, 1e-9)))))
+    if closed:
+        return resample_path(np.vstack([R, R[:1]]), n)[:-1]
+    return resample_path(R, n)
+
+
+def subd_cap(V, F, ring, flip):
+    """Bouchon en quads : un anneau intérieur (55 % vers le centre) puis un polygone central (comme SubDCylinder)."""
+    V = list(V)
+    c = np.mean([V[i] for i in ring], axis=0)
+    base = len(V)
+    V.extend([c + (V[i] - c) * 0.55 for i in ring])
+    n = len(ring)
+    for j in range(n):
+        j2 = (j + 1) % n
+        f = (ring[j], ring[j2], base + j2, base + j)
+        F.append(tuple(reversed(f)) if flip else f)
+    center = tuple(range(base, base + n))
+    F.append(center if flip else tuple(reversed(center)))
+    return np.array(V), F
+
+
+def subd_interpolate(context, obj, iters=10):
+    """La surface lisse passe par les points de la cage d'origine (les points des courbes) : on déplace la cage,
+    plusieurs fois, de l'écart entre la surface et ces points."""
+    me = obj.data
+    n = len(me.vertices)
+    T = np.empty(n * 3, dtype=np.float64)
+    me.vertices.foreach_get('co', T)
+    T = T.reshape(-1, 3)
+    cage = T.copy()
+    size = float(np.ptp(T, axis=0).max()) or 1.0
+    for _ in range(iters):
+        context.view_layer.update()
+        dg = context.evaluated_depsgraph_get()
+        ev = obj.evaluated_get(dg)
+        em = ev.to_mesh()
+        try:
+            if len(em.vertices) < n:
+                break
+            E = np.empty(len(em.vertices) * 3, dtype=np.float64)
+            em.vertices.foreach_get('co', E)
+        finally:
+            ev.to_mesh_clear()
+        E = E.reshape(-1, 3)[:n]               # les n premiers sommets subdivisés correspondent aux sommets de la cage
+        d = T - E
+        cage += d
+        me.vertices.foreach_set('co', cage.astype(np.float32).ravel())
+        me.update()
+        if float(np.abs(d).max()) < 1e-5 * size:
+            break
+
+
+def subd_object_from_cage(context, name, V, F, origin, interpolate=True):
+    obj = mesh_object_from_arrays(context, name, V, F, origin, True)
+    obj["wd_subd"] = True
+    subd_modifier(obj, create=True)
+    if interpolate:
+        try:
+            subd_interpolate(context, obj)
+        except (RuntimeError, ValueError, ReferenceError):
+            pass
+    return obj
+
+
+class _SubDCurvesOp(_ProfileOp):
+    interpolate: bpy.props.BoolProperty(name="Through the curves", default=True,
+                                        description="The smooth surface passes through smooth curves (circles, arcs, Bezier). "
+                                                    "A polyline is always used as the control polygon, like its corners in Rhino")
+    points: bpy.props.IntProperty(name="Points per curve", default=0, min=0, soft_max=64,
+                                  description="Control points taken on each curve (0: automatic — a polyline keeps its corners)")
+    cap: bpy.props.BoolProperty(name="Cap ends", default=True, description="Closes the ends when the curves are closed (solid)")
+    delete_input: bpy.props.BoolProperty(name="Delete input", default=False)
+    bl_options = {'REGISTER', 'UNDO'}
+
+    def smooth_input(self, profs):
+        return all(len(P) > 24 for P, _c in profs)
+
+    def sections(self, profs):
+        out = []
+        for P, closed in profs:
+            out.append((subd_section(P, closed, self.points or None), closed))
+        return out
+
+    def capped(self, V, F, nrows, n, closed_profile, closed_rows):
+        if not (self.cap and closed_profile and not closed_rows and n >= 3):
+            return np.asarray(V), list(F)
+        V, F = subd_cap(V, list(F), list(range(n)), True)
+        V, F = subd_cap(V, F, list(range((nrows - 1) * n, nrows * n)), False)
+        return V, F
+
+    def made(self, context, name, V, F, origin, objs, smooth=True):
+        obj = subd_object_from_cage(context, name, V, F, origin, self.interpolate and smooth)
+        if self.delete_input:
+            delete_objects(objs)
+        deselect_all_objects(context)
+        obj.select_set(True)
+        context.view_layer.objects.active = obj
+        msg = f"{name}: SubD created ({len(obj.data.vertices)} control points)"
+        cmd_log(msg)
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
+class DESSIN_OT_subd_loft(_SubDCurvesOp, bpy.types.Operator):
+    bl_idname = "dessin.subd_loft"
+    bl_label = "SubD Loft"
+    bl_description = ("SubD through curves in the order you clicked them, like SubDLoft (options: closed loft, through the curves, "
+                      "points per curve, cap)")
+
+    closed: bpy.props.BoolProperty(name="Closed loft", default=False, description="Joins the last curve back to the first one")
+
+    def invoke(self, context, event):
+        _objs, profs = self.profiles(context)
+        if len(profs) < 2:
+            self.report({'INFO'}, "SubD Loft: click at least two curves in order, then Enter")
+            return {'CANCELLED'}
+        return context.window_manager.invoke_props_dialog(self, width=300)
+
+    def draw(self, context):
+        col = self.layout.column()
+        for k in ("closed", "interpolate", "points", "cap", "delete_input"):
+            col.prop(self, k)
+
+    def execute(self, context):
+        objs, profs = self.profiles(context)
+        if len(profs) < 2:
+            self.report({'WARNING'}, "SubD Loft needs at least two curves")
+            return {'CANCELLED'}
+        kinds = {c for _p, c in profs}
+        if len(kinds) > 1:
+            self.report({'WARNING'}, "SubD Loft: mix of open and closed curves")
+            return {'CANCELLED'}
+        closed = kinds.pop()
+        secs = self.sections(profs)
+        n = max(len(p) for p, _c in secs)
+        secs = [refine_points(p, closed, n) for p, _c in secs]
+        secs = align_sections(secs, closed)
+        closed_rows = self.closed and len(secs) > 2
+        V, F = grid_mesh(np.array(secs), closed, closed_rows, False)
+        V, F = self.capped(V, F, len(secs), n, closed, closed_rows)
+        return self.made(context, "SubD Loft", V, F, np.asarray(secs[0]).mean(axis=0), objs, self.smooth_input(profs))
+
+
+class _Subd_sweep1Body(_SubDCurvesOp, bpy.types.Operator):
+    bl_idname = "dessin.subd_sweep1"
+    bl_label = "SubD Sweep 1"
+    bl_description = "SubD swept along one rail, like SubDSweep1: click the rail, then the cross-section(s), then Enter"
+
+    frame: bpy.props.EnumProperty(name="Frame", default='FREEFORM',
+                                  items=(('FREEFORM', "Freeform", "The sections follow the rail with minimal twist"),
+                                         ('UPRIGHT', "Keep Z up (roadlike)", "The sections stay upright along the rail")))
+    NRAILS = 1
+
+    def invoke(self, context, event):
+        _objs, profs = self.profiles(context)
+        if len(profs) < self.NRAILS + 1:
+            self.report({'INFO'}, "Click the rail" + ("s" if self.NRAILS == 2 else "") + ", then the cross-section(s), then Enter")
+            return {'CANCELLED'}
+        return context.window_manager.invoke_props_dialog(self, width=300)
+
+    def draw(self, context):
+        col = self.layout.column()
+        if self.NRAILS == 1:
+            col.prop(self, "frame", text="")
+        for k in ("interpolate", "points", "cap", "delete_input"):
+            col.prop(self, k)
+
+    def execute(self, context):
+        objs, profs = self.profiles(context)
+        nr = self.NRAILS
+        if len(profs) < nr + 1:
+            self.report({'WARNING'}, "Not enough curves: rail(s) first, then at least one cross-section")
+            return {'CANCELLED'}
+        rails, sections = profs[:nr], self.sections(profs[nr:])
+        kinds = {c for _p, c in sections}
+        if len(kinds) > 1:
+            self.report({'WARNING'}, "SubD Sweep: mix of open and closed cross-sections")
+            return {'CANCELLED'}
+        sclosed = kinds.pop()
+        n = max(len(p) for p, _c in sections)
+        sections = [(refine_points(p, sclosed, n), c) for p, c in sections]
+        S0 = sections[0][0]
+        per = path_length(S0, sclosed) / max(len(S0), 1)
+        # rail : un rang de cage environ toutes les demi-largeurs de section (assez pour suivre le rail, pas plus)
+        R = [(subd_rail(P, c, max(per * len(S0) / 2.0, path_length(P, c) / 24.0)), c) for P, c in rails]
+        if nr == 1:
+            built, msg = sweep1_surface(R[0], sections, self.frame == 'UPRIGHT', True, False)
+        else:
+            built, msg = sweep2_surface(R[0], R[1], sections, False)
+        if built is None:
+            self.report({'WARNING'}, msg)
+            return {'CANCELLED'}
+        V, F, _closed = built
+        V = np.asarray(V)
+        rclosed = R[0][1]
+        V, F = self.capped(V, F, len(V) // n, n, sclosed, rclosed)
+        return self.made(context, "SubD Sweep" + (" 1" if nr == 1 else " 2"), V, F, S0.mean(axis=0), objs, self.smooth_input(profs[nr:]))
+
+
+class DESSIN_OT_subd_sweep1(_Subd_sweep1Body):
+    """Registered class; the shared code lives in the unregistered base so SubD variants can inherit it."""
+    bl_idname = _Subd_sweep1Body.bl_idname
+    bl_label = _Subd_sweep1Body.bl_label
+    bl_description = _Subd_sweep1Body.bl_description
+
+
+class DESSIN_OT_subd_sweep2(_Subd_sweep1Body):
+    bl_idname = "dessin.subd_sweep2"
+    bl_label = "SubD Sweep 2"
+    bl_description = "SubD swept along two rails, like SubDSweep2: click the two rails, then the cross-section(s), then Enter"
+    NRAILS = 2
+
+
+class DESSIN_OT_subd_revolve(_RevolveBody):
+    bl_idname = "dessin.subd_revolve"
+    bl_label = "SubD Revolve"
+    bl_description = ("SubD revolved around an axis, like Revolve with a SubD result: select the curves, Enter, two points for the axis, "
+                      "then Enter for 360° or type the angle (C: cap, D: delete input). The surface passes through the profile")
+    TITLE = "SubD Revolve"
+
+    def build(self, context, spec):
+        _, o, d, angle, cap, delete = spec
+        objs = [obj for obj, _m in self.items if obj.name in bpy.data.objects]
+        dg = bpy.context.evaluated_depsgraph_get()
+        made = []
+        full = abs(angle) >= 359.999
+        try:
+            f = int(context.scene.dessin.subd_faces)
+        except (AttributeError, TypeError, ValueError):
+            f = 2
+        steps = 4 * max(2, f) if full else max(2, int(math.ceil(abs(angle) / 360.0 * 4 * max(2, f))))
+        ang = math.radians(max(-360.0, min(360.0, angle)))
+        oo = np.array(o, dtype=np.float64)
+        for obj in objs:
+            for P, closed in object_paths(obj, dg) or []:
+                Q = subd_section(P, closed)
+                rows = []
+                for s_ in range(steps if full else steps + 1):
+                    Rm = rotation_matrix(d, ang * s_ / steps)
+                    rows.append((Q - oo) @ Rm.T + oo)
+                V, F = grid_mesh(np.array(rows), closed, full, False)
+                if cap and closed and not full:
+                    n = len(Q)
+                    V, F = subd_cap(V, list(F), list(range(n)), True)
+                    V, F = subd_cap(V, F, list(range(len(rows) * n - n, len(rows) * n)), False)
+                made.append(subd_object_from_cage(context, "SubD Revolve", V, F, o, len(P) > 24))
+        if not made:
+            self.report({'WARNING'}, "SubD Revolve works on curves (or outlines without faces)")
+            self.committed = True
+            return None
+        if delete:
+            delete_objects(objs)
+            self.items = []
+        deselect_all_objects(context)
+        for ob in made:
+            ob.select_set(True)
+        context.view_layer.objects.active = made[-1]
+        self.committed = True
+        return None
 
 
 def edge_surface(curves, segments=24):
@@ -21130,7 +23454,7 @@ class LightBase(DessinBase):
     EDIT_OK = False
     DATA_NAME = "Light"
     LIGHT_TYPE = 'POINT'
-    ENERGY = 1000.0
+    ENERGY = 10.0
 
     def new_light(self, context, loc, rot=None, name=None):
         data = bpy.data.lights.new(name or self.DATA_NAME, self.LIGHT_TYPE)
@@ -21283,7 +23607,7 @@ class DESSIN_OT_light_area(LightBase):
     HAS_CENTER = True
     HAS_FLIP = True
     LIGHT_TYPE = 'AREA'
-    ENERGY = 1000.0
+    ENERGY = 10.0
 
     def prompt(self):
         if not self.points:
@@ -22572,6 +24896,108 @@ def _icon_bytes(kind="move"):
     elif k=="dim_r":
         g.ell((128,128),92,92,LINE,10); g.dot((128,128),ACC,18)
         g.arrow((128,128),(193,193),ACC,9,28)
+    elif k.startswith("subdc_"):
+        a = k[6:]
+        cage = lambda: g.poly([(40,60),(216,60),(216,196),(40,196)],None,DIM,6)
+        if a == "loft":
+            g.ell((128,60),80,22,DIM,7); g.ell((128,128),56,18,LINE,8); g.ell((128,196),80,22,DIM,7)
+            g.line([(48,60),(72,128),(48,196)],ACC,9); g.line([(208,60),(184,128),(208,196)],ACC,9)
+        elif a == "sweep1":
+            g.line([(30,200),(90,120),(170,90),(226,40)],DIM,8); g.ell((60,170),26,26,LINE,9,fill=FILLA); g.ell((196,66),26,26,ACC,9)
+        elif a == "sweep2":
+            g.line([(30,190),(120,150),(226,170)],DIM,8); g.line([(30,90),(120,50),(226,70)],DIM,8)
+            g.line([(60,80),(60,180)],LINE,9); g.line([(190,64),(190,166)],ACC,9)
+        elif a == "revolve":
+            g.dash((50,30),(50,226),DIM,6,7); g.line([(50,60),(130,90),(110,170),(50,200)],LINE,9)
+            g.ell((50,128),150,40,ACC,8,a0=-60,a1=60)
+        elif a == "to_subd":
+            g.poly([(24,84),(108,84),(108,172),(24,172)],None,LINE,8); g.arrow((116,128),(150,128),DIM,7,20)
+            g.ell((196,128),40,40,LINE,9,fill=FILLA)
+        elif a == "to_mesh":
+            g.ell((60,128),40,40,DIM,8); g.arrow((108,128),(142,128),DIM,7,20)
+            g.poly([(150,84),(234,84),(234,172),(150,172)],FILLA,LINE,9)
+        elif a == "multipipe":
+            g.line([(40,210),(128,128)],LINE,26); g.line([(216,210),(128,128)],LINE,26); g.line([(128,128),(128,36)],LINE,26)
+            g.ell((128,128),20,20,ACC,6,fill=FILLA)
+        elif a == "display":
+            cage(); g.ell((128,128),62,48,LINE,9,fill=FILLA)
+        elif a.startswith("sym_"):
+            ax = a[-1]
+            if ax == "x":
+                g.dash((128,30),(128,226),ACC,7,7); g.poly([(40,80),(108,80),(108,176),(60,176)],FILLA,LINE,8); g.poly([(148,80),(216,80),(196,176),(148,176)],None,DIM,7)
+            elif ax == "y":
+                g.dash((30,128),(226,128),ACC,7,7); g.poly([(60,40),(196,40),(176,108),(80,108)],FILLA,LINE,8); g.poly([(80,148),(176,148),(196,216),(60,216)],None,DIM,7)
+            else:
+                g.dash((40,216),(216,40),ACC,7,7); g.poly([(36,36),(150,36),(36,150)],FILLA,LINE,8); g.poly([(220,106),(220,220),(106,220)],None,DIM,7)
+        elif a == "crease":
+            cage(); g.line([(40,60),(216,60)],ACC,14); g.dot((40,60),ACC,14); g.dot((216,60),ACC,14)
+        elif a == "uncrease":
+            cage(); g.line([(40,60),(216,60)],LINE,8); g.line([(150,110),(210,170)],ACC,10); g.line([(210,110),(150,170)],ACC,10)
+        elif a == "insert_edge":
+            cage(); g.line([(128,60),(128,196)],ACC,11)
+        elif a == "slide":
+            cage(); g.line([(128,60),(128,196)],LINE,9); g.arrow((128,128),(60,128),ACC,8,22); g.arrow((128,128),(196,128),ACC,8,22)
+        elif a == "inset":
+            g.poly([(40,60),(216,60),(216,196),(40,196)],None,LINE,8); g.poly([(84,94),(172,94),(172,162),(84,162)],FILLA,ACC,8)
+            for p_,q_ in (((40,60),(84,94)),((216,60),(172,94)),((216,196),(172,162)),((40,196),(84,162))): g.line([p_,q_],DIM,5)
+        elif a == "bevel":
+            g.line([(40,200),(40,100),(100,40),(216,40)],LINE,10); g.line([(40,100),(100,40)],ACC,12)
+        elif a == "bridge":
+            g.line([(40,60),(216,60)],LINE,10); g.line([(40,196),(216,196)],LINE,10)
+            g.poly([(70,60),(186,60),(186,196),(70,196)],FILLA,ACC,6)
+        elif a == "fill":
+            g.poly([(40,60),(216,60),(216,196),(40,196)],FILLA,LINE,10)
+        elif a == "append":
+            for p_ in ((50,190),(206,190),(128,60)): g.dot(p_,ACC,16)
+            g.poly([(50,190),(206,190),(128,60)],FILLA,LINE,8)
+        elif a == "merge_faces":
+            g.poly([(40,60),(216,60),(216,196),(40,196)],FILLA,LINE,10); g.dash((128,60),(128,196),DIM,5,6); g.dash((40,128),(216,128),DIM,5,6)
+        elif a == "extract":
+            g.poly([(30,90),(150,90),(150,210),(30,210)],None,DIM,7); g.poly([(106,40),(226,40),(226,160),(106,160)],FILLA,LINE,9)
+        elif a == "weld":
+            g.dot((50,128),DIM,16); g.dot((206,128),DIM,16); g.arrow((60,128),(116,128),LINE,7,20); g.arrow((196,128),(140,128),LINE,7,20); g.dot((128,128),ACC,22)
+        elif a == "stitch":
+            g.line([(40,70),(216,70)],LINE,9); g.line([(40,186),(216,186)],LINE,9)
+            g.line([(60,70),(90,186),(120,70),(150,186),(180,70),(200,186)],ACC,6)
+        elif a == "sel_loop":
+            cage(); g.ell((128,128),88,34,ACC,9)
+        else:   # sel_ring
+            cage()
+            for x_ in (70,110,150,190): g.line([(x_,72),(x_,184)],ACC,9)
+    elif k.startswith("subd_"):
+        sub = k[5:]
+        if sub == "box":
+            g.poly([(40,40),(216,40),(216,216),(40,216)],None,DIM,6)
+            g.ell((128,128),74,74,LINE,10,fill=FILLA)
+        elif sub == "sphere":
+            g.poly([(40,40),(216,40),(216,216),(40,216)],None,DIM,6); g.line([(40,128),(216,128)],DIM,5); g.line([(128,40),(128,216)],DIM,5)
+            g.ell((128,128),80,80,LINE,10,fill=FILLA)
+        elif sub == "cylinder":
+            g.poly([(52,40),(204,40),(204,216),(52,216)],None,DIM,6)
+            g.ell((128,70),68,22,LINE,8); g.ell((128,186),68,22,LINE,8); g.line([(60,70),(60,186)],LINE,9); g.line([(196,70),(196,186)],LINE,9)
+        elif sub == "cone":
+            g.poly([(52,40),(204,40),(204,216),(52,216)],None,DIM,6)
+            g.ell((128,186),68,22,LINE,8); g.line([(60,186),(128,52)],LINE,9); g.line([(196,186),(128,52)],LINE,9)
+        elif sub == "torus":
+            g.poly([(30,60),(226,60),(226,196),(30,196)],None,DIM,6)
+            g.ell((128,128),88,52,LINE,10,fill=FILLA); g.ell((128,128),34,16,LINE,8)
+        else:
+            for i in range(3):
+                y = 60 + 68 * i
+                g.line([(40,y),(216,y)],DIM,5); g.line([(40+88*i,60),(40+88*i,196)],DIM,5)
+            g.line([(40,196),(90,150),(166,150),(216,196)],LINE,9)
+        for p in ((40,40),(216,40),(216,216),(40,216)) if sub in ("box","sphere") else ():
+            g.dot(p,ACC,14)
+    elif k=="text":
+        g.line([(52,56),(204,56)],LINE,16); g.line([(128,56),(128,206)],LINE,16)
+        g.line([(40,222),(216,222)],DIM,7); g.dot((40,222),ACC,16)
+    elif k=="dist":
+        g.dot((44,180),ACC,18); g.dot((212,76),ACC,18)
+        g.dash((44,180),(212,76),LINE,8,6)
+        g.line([(44,180),(212,180)],DIM,6); g.line([(212,180),(212,76)],DIM,6)
+    elif k=="id_point":
+        g.line([(128,40),(128,216)],DIM,7); g.line([(40,128),(216,128)],DIM,7)
+        g.ell((128,128),46,46,LINE,9); g.dot((128,128),ACC,20)
     elif k=="area":
         g.poly([(40,70),(150,44),(216,120),(176,214),(66,186)],FILLA,LINE,10)
         for p in ((40,70),(150,44),(216,120),(176,214),(66,186)): g.dot(p,ACC,16)
@@ -22889,7 +25315,7 @@ def _icon_bytes(kind="move"):
 
 # Palette « tons terre » : une teinte par famille d'outils (remplace l'ambre sur ce que l'outil crée ou modifie)
 ICON_FAMILY_COLORS = ((169, 185, 209), (224, 144, 122), (169, 189, 126), (227, 184, 99),
-                      (185, 154, 196), (217, 168, 140), (201, 163, 107), (143, 194, 189))
+                      (185, 154, 196), (217, 168, 140), (201, 163, 107), (143, 194, 189), (214, 140, 170))
 ICON_FAMILIES = (
     ("select", "sel_box", "sel_circle", "lasso", "stretch", "move", "copy", "rotate", "scale", "scale_2d", "scale_1d", "scale_size", "mirror", "array_l", "array_r", "array_p", "align"),
     ("join", "explode", "trim", "cut", "divide", "overkill", "split_face", "bool_u", "bool_d", "bool_i", "bool_s", "fillet", "chamfer", "fillet_c", "chamfer_c", "offset_srf", "offset"),
@@ -22899,7 +25325,12 @@ ICON_FAMILIES = (
     ("blend_srf", "match_srf", "thicken", "cap", "shell"),
     ("box", "cylinder", "cone", "tcone", "pyramid", "tpyramid", "tube", "sphere", "ellipsoid", "tsphere", "torus"),
     ("light_point", "light_spot", "light_sun", "light_area", "camera", "camera_target"),
-    ("dim", "dim_r", "dim_a", "note", "area", "make2d", "clip_plane"),
+    ("dim", "dim_r", "dim_a", "note", "text", "area", "dist", "id_point", "make2d", "clip_plane"),
+    ("subd_box", "subd_sphere", "subd_cylinder", "subd_cone", "subd_torus", "subd_plane", "subdc_to_subd", "subdc_to_mesh",
+     "subdc_loft", "subdc_sweep1", "subdc_sweep2", "subdc_revolve",
+     "subdc_multipipe", "subdc_display", "subdc_sym_x", "subdc_sym_y", "subdc_sym_z", "subdc_crease", "subdc_uncrease",
+     "subdc_insert_edge", "subdc_slide", "subdc_bevel", "subdc_inset", "subdc_bridge", "subdc_fill", "subdc_append", "subdc_merge_faces",
+     "subdc_extract", "subdc_weld", "subdc_stitch", "subdc_sel_loop", "subdc_sel_ring"),
 )
 _ICON_ACCENT_RGB = {(245, 184, 61), (255, 168, 38)}
 
@@ -22957,6 +25388,7 @@ class DESSIN_TT_deplacer(bpy.types.WorkSpaceTool):
         ("dessin.deplacer", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # la commande démarre dès que la souris bouge : accrochage visible avant le premier clic
         ("dessin.deplacer", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -22976,6 +25408,7 @@ class DESSIN_TT_copier(bpy.types.WorkSpaceTool):
     bl_keymap = (
         ("dessin.copier", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         ("dessin.copier", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -23075,6 +25508,7 @@ class DESSIN_TT_polyligne(bpy.types.WorkSpaceTool):
     bl_keymap = (
         ("dessin.polyligne", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         ("dessin.polyligne", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -23095,6 +25529,7 @@ class DESSIN_TT_plan(bpy.types.WorkSpaceTool):
     bl_keymap = (
         ("dessin.plan", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         ("dessin.plan", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -23108,13 +25543,14 @@ class DESSIN_TT_rotation(bpy.types.WorkSpaceTool):
     bl_context_mode = 'OBJECT'
     bl_idname = "dessin.rotation_tool"
     bl_label = "Rotate (center, reference, angle)"
-    bl_description = ("Rotates the selection: center, reference point, target point or typed angle. Shift: 15° steps, C: copy")
+    bl_description = ("Rotates the selection: center, reference point, target point or typed angle. R: Reference (reference angle by two points, then the new angle). Shift: 15° steps, C: copy")
     bl_icon = "ops.transform.rotate"
     bl_widget = None
     bl_keymap = (
         ("dessin.rotation", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # la commande démarre dès que la souris bouge : accrochage visible avant le premier clic
         ("dessin.rotation", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -23127,14 +25563,15 @@ class DESSIN_TT_echelle(bpy.types.WorkSpaceTool):
     bl_space_type = 'VIEW_3D'
     bl_context_mode = 'OBJECT'
     bl_idname = "dessin.echelle_tool"
-    bl_label = "Scale (base, reference 1, reference 2)"
-    bl_description = ("Scales the selection: base point, two reference points or typed factor. R: reference mode (base + reference point, then second base + second reference point), D: 3D / 2D / 1D, C: copy")
+    bl_label = "Scale"
+    bl_description = ("Scales the selection: base point, two reference points or typed factor. R: Reference (reference length by two points, then new length; R again: free reference with a second base point), D: 3D / 2D / 1D, C: copy")
     bl_icon = "ops.transform.resize"
     bl_widget = None
     bl_keymap = (
         ("dessin.echelle", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
         # la commande démarre dès que la souris bouge : accrochage visible avant le premier clic
         ("dessin.echelle", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+        ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None),   # Échap hors commande : quitte l'outil
     )
     draw_cursor = staticmethod(hover_draw_cursor)
     bl_cursor = 'NONE'
@@ -23380,6 +25817,136 @@ DESSIN_TT_annotation = _draw_tool_cls(
     "Text note with a leader line: click the point to point at, click where the text goes, type the text, Enter",
     "Point to point at, then the text position  ·  type the text  ·  Enter: create  ·  Esc: cancel")
 DESSIN_TT_annotation.draw_settings = _cotation_settings
+def _subd_settings(context, layout, tool):
+    layout.prop(context.scene.dessin, "subd_faces")
+    layout.label(text=getattr(tool, "dessin_hint", "") if hasattr(tool, "dessin_hint") else "")
+
+
+DESSIN_TT_subd_box = _draw_tool_cls(
+    "DESSIN_TT_subd_box", "dessin.subd_box_tool", "dessin.subd_box", "SubD Box",
+    "SubD box like SubDBox: first corner, opposite corner, then height. Smooth surface over a quad control cage, editable in Edit Mode",
+    "First corner, opposite corner, height  ·  C: from center  ·  SubD faces: faces per side of the cage")
+DESSIN_TT_subd_sphere = _draw_tool_cls(
+    "DESSIN_TT_subd_sphere", "dessin.subd_sphere_tool", "dessin.subd_sphere", "SubD Sphere",
+    "SubD sphere like SubDSphere (quad ball): center then radius",
+    "Center, then radius  ·  SubD faces: density of the cage")
+DESSIN_TT_subd_cylinder = _draw_tool_cls(
+    "DESSIN_TT_subd_cylinder", "dessin.subd_cylinder_tool", "dessin.subd_cylinder", "SubD Cylinder",
+    "SubD cylinder like SubDCylinder: center, radius, then height",
+    "Center, radius, height  ·  SubD faces: density of the cage")
+DESSIN_TT_subd_cone = _draw_tool_cls(
+    "DESSIN_TT_subd_cone", "dessin.subd_cone_tool", "dessin.subd_cone", "SubD Cone",
+    "SubD cone like SubDCone: center, radius, then height",
+    "Center, radius, height  ·  SubD faces: density of the cage")
+DESSIN_TT_subd_torus = _draw_tool_cls(
+    "DESSIN_TT_subd_torus", "dessin.subd_torus_tool", "dessin.subd_torus", "SubD Torus",
+    "SubD torus like SubDTorus: center, first radius, second radius",
+    "Center, first radius, second radius  ·  SubD faces: density of the cage")
+DESSIN_TT_subd_plane = _draw_tool_cls(
+    "DESSIN_TT_subd_plane", "dessin.subd_plane_tool", "dessin.subd_plane", "SubD Plane",
+    "SubD plane like SubDPlane: first corner then opposite corner (a grid of quads, sharp corners)",
+    "First corner, opposite corner  ·  SubD faces: density of the grid")
+for _t in (DESSIN_TT_subd_box, DESSIN_TT_subd_sphere, DESSIN_TT_subd_cylinder, DESSIN_TT_subd_cone, DESSIN_TT_subd_torus, DESSIN_TT_subd_plane):
+    _t.draw_settings = _subd_settings
+for _t in (DESSIN_TT_subd_sphere, DESSIN_TT_subd_cylinder, DESSIN_TT_subd_cone, DESSIN_TT_subd_torus, DESSIN_TT_subd_plane):
+    _t._in_group = True          # un seul menu déroulant SubD (tête : SubD Box)
+def _subd_cmd_tool(name, action, label, desc, hint, mode, kind, group=False, keymap=None):
+    """Outil de la barre pour une commande SubD : on désigne (objets en mode Objet, sommets / arêtes / faces en Édition),
+    puis Entrée / Espace / clic droit lance la commande."""
+    cls = _draw_tool_cls(name, f"dessin.subdc_{action.lower()}_{'edit' if mode == 'EDIT_MESH' else 'obj'}_tool", "dessin.subd",
+                         label, desc, hint, hover=False)
+    run = [("dessin.subd", {"type": k, "value": 'PRESS'}, {"properties": [("action", action)]}) for k in ('RET', 'NUMPAD_ENTER', 'SPACE')]
+    if keymap is None:
+        if mode == 'EDIT_MESH':
+            pick = [("dessin.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "any": True}, None),
+                    ("dessin.selection_boite", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None)]
+        else:
+            pick = [("dessin.pick_object", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None)]
+        keymap = tuple(pick + run + [
+            ("dessin.rclick_run", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, {"properties": [("cmd", "subd"), ("action", action)]}),
+            ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None)])
+    cls.bl_keymap = keymap
+    cls.bl_context_mode = mode
+    cls.dessin_icon = kind
+    cls._in_group = group
+    return cls
+
+
+_SUBD_SEL_HINT = "Select edges / faces / points (double-click: loop)  ·  Enter / Space / right click: "
+DESSIN_TT_subdc_to_subd = _subd_cmd_tool(
+    "DESSIN_TT_subdc_to_subd", 'TO_SUBD', "To SubD", "Turns the selected meshes into SubD, like ToSubD: click the objects (or select them first), then Enter",
+    "Click the meshes (or select them first)  ·  Enter / Space: To SubD", 'OBJECT', "subdc_to_subd")
+DESSIN_TT_subdc_to_mesh = _subd_cmd_tool(
+    "DESSIN_TT_subdc_to_mesh", 'TO_MESH', "SubD to Mesh", "Applies the subdivision of the selected SubD (the smooth surface becomes the mesh): click the objects, then Enter",
+    "Click the SubD objects  ·  Enter / Space: apply", 'OBJECT', "subdc_to_mesh", group=True)
+DESSIN_TT_subdc_multipipe = _subd_cmd_tool(
+    "DESSIN_TT_subdc_multipipe", 'MULTIPIPE', "MultiPipe", "SubD pipes along curves, joined at the nodes, like MultiPipe: click the curves, then Enter",
+    "Click the curves  ·  Enter / Space: MultiPipe  ·  radius: SubD panel", 'OBJECT', "subdc_multipipe", group=True)
+_SUBD_OBJ_EXTRA = []
+_SUBD_EDIT_EXTRA = []
+for _mode in ('OBJECT', 'EDIT_MESH'):
+    _suf = "" if _mode == 'OBJECT' else "_edit"
+    _hint = "Click the SubD objects" if _mode == 'OBJECT' else "Select the parts of the SubD"
+    _t = [_subd_cmd_tool(f"DESSIN_TT_subdc_display{_suf}", 'DISPLAY', "Toggle SubD Display",
+                         "Smooth / box (control cage) display of the SubD, like ToggleSubDDisplay: Enter to toggle",
+                         _hint + "  ·  Enter / Space: smooth / box display", _mode, "subdc_display", group=(_mode == 'OBJECT'))]
+    for _ax, _g in (("X", False), ("Y", True), ("Z", True)):
+        _t.append(_subd_cmd_tool(f"DESSIN_TT_subdc_sym_{_ax.lower()}{_suf}", f'REFLECT_{_ax}', f"Symmetry {_ax}",
+                                 f"Live symmetry across the {_ax} axis of the object (Mirror before the SubD), like Reflect: Enter to toggle",
+                                 _hint + f"  ·  Enter / Space: symmetry {_ax} on / off", _mode, f"subdc_sym_{_ax.lower()}", group=_g))
+    (_SUBD_OBJ_EXTRA if _mode == 'OBJECT' else _SUBD_EDIT_EXTRA).append(_t)
+DESSIN_TT_subdc_insert_edge = _subd_cmd_tool(
+    "DESSIN_TT_subdc_insert_edge", 'INSERT_EDGE', "Insert Edge", "Inserts an edge loop, like InsertEdge: hover an edge and click, move to slide it, click to confirm",
+    "Hover an edge, click, slide, click  ·  Esc: leave", 'EDIT_MESH', "subdc_insert_edge",
+    keymap=(("mesh.loopcut_slide", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+            ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None)))
+_SUBD_EDIT_LIST = [
+    [_subd_cmd_tool("DESSIN_TT_subdc_crease", 'CREASE', "Crease", "Sharp crease on the selected edges, like Crease: select the edges, then Enter",
+                    _SUBD_SEL_HINT + "crease", 'EDIT_MESH', "subdc_crease"),
+     _subd_cmd_tool("DESSIN_TT_subdc_uncrease", 'UNCREASE', "Remove Crease", "Removes the crease from the selected edges, like RemoveCrease: select the edges, then Enter",
+                    _SUBD_SEL_HINT + "remove the crease", 'EDIT_MESH', "subdc_uncrease", group=True)],
+    [DESSIN_TT_subdc_insert_edge,
+     _subd_cmd_tool("DESSIN_TT_subdc_slide", 'SLIDE', "Slide", "Slides the selected edges or points along the surface, like Slide: select, then Enter and move the mouse",
+                    _SUBD_SEL_HINT + "slide", 'EDIT_MESH', "subdc_slide", group=True),
+     _subd_cmd_tool("DESSIN_TT_subdc_bevel", 'BEVEL', "Bevel", "Bevels the selected edges, like Bevel: select the edges, then Enter and move the mouse",
+                    _SUBD_SEL_HINT + "bevel", 'EDIT_MESH', "subdc_bevel", group=True),
+     _subd_cmd_tool("DESSIN_TT_subdc_inset", 'INSET', "Inset", "Insets the selected faces (smaller face + ring of faces): select the faces, then Enter and move the mouse",
+                    _SUBD_SEL_HINT + "inset", 'EDIT_MESH', "subdc_inset", group=True)],
+    [_subd_cmd_tool("DESSIN_TT_subdc_bridge", 'BRIDGE', "Bridge", "Bridges two edge chains with faces, like Bridge: select both chains, then Enter",
+                    _SUBD_SEL_HINT + "bridge", 'EDIT_MESH', "subdc_bridge"),
+     _subd_cmd_tool("DESSIN_TT_subdc_fill", 'FILL', "Fill", "Fills the selected hole with quads, like Fill: select the border, then Enter",
+                    _SUBD_SEL_HINT + "fill", 'EDIT_MESH', "subdc_fill", group=True),
+     _subd_cmd_tool("DESSIN_TT_subdc_append", 'APPEND', "Append Face", "Creates a face from the selected points or edges, like Append: select, then Enter",
+                    _SUBD_SEL_HINT + "create the face", 'EDIT_MESH', "subdc_append", group=True)],
+    [_subd_cmd_tool("DESSIN_TT_subdc_merge_faces", 'MERGE_FACES', "Merge Faces", "Merges the selected faces into one, like MergeFaces: select the faces, then Enter",
+                    _SUBD_SEL_HINT + "merge", 'EDIT_MESH', "subdc_merge_faces"),
+     _subd_cmd_tool("DESSIN_TT_subdc_extract", 'EXTRACT', "Extract Faces", "Extracts the selected faces into a separate object, like ExtractSubObject: select the faces, then Enter",
+                    _SUBD_SEL_HINT + "extract", 'EDIT_MESH', "subdc_extract", group=True),
+     _subd_cmd_tool("DESSIN_TT_subdc_weld", 'WELD', "Weld", "Welds the points that are at the same place, like Weld: select, then Enter",
+                    _SUBD_SEL_HINT + "weld", 'EDIT_MESH', "subdc_weld", group=True),
+     _subd_cmd_tool("DESSIN_TT_subdc_stitch", 'STITCH', "Stitch", "Stitches the selected points / edges onto the last selected, like Stitch: select, then Enter",
+                    _SUBD_SEL_HINT + "stitch", 'EDIT_MESH', "subdc_stitch", group=True)],
+    [_subd_cmd_tool("DESSIN_TT_subdc_sel_loop", 'SEL_LOOP', "Select Loop", "Selects the loops of the selected edges, like SelLoop: select an edge, then Enter",
+                    _SUBD_SEL_HINT + "select the loop", 'EDIT_MESH', "subdc_sel_loop"),
+     _subd_cmd_tool("DESSIN_TT_subdc_sel_ring", 'SEL_RING', "Select Ring", "Selects the rings of the selected edges, like SelRing: select an edge, then Enter",
+                    _SUBD_SEL_HINT + "select the ring", 'EDIT_MESH', "subdc_sel_ring", group=True)],
+] + _SUBD_EDIT_EXTRA
+_SUBD_OBJ_LIST = [[DESSIN_TT_subdc_to_subd, DESSIN_TT_subdc_to_mesh, DESSIN_TT_subdc_multipipe]] + _SUBD_OBJ_EXTRA
+
+
+DESSIN_TT_text = _draw_tool_cls(
+    "DESSIN_TT_text", "dessin.text_tool", "dessin.text", "Text",
+    "Single-line text like TEXT: insertion point, type the text, Enter: next line, Enter on an empty line: finish",
+    "Insertion point  ·  type the text  ·  Enter: next line  ·  Enter on an empty line: finish")
+DESSIN_TT_text.draw_settings = _cotation_settings
+DESSIN_TT_dist = _draw_tool_cls(
+    "DESSIN_TT_dist", "dessin.dist_tool", "dessin.dist", "Distance",
+    "Like DIST: distance, X / Y / Z deltas and angles between two points. Nothing is created",
+    "First point, second point  ·  result in the command bar, distance copied to the clipboard")
+DESSIN_TT_id_point = _draw_tool_cls(
+    "DESSIN_TT_id_point", "dessin.id_point_tool", "dessin.id_point", "ID Point",
+    "Like ID: click a point to read its X, Y, Z coordinates. Nothing is created",
+    "Click a point (snaps work)  ·  coordinates in the command bar and copied to the clipboard")
 DESSIN_TT_mesure_aire = _draw_tool_cls(
     "DESSIN_TT_mesure_aire", "dessin.mesure_aire_tool", "dessin.mesure_aire", "Area / Perimeter",
     "Quick measure: click the corners of a contour (Enter or first point to close), D: measure the selection. Nothing is created",
@@ -23388,12 +25955,12 @@ DESSIN_TT_mesure_aire = _draw_tool_cls(
 DESSIN_TT_echelle_2d = _draw_tool_cls(
     "DESSIN_TT_echelle_2d", "dessin.echelle_2d_tool", "dessin.echelle_2d", "Scale 2D",
     "Scales the selection in the construction plane only (like Scale2D): base point, two reference points or typed factor",
-    "Select the objects first  ·  base point, reference points or factor + Enter  ·  C: copy  ·  R: free reference")
+    "Select the objects first  ·  base point, reference points or factor + Enter  ·  C: copy  ·  R: reference / free reference")
 DESSIN_TT_echelle_2d._in_group = True
 DESSIN_TT_echelle_1d = _draw_tool_cls(
     "DESSIN_TT_echelle_1d", "dessin.echelle_1d_tool", "dessin.echelle_1d", "Scale 1D",
     "Scales the selection in one direction only, the one from the base point to the reference point (like Scale1D)",
-    "Select the objects first  ·  base point, reference points or factor + Enter  ·  C: copy  ·  R: free reference")
+    "Select the objects first  ·  base point, reference points or factor + Enter  ·  C: copy  ·  R: reference / free reference")
 DESSIN_TT_echelle_1d._in_group = True
 DESSIN_TT_echelle_taille = _draw_tool_cls(
     "DESSIN_TT_echelle_taille", "dessin.echelle_taille_tool", "dessin.echelle_taille", "Scale to Size",
@@ -23477,6 +26044,27 @@ DESSIN_TT_revolve = _draw_tool_cls(
     "DESSIN_TT_revolve", "dessin.revolve_tool", "dessin.revolve", "Revolve",
     "Revolves curves around an axis: select the curves, Enter, two points for the axis, then Enter for 360° or type the angle (C: cap, D: delete input)",
     "Select the curves, Enter  ·  axis start, axis end  ·  Enter: 360° or type the angle  ·  C: cap  ·  D: delete input")
+DESSIN_TT_subd_loft = _pick_then_run_tool(
+    "DESSIN_TT_subd_loft", "dessin.subd_loft_tool", "dessin.subd_loft", "SubD Loft",
+    "SubD through curves, like SubDLoft: click the curves in order, then Enter (options: closed, through the curves, points, cap)",
+    "Click the curves in order  ·  Enter / Space: SubD Loft options  ·  Esc: leave")
+DESSIN_TT_subd_sweep1 = _pick_then_run_tool(
+    "DESSIN_TT_subd_sweep1", "dessin.subd_sweep1_tool", "dessin.subd_sweep1", "SubD Sweep 1",
+    "SubD swept along one rail, like SubDSweep1: click the rail first, then the cross-sections, then Enter",
+    "Click the rail first, then the cross-sections  ·  Enter / Space: options  ·  Esc: leave")
+DESSIN_TT_subd_sweep2 = _pick_then_run_tool(
+    "DESSIN_TT_subd_sweep2", "dessin.subd_sweep2_tool", "dessin.subd_sweep2", "SubD Sweep 2",
+    "SubD swept along two rails, like SubDSweep2: click the two rails, then the cross-sections, then Enter",
+    "Click the two rails, then the cross-sections  ·  Enter / Space: options  ·  Esc: leave")
+DESSIN_TT_subd_revolve = _draw_tool_cls(
+    "DESSIN_TT_subd_revolve", "dessin.subd_revolve_tool", "dessin.subd_revolve", "SubD Revolve",
+    "SubD revolved around an axis: select the curves, Enter, two points for the axis, then Enter for 360° or type the angle (C: cap, D: delete input)",
+    "Select the curves, Enter  ·  axis start, axis end  ·  Enter: 360° or type the angle  ·  C: cap  ·  D: delete input")
+for _t, _k in ((DESSIN_TT_subd_loft, "subdc_loft"), (DESSIN_TT_subd_sweep1, "subdc_sweep1"), (DESSIN_TT_subd_sweep2, "subdc_sweep2"),
+               (DESSIN_TT_subd_revolve, "subdc_revolve")):
+    _t.dessin_icon = _k
+    _t._in_group = _t is not DESSIN_TT_subd_loft
+_SUBD_OBJ_LIST.insert(0, [DESSIN_TT_subd_loft, DESSIN_TT_subd_sweep1, DESSIN_TT_subd_sweep2, DESSIN_TT_subd_revolve])
 DESSIN_TT_loft = _pick_then_run_tool(
     "DESSIN_TT_loft", "dessin.loft_tool", "dessin.loft", "Loft",
     "Creates a surface through curves: click them in order, then Enter (options: closed, straight / smooth, cap)",
@@ -23694,11 +26282,20 @@ TOOL_ORDER = (
     (DESSIN_TT_ellipsoide, "ellipsoid", False),
     (DESSIN_TT_sphere_tronquee, "tsphere", False),
     (DESSIN_TT_tore, "torus", False),
+    (DESSIN_TT_subd_box, "subd_box", True),
+    (DESSIN_TT_subd_sphere, "subd_sphere", False),
+    (DESSIN_TT_subd_cylinder, "subd_cylinder", False),
+    (DESSIN_TT_subd_cone, "subd_cone", False),
+    (DESSIN_TT_subd_torus, "subd_torus", False),
+    (DESSIN_TT_subd_plane, "subd_plane", False),
     (DESSIN_TT_cotation, "dim", True),
     (DESSIN_TT_cotation_rayon, "dim_r", False),
     (DESSIN_TT_cotation_angle, "dim_a", False),
     (DESSIN_TT_annotation, "note", False),
+    (DESSIN_TT_text, "text", False),
     (DESSIN_TT_mesure_aire, "area", False),
+    (DESSIN_TT_dist, "dist", False),
+    (DESSIN_TT_id_point, "id_point", False),
 )
 _EDIT_TOOLS = []
 
@@ -24951,7 +27548,7 @@ CMD_ALIASES = {
     "ellipse_centre_tool": "el ellipse", "arc_cse_tool": "a arc", "arc_3pts_tool": "a3 arc3", "boite_tool": "bx box",
     "cylindre_tool": "cyl cylinder", "cone_tool": "cone", "pyramide_tool": "pyr pyramid", "tube_tool": "tube",
     "sphere_tool": "sp sph sphere", "tore_tool": "to torus", "cotation_tool": "dli dim dimension",
-    "cotation_rayon_tool": "dra dimrad radius", "mesure_aire_tool": "aa area", "cotation_angle_tool": "dan dimangle angle", "annotation_tool": "lead leader note annotation", "curve_cp_tool": "crv curve", "extrude_path_tool": "extrudecrv extrudepath", "srf_corners_tool": "srfpt corners", "curve_interp_tool": "ic interp interpcrv", "sketch_tool": "sk sketch", "pen_tool": "pen bezier", "point_tool": "pt point",
+    "cotation_rayon_tool": "dra dimrad radius", "mesure_aire_tool": "aa area", "subd_loft_tool": "subdloft", "subd_sweep1_tool": "subdsweep1 subdsweep", "subd_sweep2_tool": "subdsweep2", "subd_revolve_tool": "subdrevolve", "subd_box_tool": "subdbox", "subd_sphere_tool": "subdsphere quadball", "subd_cylinder_tool": "subdcylinder subdcyl", "subd_cone_tool": "subdcone", "subd_torus_tool": "subdtorus", "subd_plane_tool": "subdplane", "text_tool": "text dt tx mtext", "dist_tool": "di dist distance", "id_point_tool": "id idpoint", "cotation_angle_tool": "dan dimangle angle", "annotation_tool": "lead leader note annotation", "curve_cp_tool": "crv curve", "extrude_path_tool": "extrudecrvalongcrv extrudepath", "srf_corners_tool": "srfpt corners", "curve_interp_tool": "ic interp interpcrv", "sketch_tool": "sk sketch", "pen_tool": "pen bezier", "point_tool": "pt point",
     "trim_tool": "tr trim", "join_tool": "j join", "explode_tool": "x explode", "align_tool": "al align",
     "make2d_tool": "m2d make2d", "revolve_tool": "rev revolve", "loft_tool": "loft", "sweep1_tool": "sweep1 sw1", "sweep2_tool": "sweep2 sw2",
     "light_point_tool": "pointlight", "light_spot_tool": "spotlight", "light_sun_tool": "sunlight", "light_area_tool": "arealight",
@@ -24999,6 +27596,10 @@ def cmd_tool_class(tool_id):
     for c in cmd_tool_classes():
         if c.bl_idname == tool_id:
             return c
+    for grp in _SUBD_OBJ_LIST + _SUBD_EDIT_LIST:      # outils de commandes SubD (pas dans la liste des commandes : déjà des actions)
+        for c in grp:
+            if c.bl_idname == tool_id:
+                return c
     return None
 
 
@@ -25149,7 +27750,7 @@ def cp_pick(context, region, rv3d, mx, my):
     ro = region_2d_to_origin_3d(region, rv3d, coord)
     rv = region_2d_to_vector_3d(region, rv3d, coord)
     try:
-        ok, loc, _nor, idx, obj, mat = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+        ok, loc, _nor, idx, obj, mat = ray_cast_opaque(context, ro, rv)
     except (RuntimeError, TypeError, ValueError):
         ok = False
     if ok:
@@ -25248,7 +27849,7 @@ class DESSIN_OT_cplane(bpy.types.Operator):
         ro = region_2d_to_origin_3d(self.region, self.rv3d, coord)
         rv = region_2d_to_vector_3d(self.region, self.rv3d, coord)
         try:
-            ok, loc, nor, _i, _o, _m = context.scene.ray_cast(context.evaluated_depsgraph_get(), ro, rv)
+            ok, loc, nor, _i, _o, _m = ray_cast_opaque(context, ro, rv)
         except (RuntimeError, TypeError, ValueError):
             ok = False
         if not ok:
@@ -25517,7 +28118,7 @@ class DESSIN_OT_pushpull(bpy.types.Operator):
         rv = region_2d_to_vector_3d(region, self.rv3d, coord)
         try:
             dg = context.evaluated_depsgraph_get()
-            ok, loc, _nor, idx, obj, _m = context.scene.ray_cast(dg, ro, rv)
+            ok, loc, _nor, idx, obj, _m = ray_cast_opaque(context, ro, rv, True)
         except (RuntimeError, TypeError, ValueError):
             return None
         if not ok or obj is None or obj.type != 'MESH':
@@ -25552,9 +28153,9 @@ class DESSIN_OT_pushpull(bpy.types.Operator):
         coord = Vector((mx, my))
         ro = region_2d_to_origin_3d(region, self.rv3d, coord)
         rv = region_2d_to_vector_3d(region, self.rv3d, coord)
-        hit = geometry.intersect_line_line(ro, ro + rv, p0, p0 + nw)
-        if hit is not None:
-            self.dist = (hit[1] - p0).dot(nw)
+        h = view_height(p0, p0, nw, ro, rv, self.rv3d)     # face vue de face (dessus en vue Top) : distance du curseur
+        if h is not None:
+            self.dist = h
 
     def refresh_preview(self):
         obj, idx, segs, nw, p0 = self.target
@@ -25860,6 +28461,28 @@ CMD_ACTIONS = (
     ("Local View", "lv localview isolateview", "", "Local view of the selection", _act_op("view3d.localview")),
     ("Camera View", "vc cameraview", "", "View through the active camera", _act_op("view3d.view_camera")),
     ("Cursor to Selected", "c2s cursortoselected", "", "Move the 3D cursor to the selection", _act_op("view3d.snap_cursor_to_selected")),
+    ("Show Edges", "showedges nakededges naked edges", "", "Highlight the naked edges (open borders) of the selection, like ShowEdges; again to hide", _act_op("dessin.show_edges")),
+    ("To SubD", "tosubd subd", "", "Turn the selected meshes into SubD (their faces become the control cage)", _act_op("dessin.subd", action='TO_SUBD')),
+    ("SubD to Mesh", "subdtomesh applysubd", "", "Apply the subdivision: the smooth surface becomes the mesh", _act_op("dessin.subd", action='TO_MESH')),
+    ("Toggle SubD Display", "togglesubddisplay subddisplay", "", "Smooth / box display of the selected SubD", _act_op("dessin.subd", action='DISPLAY')),
+    ("Crease", "crease", "", "Sharp crease on the selected edges (Edit Mode)", _act_op("dessin.subd", action='CREASE')),
+    ("Remove Crease", "removecrease uncrease", "", "Remove the crease from the selected edges (Edit Mode)", _act_op("dessin.subd", action='UNCREASE')),
+    ("Insert Edge", "insertedge", "", "Insert an edge loop (Edit Mode)", _act_op("dessin.subd", action='INSERT_EDGE')),
+    ("Slide", "slide", "", "Slide edges or points along the surface (Edit Mode)", _act_op("dessin.subd", action='SLIDE')),
+    ("Inset", "inset insetfaces", "", "Inset the selected faces (Edit Mode)", _act_op("dessin.subd", action='INSET')),
+    ("Bridge", "bridge", "", "Bridge two edge chains (Edit Mode)", _act_op("dessin.subd", action='BRIDGE')),
+    ("Fill", "fill fillhole", "", "Fill the selected hole with quads (Edit Mode)", _act_op("dessin.subd", action='FILL')),
+    ("Append Face", "append appendface", "", "Face from the selected points / edges (Edit Mode)", _act_op("dessin.subd", action='APPEND')),
+    ("Merge Faces", "mergefaces mergeallfaces", "", "Merge the selected faces (Edit Mode)", _act_op("dessin.subd", action='MERGE_FACES')),
+    ("Weld", "weld", "", "Weld coincident points (Edit Mode)", _act_op("dessin.subd", action='WELD')),
+    ("Stitch", "stitch", "", "Stitch the selected points / edges on the last one (Edit Mode)", _act_op("dessin.subd", action='STITCH')),
+    ("Extract Faces", "extractsubobject extractfaces extract", "", "Extract the selected faces to a new object (Edit Mode)", _act_op("dessin.subd", action='EXTRACT')),
+    ("Select Loop", "selloop loop", "", "Select the edge loop (Edit Mode)", _act_op("dessin.subd", action='SEL_LOOP')),
+    ("Select Ring", "selring ring", "", "Select the edge ring (Edit Mode)", _act_op("dessin.subd", action='SEL_RING')),
+    ("Symmetry X", "reflect symmetry symx", "", "Live symmetry across X (Mirror before the SubD)", _act_op("dessin.subd", action='REFLECT_X')),
+    ("Symmetry Y", "symy", "", "Live symmetry across Y", _act_op("dessin.subd", action='REFLECT_Y')),
+    ("Symmetry Z", "symz", "", "Live symmetry across Z", _act_op("dessin.subd", action='REFLECT_Z')),
+    ("MultiPipe", "multipipe mp", "", "SubD pipes along the selected curves, joined at the nodes", _act_op("dessin.subd", action='MULTIPIPE')),
     ("Group", "g group", "", "Group the selected objects", _act_op("dessin.group")),
     ("Ungroup", "ug ungroup", "", "Ungroup the selected group", _act_op("dessin.ungroup")),
 )
@@ -25958,8 +28581,11 @@ def cmd_entries(context=None):
     counts = {}
     for c in classes_:
         counts[cmd_clean_label(c.bl_label)] = counts.get(cmd_clean_label(c.bl_label), 0) + 1
+    act_names = {lab for lab, _al, _x, _d, _fn in CMD_ACTIONS}
     for c in classes_:
         label = cmd_clean_label(c.bl_label)
+        if c.bl_idname.startswith("dessin.subdc_") and cmd_clean_label(c.__dict__.get("dessin_en_label", c.bl_label)) in act_names:
+            continue     # outil SubD de la barre qui double une commande : la commande (même nom) suffit dans la ligne de commande
         if counts[label] > 1:
             label = c.bl_label.split(" →")[0].strip()
         short = c.bl_idname.split(".", 1)[1]
@@ -26054,7 +28680,7 @@ def cmd_suggest(text, limit=8):
                 sc_ += 0.0005 * j
                 best = sc_ if best is None else min(best, sc_)
         if best is not None:
-            found.append((best + (1.5 if e.get("gen") else 0.0), i, e))
+            found.append((best + (1.5 if e.get("gen") else (0.01 if e["kind"] == "native" else 0.0)), i, e))     # à égalité, l'outil passe avant la commande native de Blender
     found.sort(key=lambda t: (t[0], t[1]))
     out = []
     for _s, _i, e in found[:limit * 6]:
@@ -26504,6 +29130,42 @@ def cmd_parse_prompt(txt):
     return title, rest, details, out, extras
 
 
+def bar_layout(ptr, region_w, left, right, sc, vw, cw, mw, hc):
+    """Position des trois pastilles du bas (onglets de vue, ligne de commande, boutons de mode).
+    Une seule ligne si tout tient entre la barre d'outils et la barre latérale ; sinon la ligne de commande passe
+    au-dessus, seule, et les onglets + modes restent en bas (sur deux lignes si la vue est vraiment étroite).
+    Retourne {"views": (x, y), "cmd": (x, y), "modes": (x, y)} (bas-gauche de chaque pastille)."""
+    G = 18 * sc
+    hp = 11 * sc * 1.6 + 11 * sc                       # hauteur d'une pastille d'onglets / de modes
+    avail = region_w - left - right - 24 * sc
+    parts = [(k, w) for k, w in (("views", vw), ("cmd", cw), ("modes", mw)) if w > 0]
+    out = {}
+    total = sum(w for _k, w in parts) + G * max(0, len(parts) - 1)
+    if not (_GROUP["cmd_row"].get(ptr) and cw > 0) and total <= avail:
+        x = group_center(region_w, left, right, total, sc) - total / 2.0
+        for k, w in parts:
+            out[k] = (x, 16 * sc + (0.0 if k == "cmd" else max(0.0, (hc - hp) / 2.0)))
+            x += w + G
+        return out
+    rows = []
+    low = [(k, w) for k, w in parts if k != "cmd"]
+    if len(low) == 2 and low[0][1] + G + low[1][1] > avail:
+        rows = [[low[1]], [low[0]]]                   # très étroit : modes en bas, onglets au-dessus
+    elif low:
+        rows = [low]
+    if cw > 0:
+        rows.append([("cmd", cw)])
+    y = 16 * sc
+    for row in rows:
+        total = sum(w for _k, w in row) + G * (len(row) - 1)
+        x = group_center(region_w, left, right, total, sc) - total / 2.0
+        for k, w in row:
+            out[k] = (x, y)
+            x += w + G
+        y += (hc if row[0][0] == "cmd" else hp) + 8 * sc
+    return out
+
+
 def group_center(width, left, right, groupw, sc):
     """Centre horizontal du groupe (onglets + commande + modes) : au milieu de la vue, mais jamais sous la barre d'outils
     ni sous la barre latérale (même très large)."""
@@ -26550,9 +29212,15 @@ def cmd_bar_cb():
     cx = region.width / 2.0                                   # centre du viewport (toute la largeur, panneaux compris)
     vw0 = _GROUP["views"].get(ptr, 0.0)
     mw0 = modes_total_w(context, ptr, sc)
-    # le groupe (onglets de vue + barre de commande + boutons de mode) est centré : il doit tenir entre les panneaux
+    # le groupe (onglets de vue + barre de commande + boutons de mode) est centré : il doit tenir entre les panneaux.
+    # Vue trop étroite : la ligne de commande passe sur sa propre ligne, au-dessus des onglets et des modes (rien ne se chevauche)
     avail = region.width - left - right - 24 * sc          # place libre entre la barre d'outils et la barre latérale
-    maxw = max(160.0, min(avail - ((vw0 + 18 * sc) if vw0 else 0.0) - mw0, 760 * sc))
+    share = avail - ((vw0 + 18 * sc) if vw0 else 0.0) - mw0
+    own_row = share < 360 * sc
+    if _GROUP["cmd_row"].get(ptr) != own_row:
+        _GROUP["cmd_row"][ptr] = own_row
+        area.tag_redraw()
+    maxw = max(160.0, min(avail if own_row else share, 760 * sc))
     th = _cmd_theme()
     padx = 14 * sc
     gap = 8 * sc
@@ -26661,10 +29329,8 @@ def cmd_bar_cb():
     _GROUP["cmd"][ptr] = width
     _GROUP["cmd_h"][ptr] = h
     vw = _GROUP["views"].get(ptr, 0.0)
-    groupw = width + ((18 * sc + vw) if vw else 0.0) + mw0   # onglets de vue + ligne de commande + boutons de mode, centrés
-    gx = group_center(region.width, left, right, groupw, sc)
-    x0 = gx - groupw / 2.0 + ((vw + 18 * sc) if vw else 0.0)   # onglets de vue à gauche, ligne de commande à droite
-    y0 = 16 * sc
+    mw_raw = modes_layout(context, ptr, sc)[2] if mw0 else 0.0
+    x0, y0 = bar_layout(ptr, region.width, left, right, sc, vw, width, mw_raw, h)["cmd"]
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')
 
@@ -26734,7 +29400,7 @@ def cmd_bar_cb():
 
 
 _VBAR = {"hit": {}, "handle": None}
-_GROUP = {"cmd": {}, "views": {}, "cmd_h": {}}
+_GROUP = {"cmd": {}, "views": {}, "cmd_h": {}, "cmd_row": {}}
 
 
 def vbar_toggle_state(context, key):
@@ -26987,7 +29653,10 @@ def views_bar_cb():
     total = sum(widths) + gap * (len(names) - 1) + 8 * sc
     x0 = left + 12 * sc
     hc = _GROUP["cmd_h"].get(ptr, 0.0) if pref("cmd_line") else 0.0
-    y0 = 16 * sc + max(0.0, (hc - h) / 2.0)              # centrés sur la même ligne que la barre de commande
+    cw_ = _GROUP["cmd"].get(ptr, 0.0) if pref("cmd_line") else 0.0
+    mw_ = modes_layout(context, ptr, sc)[2] if modes_visible(context, ptr) else 0.0
+    lay = bar_layout(ptr, region.width, left, right, sc, total if len(names) > 1 else 0.0, cw_, mw_, hc)
+    y0 = 16 * sc
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')
 
@@ -27021,17 +29690,12 @@ def views_bar_cb():
         if _GROUP["views"].get(ptr) != total:
             area.tag_redraw()
         _GROUP["views"][ptr] = total
-        cw = _GROUP["cmd"].get(ptr, 0.0) if pref("cmd_line") else 0.0
-        groupw = total + ((18 * sc + cw) if cw else 0.0) + modes_total_w(context, ptr, sc)
-        vx0 = group_center(region.width, left, right, groupw, sc) - groupw / 2.0
+        vx0, y0 = lay["views"]
         pill(vx0, [('viewmenu' if n == "+" else 'view', n, t, n == active) for n, t in zip(names, labels)], widths, total)
     # boutons de mode (Ortho, Polar, accrochage, repérage) à droite de la ligne de commande, seulement quand on dessine
     if modes_visible(context, ptr):
         items, arrow_w, mw = modes_layout(context, ptr, sc)
-        cwid = _GROUP["cmd"].get(ptr, 0.0) if pref("cmd_line") else 0.0
-        vw_ = total if len(names) > 1 else 0.0
-        groupw = vw_ + cwid + (18 * sc if (vw_ and cwid) else 0.0) + mw + 18 * sc
-        mx0 = group_center(region.width, left, right, groupw, sc) - groupw / 2.0 + vw_ + cwid + (18 * sc if (vw_ and cwid) else 0.0) + 18 * sc
+        mx0, y0 = lay["modes"]
         fill(th["line"], _cmd_rrect(mx0 - 1, y0 - 1, mx0 + mw + 1, y0 + h + 1, rad + 1))
         fill(th["bg"], _cmd_rrect(mx0, y0, mx0 + mw, y0 + h, rad))
         x = mx0 + 4 * sc
@@ -27321,11 +29985,6 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     gumball_line: bpy.props.FloatProperty(
         name="Arc thickness", default=3.0, min=1.0, max=8.0, precision=1,
         description="Line thickness of the Gumball rotation arcs, in pixels")
-    preview_style: bpy.props.EnumProperty(
-        name="Drawing preview", default='CAD',
-        items=(('CAD', "CAD (white / black line, blue points)", "The line being drawn is white on a dark viewport (black on a light one), the points you placed are blue"),
-               ('CLASSIC', "Classic (yellow line, orange points)", "The previous colors")),
-        description="Colors of the line and the points while you draw")
     rich_tooltips: bpy.props.BoolProperty(
         name="Detailed tool tooltips", default=True, update=_update_icon_palette,
         description="Hovering a tool shows how to use it step by step, its command line alias and the useful keys. Changing it reloads the add-on")
@@ -27448,7 +30107,6 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         if self.language != pref_applied_language():
             abox.label(text="Restart Blender to apply the language", icon='INFO')
         abox.prop(self, "icon_palette")
-        abox.prop(self, "preview_style")
         abox.prop(self, "rich_tooltips")
         trow = abox.row(align=True)
         trow.label(text="Theme")
@@ -27611,6 +30269,7 @@ classes = (
     DESSIN_OT_stretch,
     DESSIN_OT_divide,
     DESSIN_OT_overkill,
+    DESSIN_OT_show_edges,
     DESSIN_OT_fillet_curve,
     DESSIN_OT_chamfer_curve,
     DESSIN_OT_clip_plane,
@@ -27652,6 +30311,21 @@ classes = (
     DESSIN_OT_cotation_rayon,
     DESSIN_OT_cotation_angle,
     DESSIN_OT_annotation,
+    DESSIN_OT_subd_box,
+    DESSIN_OT_subd_sphere,
+    DESSIN_OT_subd_cylinder,
+    DESSIN_OT_subd_cone,
+    DESSIN_OT_subd_torus,
+    DESSIN_OT_subd_plane,
+    DESSIN_OT_subd,
+    DESSIN_OT_subd_loft,
+    DESSIN_OT_subd_sweep1,
+    DESSIN_OT_subd_sweep2,
+    DESSIN_OT_subd_revolve,
+    DESSIN_PT_subd,
+    DESSIN_OT_text,
+    DESSIN_OT_dist,
+    DESSIN_OT_id_point,
     DESSIN_OT_mesure_aire,
     DESSIN_OT_deplacer,
     DESSIN_OT_copier,
@@ -28056,6 +30730,10 @@ def _wrap_rclick(cls):
     orig = cls.modal
 
     def modal(self, context, event):
+        if hasattr(self, "coord_pre"):
+            res = self.coord_pre(context, event)      # coordonnées tapées et From : avant le modal de l'outil
+            if res is not None:
+                return res
         if pref("rclick_enter") or getattr(self, "_rc", None) is not None:
             res = rclick_filter(self, context, event, orig)
             if res is not None:
@@ -28071,6 +30749,7 @@ def register():
     try:
         _LANG_APPLIED["v"] = lang()
         tool_classes = [c for n, c in list(globals().items()) if n.startswith("DESSIN_TT_") and isinstance(c, type)]
+        tool_classes += [c for grp in _SUBD_OBJ_LIST + _SUBD_EDIT_LIST for c in grp if c not in tool_classes]
         apply_language(list(classes) + tool_classes)
     except (KeyError, AttributeError, ReferenceError, RuntimeError):
         pass
@@ -28119,6 +30798,9 @@ def register():
                  "plane": "ops.mesh.primitive_plane_add_gizmo", "polyline": "ops.gpencil.draw"}
     for cls, kind, _sep in TOOL_ORDER:
         cls.bl_icon = ensure_icon(kind, fallbacks.get(kind, "ops.generic.select_box"))
+    for _grp in _SUBD_OBJ_LIST + _SUBD_EDIT_LIST:
+        for _c in _grp:
+            _c.bl_icon = ensure_icon(_c.dessin_icon, "ops.generic.select_box")
     DESSIN_TT_selection_boite.bl_icon = ensure_icon("select", "ops.generic.select_box")
     DESSIN_TT_selection_rect.bl_icon = ensure_icon("sel_box", "ops.generic.select_box")
     DESSIN_TT_selection_cercle.bl_icon = ensure_icon("sel_circle", "ops.generic.select_circle")
@@ -28169,7 +30851,11 @@ def register():
                                                            DESSIN_TT_join, DESSIN_TT_explode,
                                                            DESSIN_TT_align, DESSIN_TT_revolve, DESSIN_TT_loft, DESSIN_TT_sweep1, DESSIN_TT_sweep2, DESSIN_TT_make2d,
                                                            DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun,
-                                                           DESSIN_TT_light_area, DESSIN_TT_camera, DESSIN_TT_camera_target])
+                                                           DESSIN_TT_light_area, DESSIN_TT_camera, DESSIN_TT_camera_target]
+                            # tous les autres outils aussi (SubD, Text, DIST, ID...) : G / R / S se comportent partout de la même façon
+                            + [c for n, c in sorted(globals().items()) if n.startswith("DESSIN_TT_") and isinstance(c, type)
+                               and issubclass(c, bpy.types.WorkSpaceTool)]
+                            + [c for grp in _SUBD_OBJ_LIST + _SUBD_EDIT_LIST for c in grp])
     _EDIT_TOOLS.clear()
     for cls in [t[0] for t in TOOL_ORDER] + [DESSIN_TT_selection_lasso, DESSIN_TT_selection_boite, DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle]:
         # même outil en mode édition (maillage) : sous-classe ordinaire, pas une classe Blender enregistrée
@@ -28197,9 +30883,10 @@ def register():
          DESSIN_TT_rail_revolve, DESSIN_TT_loft, DESSIN_TT_sweep1, DESSIN_TT_sweep2],                                  # surfaces
         [DESSIN_TT_blend_srf, DESSIN_TT_match_srf, DESSIN_TT_thicken, DESSIN_TT_cap, DESSIN_TT_shell],  # édition de surfaces
         _between(DESSIN_TT_boite, DESSIN_TT_tore),                                                  # solides
+        _between(DESSIN_TT_subd_box, DESSIN_TT_subd_plane),                                         # SubD
         [DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun, DESSIN_TT_light_area,
          DESSIN_TT_camera, DESSIN_TT_camera_target],                                                # lumières / caméras
-        [DESSIN_TT_cotation, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_mesure_aire, DESSIN_TT_make2d, DESSIN_TT_clip_plane],    # annotation
+        [DESSIN_TT_cotation, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_text, DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane],    # annotation
     ]
     obj_chain = []
     for g in _groups:
@@ -28213,12 +30900,19 @@ def register():
             _edit_of[c] = _ev
             _edit_extra.append(_ev)
     edit_chain = [(_edit_of[c], sep) for c, sep in obj_chain if c in _edit_of]
+    # commandes SubD : après les primitives SubD (outils propres au mode Objet / au mode Édition)
+    _ko = [c for c, _s in obj_chain].index(DESSIN_TT_subd_plane) + 1
+    obj_chain[_ko:_ko] = [(c, i == 0 and gi == 0) for gi, grp in enumerate(_SUBD_OBJ_LIST) for i, c in enumerate(grp)]
+    _ke = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_subd_plane]) + 1
+    _sub_edit = [(c, i == 0 and gi == 0) for gi, grp in enumerate(_SUBD_EDIT_LIST) for i, c in enumerate(grp)]
+    edit_chain[_ke:_ke] = _sub_edit
     k_mir = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_miroir]) + 1
     edit_chain.insert(k_mir, (DESSIN_TT_extrude, False))            # Extrude : mode édition seulement
     register_set('OBJECT', DESSIN_TT_selection_boite, DESSIN_TT_selection_lasso, obj_chain, extra=(DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle))
     register_set('EDIT_MESH', _EDIT_TOOLS[-3], _EDIT_TOOLS[-4], edit_chain, extra=(_EDIT_TOOLS[-2], _EDIT_TOOLS[-1]))
     _EDIT_TOOLS.append(DESSIN_TT_extrude)
     _EDIT_TOOLS.extend(_edit_extra)
+    _EDIT_TOOLS.extend(c for c, _s in _sub_edit)
     # mode édition d'une courbe : outils de courbe, de transformation, de modification et de surfaces (ils quittent l'édition puis se lancent)
     def _crv_select_keymap(select_op):
         km = [("dessin.bar_click", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
@@ -28264,6 +30958,8 @@ def register():
         _EXT_BALL["handle"] = bpy.types.SpaceView3D.draw_handler_add(draw_extrude_ball, (), 'WINDOW', 'POST_PIXEL')
     if _TRIM_HL["handle"] is None:
         _TRIM_HL["handle"] = bpy.types.SpaceView3D.draw_handler_add(trim_highlight_cb, (), 'WINDOW', 'POST_VIEW')
+    if _SHOWEDGES["handle"] is None:
+        _SHOWEDGES["handle"] = bpy.types.SpaceView3D.draw_handler_add(showedges_cb, (), 'WINDOW', 'POST_VIEW')
     if _CURVE_PTS["handle"] is None:
         _CURVE_PTS["handle"] = bpy.types.SpaceView3D.draw_handler_add(curve_points_cb, (), 'WINDOW', 'POST_VIEW')
     if _CP_DRAW["handle"] is None:
@@ -28310,6 +31006,13 @@ def unregister():
         except (ValueError, RuntimeError):
             pass
         _TRIM_HL["handle"] = None
+    if _SHOWEDGES["handle"] is not None:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_SHOWEDGES["handle"], 'WINDOW')
+        except (ValueError, RuntimeError):
+            pass
+        _SHOWEDGES["handle"] = None
+    _SHOWEDGES["on"] = False
     if _CURVE_PTS["handle"] is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_CURVE_PTS["handle"], 'WINDOW')
@@ -28339,6 +31042,12 @@ def unregister():
     for c in reversed(_EDIT_TOOLS):
         bpy.utils.unregister_tool(c)
     _EDIT_TOOLS.clear()
+    for _grp in _SUBD_OBJ_LIST:
+        for _c in _grp:
+            try:
+                bpy.utils.unregister_tool(_c)
+            except (RuntimeError, ValueError, KeyError):
+                pass
     bpy.utils.unregister_tool(DESSIN_TT_offset_surface)
     bpy.utils.unregister_tool(DESSIN_TT_trim)
     bpy.utils.unregister_tool(DESSIN_TT_join)
