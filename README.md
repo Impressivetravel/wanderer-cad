@@ -4,7 +4,7 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 
 > **Status: stable (2.96.123).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 
-![Overview](docs/images/wanderer-01.jpg)
+![Overview](docs/images/wanderer-01.jpeg)
 
 ## Features
 
