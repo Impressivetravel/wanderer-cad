@@ -2,7 +2,8 @@ import bpy,sys,importlib.util,types,traceback,math
 from types import SimpleNamespace as NS
 from mathutils import Matrix, Vector
 SRC=sys.argv[1] if len(sys.argv)>1 and sys.argv[1].endswith('.py') else _SRC
-sp=importlib.util.spec_from_file_location('m',SRC);m=importlib.util.module_from_spec(sp);sys.modules['m']=m;sp.loader.exec_module(m)
+import os as _hos
+exec(open(_hos.path.join(_HERE,'addon_loader.py')).read())
 bpy.ops.wm.read_factory_settings(use_empty=True); m.register()
 _MIR={}
 _BUILDING=set()

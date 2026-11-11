@@ -10,8 +10,10 @@ with open(os.path.join(src, "blender_manifest.toml"), encoding="utf-8") as f:
 os.makedirs(os.path.join(root, "dist"), exist_ok=True)
 out = os.path.join(root, "dist", f"wanderer-{version}.zip")
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-    for name in ("__init__.py", "blender_manifest.toml"):
-        z.write(os.path.join(src, name), name)
+    # le paquet : __init__.py, ses modules (un par famille d'outils) et le manifeste
+    for name in sorted(os.listdir(src)):
+        if name.endswith(".py") or name == "blender_manifest.toml":
+            z.write(os.path.join(src, name), name)
     themes = os.path.join(src, "themes")
     for name in sorted(os.listdir(themes)):
         if name.endswith(".xml"):

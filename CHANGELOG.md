@@ -1,3 +1,66 @@
+# Wanderer CAD 2.96.124 — what's new since 2.96.123
+
+2.96.124 adds **eleven commands**, **Gumball handles to extrude and cut**, **PushPull on curved faces**, **pasting coordinates**, tracking along the **extension of a segment**, safer **Booleans**, and it fixes several problems found while remodeling a real piece of furniture with the mouse and the keyboard: the **Napoleone** coffee table, designed by **Claudio Salocchi for Acerbis** (see the README).
+
+## New commands
+
+They are in the toolbar, in the Wanderer menu and on the command line.
+
+- **Pipe** (`pipe`): a round tube along curves, with mitred corners on polylines and optional caps.
+- **Intersect** (`int`): the curves where surfaces and solids meet, and points where curves cross.
+- **Section** (`sec`): cuts the selected objects with a plane given by two points.
+- **Contour** (`contour`): evenly spaced section curves (base point, direction, spacing). At most 2000 planes.
+- **Extract Surface** (`extractsrf`): click faces of a solid to detach them (`C`: copy).
+- **Duplicate Border** (`dupborder`) and **Duplicate Edge** (`dupedge`): curves from the free borders of a surface, or from the edges you click.
+- **Merge All Faces** (`mergeallfaces`): merges neighbouring coplanar faces after Booleans or PushPull.
+- **Unroll Surface** (`unroll`): flattens a developable surface (cylinder, cone, folded plates) at true length. Double-curved surfaces are refused.
+- **Rebuild Surface** (`rebuildsrf`): rebuilds a surface made of a grid of quads with the point counts you choose.
+- **Orient** (`orient`): two reference points onto two target points (`D`: also scale, `C`: copy).
+
+## Gumball
+
+- **Extrusion sphere** on the arrows where an extrusion makes sense: it extrudes the curve, the flat surface or the selected faces (`Shift`: both sides).
+- **Cut handle** (a short line next to the sphere): a closed flat curve cuts the solids on its way; with `Ctrl/Cmd` it adds to them. On a selected flat face it pushes or pulls like PushPull.
+- Drag the handle, or click it, type the distance and press Enter.
+- The cut now also works on an object that holds a solid *and* a loose surface (for example a duplicated face): the closed parts are cut, the rest is left as it is. An object with no closed part gives a message that names it.
+
+## PushPull
+
+- Works on **curved faces**: the face is offset along its normals. A cylinder of radius 1 pulled by 0.5 becomes a cylinder of radius 1.5, and the caps follow. It also works on a sphere, the wall of a hole, a dome on a box, a rounded end.
+
+## Typing and pasting
+
+- **Enter repeats the last value** typed in a tool (radius, distance, height...). A preference turns it off.
+- **Ctrl/Cmd + V** during a command enters the numbers or coordinates of the clipboard as if they were typed: `12.5`, `#0,0`, `@10,0`, `@10<45`. Several points separated by spaces or line breaks are entered one after the other, so a whole polyline can be pasted at once.
+- `#` and `@` typed with AltGr (French, German... keyboards) or Option (Mac) are accepted.
+
+## Tracking
+
+- **SmartTrack follows the extension of a segment**: start on the end of a curve or an edge (or hover it for half a second), then move near the line that continues its last segment. The cursor locks on it, and on its crossing with the X / Y / Z lines of other points.
+
+## Booleans
+
+- Every result is checked: closed solid, coherent volume, no zero-thickness sheet. If a solver fails the next one is tried; a warning is shown when no solver gives a verified solid.
+
+## Fixed
+
+- **Fillet Curve, Chamfer Curve and Divide** read typed values in metres whatever the unit of the scene: typing `6` in a millimetre scene gave a 6 m radius. Typed values and the status text now use the unit of the scene (mm, cm, m, inches...).
+- **Dimensions placed by an older version stopped following the dimension style.** They store the tool under its class name (`DESSIN_OT_cotation`) while the current code only looked up the command name (`dessin.cotation`), so changing decimals, units, arrow size or text height silently left them as they were. Both spellings are read now, and an old dimension rebuilds like any other.
+- **Auto CPlane** is off by default again.
+
+## Under the hood
+
+- The add-on is now a **package of 42 modules** instead of one file. It is still one extension and installs the same way.
+- 60 regression suites, with new ones for the new commands, the Gumball handles, units, pasting, tracking and the rebuilding of old dimensions.
+
+## How it was tested
+
+- **Automated:** 60 suites out of 60 pass. No mouse move above 16 ms out of 11,232 measured.
+- **With the real mouse and keyboard, in Blender 5.1.1 on Windows:** the complete modeling session shown in the README (Polyline, Fillet Curve, Offset, object snaps, Join, Extrude Curve, Box, Gumball cut by dragging and by entering a value, Fillet Edge, Circle, Copy, Mirror, Stretch, Dimension). Numbers and coordinates were entered with Ctrl/Cmd + V. The finished parts were measured: every one is a closed solid and the overall sizes match the reference model. The **Angular Dimension** was then placed by hand on the fold of the "V" and reads 90.00 degrees, and the height dimension was placed again from the underside of the base plates (355.5 mm, not 375.16 mm from the floor).
+- **Not tested by hand yet:** Pipe, Intersect, Section, Contour, Extract Surface, Duplicate Border / Edge, Merge All Faces, Unroll, Rebuild Surface, Orient and PushPull on curved faces (automated tests only), and `#` / `@` typed with a real AltGr key. Mac and Blender 4.2 to 5.0 were not re-tested for this release.
+
+---
+
 # Wanderer CAD 2.96.123 — what's new since 2.96.122
 
 123 adds **hatching**, **blocks**, more **dimension** tools, a set of Rhino-style **curve and surface** tools, **sub-object selection**, a **Mac** pass, two new looks (**Ghost** theme, **Target** icons) and a lot of work on **precision, stability and speed in big scenes**.

@@ -2,7 +2,7 @@ import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _
 import sys
 import bpy, sys, importlib.util
 from mathutils import Vector
-spec=importlib.util.spec_from_file_location("cad",_SRC); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+exec(open(_os.path.join(_HERE,'addon_loader.py')).read())
 m.register()
 sc=bpy.context.scene
 print("props", sc.dessin.auto_cplane, sc.dessin.auto_cplane_sticky)
