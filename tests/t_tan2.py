@@ -2,7 +2,7 @@ import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _
 import bpy,sys,importlib.util,numpy as np
 from types import SimpleNamespace as NS
 from mathutils import Vector
-sp=importlib.util.spec_from_file_location('m',_SRC);m=importlib.util.module_from_spec(sp);sys.modules['m']=m;sp.loader.exec_module(m)
+exec(open(_os.path.join(_HERE,'addon_loader.py')).read())
 circ=("C",)
 ns=NS(points=[],cur=Vector((1,2,0)),typed=['',''],lock=None,_tan_info=("first",circ),update_preview=lambda c:None)
 ns.effective_point=lambda: ns.cur.copy()

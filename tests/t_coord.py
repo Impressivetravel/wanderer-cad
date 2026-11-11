@@ -2,7 +2,7 @@ import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _
 import bpy,sys,importlib.util,math,functools
 from types import SimpleNamespace as NS
 from mathutils import Vector
-sp=importlib.util.spec_from_file_location('m',_SRC);m=importlib.util.module_from_spec(sp);sys.modules['m']=m;sp.loader.exec_module(m)
+exec(open(_os.path.join(_HERE,'addon_loader.py')).read())
 bpy.ops.wm.read_factory_settings(use_empty=True); m.register()
 P=m.parse_coord
 ok=True

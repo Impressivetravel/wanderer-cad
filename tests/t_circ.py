@@ -1,6 +1,6 @@
 import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _os.environ.get('WANDERER_SRC') or _os.path.join(_HERE, '..', 'wanderer_cad', '__init__.py')
 import bpy,sys,types,numpy as np,importlib.util
-sp=importlib.util.spec_from_file_location('m',_SRC);m=importlib.util.module_from_spec(sp);sys.modules['m']=m;sp.loader.exec_module(m)
+exec(open(_os.path.join(_HERE,'addon_loader.py')).read())
 m.register()
 print("outils:",[t for t in (m.DESSIN_TT_selection_rect.bl_idname,m.DESSIN_TT_selection_cercle.bl_idname)])
 got={}

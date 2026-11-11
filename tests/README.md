@@ -15,7 +15,7 @@ python scripts/run_tests.py --bench    # adds the per-mouse-move timings
 ```
 
 A single suite can be run directly: `python tests/t_prec1.py`.
-The add-on tested is `wanderer_cad/__init__.py`; set `WANDERER_SRC=/path/to/file.py` to test another copy.
+The add-on tested is the package in `wanderer_cad/` (loaded by `tests/addon_loader.py`); set `WANDERER_SRC=/path/to/file.py` to test another copy.
 
 ## What each group checks
 
@@ -27,6 +27,9 @@ The add-on tested is `wanderer_cad/__init__.py`; set `WANDERER_SRC=/path/to/file
 | `t_perf`, `t_budget`, `t_rt` | Performance: snap data reuse, snap budget and on-demand detail in very large scenes, time per mouse move |
 | `t_alltools`, `t_reginherit`, `t_wf`, `t_esc`, `t_dimesc`, `t_coord`, `t_osnap`, `t_tan`, `t_tan2`, `t_quadnew`, `t_arcr`, `t_circ`, `t_autocp`, `t_far` | Workflow: every tool starts and finishes, right-click = Enter, C to close, F3, coordinates entry, object snaps, tangents, Auto CPlane, far-from-origin notice |
 | `t_hatch`, `t_hatchreg`, `t_srf`, `t_crv`, `t_blocks`, `t_dimadv`, `t_untrim`, `t_extopts`, `t_extcap`, `t_ppimprint` | Features: hatches, surfaces, curve editing, blocks, dimensions, untrim, extrude options |
+| `t_newcmds`, `t_gbpull`, `t_ppcurved`, `t_pushpull`, `t_bool`, `t_extdir` | Pipe, Intersect, Section, Contour, Extract Surface, Duplicate Border / Edge, Merge All Faces, Unroll, Rebuild Surface, Orient and their toolbar buttons; Gumball extrude and cut handles; PushPull on flat and curved faces; Booleans checked (closed, volume, no zero-thickness sheet) |
+| `t_enterlast`, `t_paste`, `t_units`, `t_track`, `t_rclick` | Typing: Enter = last value, pasted numbers and coordinates, typed values in the unit of the scene (mm, cm, m, inches), tracking along the extension of a segment, right-click = Enter |
+| `t_dimadv`, `t_dimesc`, `t_dimold` | Dimensions: continued and baseline, custom text, moving the dimension line, Esc, and dimensions stored by an older version still rebuilding when the style changes |
 
 ## Writing a suite
 

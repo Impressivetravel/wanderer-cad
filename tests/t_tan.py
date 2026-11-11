@@ -3,7 +3,7 @@ import sys, math, importlib.util, numpy as np
 import bpy
 from mathutils import Vector, Matrix
 from types import SimpleNamespace as NS
-sp=importlib.util.spec_from_file_location('m',_SRC);m=importlib.util.module_from_spec(sp);sys.modules['m']=m;sp.loader.exec_module(m)
+exec(open(_os.path.join(_HERE,'addon_loader.py')).read())
 def circ(c,r,n=(0,0,1)):
     th=np.linspace(0,2*np.pi,48,endpoint=False)
     P=np.array([(c[0]+r*np.cos(t),c[1]+r*np.sin(t),c[2]) for t in th])
