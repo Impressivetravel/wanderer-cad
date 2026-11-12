@@ -8,7 +8,7 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from mathutils import Vector, geometry
 
 from .core import (
-    SNAP_RADIUS, TAU, _link_object, arc_samples, build_plane, build_polyline, build_shape_mesh,
+    AXES3, SNAP_RADIUS, TAU, _link_object, arc_samples, build_plane, build_polyline, build_shape_mesh,
     circle_through_origin, drawing_axis, edit_add_geometry, idle_tool, plane_axes, plane_origin,
 )
 from .drawing import _TAN, find_window_region, project_px, px_scale, region_rv3d
@@ -100,6 +100,7 @@ class PolylineBase(DessinBase):
     NEEDED = 2
     NUMFIELDS = 1  # longueur du segment
     CAN_CLOSE = False   # C ferme sur le premier point (Polyline et courbes, comme l'option Close de Rhino / AutoCAD)
+    LOCK_3D = True      # X / Y / Z : l'axe hors du plan de construction est permis (segment vertical : touche Z)
 
     def prompt(self):
         n = len(self.points)
@@ -170,8 +171,17 @@ class PolylineBase(DessinBase):
         if getattr(self, "closing", False):
             return self.points[0].copy()
         last = self.points[-1]
-        u, v, _ = plane_axes(self.axis)
+        u, v, n = plane_axes(self.axis)
         d = self.cur - last
+        k = getattr(self, "lock", None)
+        if k is not None and self.LOCK_3D and abs(AXES3[k].dot(n)) >= 0.5:
+            # axe verrouillé hors du plan de construction (Z sur le plan du sol) : le segment suit cet axe
+            a = AXES3[k]
+            h = d.dot(a)
+            t = self.typed_value(0)
+            if t is not None:
+                h = t if h >= 0.0 else -t
+            return last + a * h
         du, dv = d.dot(u), d.dot(v)
         if self.ortho and not self.snap_screen:
             if abs(du) >= abs(dv):
@@ -573,6 +583,7 @@ class DESSIN_OT_sketch(PolylineBase):
     NUMFIELDS = 0
     HIDE_POINTS = True      # pas de points pendant le tracé : le trait reste fluide et lisible
     LOCK_OK = False
+    LOCK_3D = False
 
     def invoke(self, context, event):
         self._down = False
@@ -731,6 +742,7 @@ class DESSIN_OT_pen(PolylineBase):
 
     TITLE = "Pen"
     NUMFIELDS = 0
+    LOCK_3D = False         # les poignées de Bézier se calculent dans le plan de construction
 
     def invoke(self, context, event):
         self.hin = []

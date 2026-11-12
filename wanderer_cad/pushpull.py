@@ -868,6 +868,7 @@ class DESSIN_OT_pushpull(bpy.types.Operator):
                       "Closed curves drawn on a face split it first (inside zone / outer ring), and a zone closed by curves "
                       "alone can be pulled directly, without making a surface first")
     bl_options = {'REGISTER', 'UNDO'}
+    ONESHOT_USER = True     # la distance s'accroche aux points : un accrochage ponctuel (Maj + clic) s'éteint avec la commande
 
     @classmethod
     def poll(cls, context):

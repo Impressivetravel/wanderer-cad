@@ -9,7 +9,7 @@ import time
 from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector
 
-from .core import AXES3, TAU, pref
+from .core import AXES3, TAU, oneshot_shown, osnap_shown, pref, tr_text
 from .drawing import get_shader, project_px, px_scale
 from .subd import expand_groups
 from .gumball import (
@@ -971,12 +971,22 @@ def statusbar_osnap(self, context):
         st = context.scene.dessin
     except (AttributeError, ReferenceError):
         return
+    one = oneshot_shown()
     row = self.layout.row(align=True)
     row.label(text="OSnap")
     sub = row.row(align=True)
-    sub.enabled = not st.osnap_disable
+    sub.active = one or not st.osnap_disable        # F3 : cases grisées (elles restent cliquables)
     for key, label in OSNAP_BAR:
-        sub.prop(st, "osnap_" + key, text=label)
+        # cases en boutons : l'opérateur voit la touche Maj (Maj + clic = accrochage ponctuel, comme Rhino). Maj tenu
+        # au-dessus de la barre : toutes paraissent décochées ; seuls les accrochages ponctuels cliqués sont cochés
+        on = osnap_shown(st, key)
+        try:
+            sub.operator("dessin.osnap_set", text=label, icon='CHECKBOX_HLT' if on else 'CHECKBOX_DEHLT', emboss=False).key = key
+        except (AttributeError, TypeError, RuntimeError):
+            sub.prop(st, "osnap_" + key, text=label)        # opérateur absent (module en cours d'arrêt) : la case d'origine
+    if one:
+        # l'indication vient APRÈS les cases : elles ne bougent pas sous la souris quand Maj les décoche
+        row.label(text=tr_text("one shot"))
     self.layout.separator(factor=2.0)
 
 

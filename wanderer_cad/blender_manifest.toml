@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "wanderer"
-version = "2.96.124"
+version = "2.96.125"
 name = "Wanderer CAD"
 tagline = "Precision CAD modeling with snapping and a command line"
 maintainer = "Hostylmatic"
@@ -17,4 +17,4 @@ copyright = ["2026 Hostylmatic"]
 
 [permissions]
 clipboard = "Copies measurements to the clipboard, pastes into command line"
-files = "Reads DXF drawings; keeps an icon cache in its user folder"
+files = "Reads DXF, writes layout PDF / SVG / DXF, keeps an icon cache"

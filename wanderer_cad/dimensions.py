@@ -49,6 +49,7 @@ class DESSIN_OT_cotation(DessinBase):
     def text_for(self, length):
         st = bpy.context.scene.dessin
         factor, label = self.unit_for_text()
+        length = length * layout_dim_factor(self)      # mise en page : cote posée sur un détail = longueur du modèle
         txt = f"{length / factor:.{st.decimales}f}"
         if st.supprimer_zeros and "." in txt:
             txt = txt.rstrip("0").rstrip(".")
@@ -2064,3 +2065,5 @@ def _late_imports():
     DESSIN_OT_hatch_match, DESSIN_OT_hatch_region, is_hatch,
     )
     from .cplane import cmd_log
+    global layout_dim_factor
+    from .layout import layout_dim_factor

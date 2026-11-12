@@ -260,6 +260,11 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     cmd_size: bpy.props.IntProperty(
         name="Command bar size", default=100, min=40, max=250, subtype='PERCENTAGE', update=_update_cmd_line,
         description="Size of the command bar text and pill (lower it if it looks too big on your screen)")
+    mode_icons: bpy.props.BoolProperty(
+        name="Mode bar: icons only", default=False, update=_update_cmd_line,
+        description="Always show the mode buttons at the bottom right of the 3D viewport (Grid Snap, Ortho, Polar, OSnap, "
+                    "SmartTrack, Gumball, Auto CPlane, Quick Type) as icons, even when the viewport is wide. "
+                    "Off: they show their names and only turn into icons when the viewport gets narrow")
     cmd_key: bpy.props.EnumProperty(
         name="Open with", items=CMD_KEY_ITEMS, default='SPACE', update=_update_cmd_line,
         description="Key that opens the command line in the 3D viewport")
@@ -333,6 +338,7 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         row = cbox.row()
         row.enabled = self.cmd_line
         row.prop(self, "cmd_size")
+        cbox.prop(self, "mode_icons")      # (la barre de modes reste affichée sans la ligne de commande : réglage toujours actif)
         row = cbox.row()
         row.enabled = self.cmd_line
         row.prop(self, "cmd_key")

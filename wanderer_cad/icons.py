@@ -579,6 +579,14 @@ ICON_SVG.update({
     'orient': '<rect class="n" x="3" y="12" width="7" height="7" rx="1"/><path class="g" d="M6.5 12V8M3 15.5H1" stroke-dasharray="1.4 1.4"/><path class="a" d="M14 11L18 6M14 11L20 12"/><g transform="rotate(-30 17 15)"><rect class="af" x="13.5" y="13" width="7" height="7" rx="1"/></g><path class="n" d="M11 15L13 14M12.3 12.5L13.8 14.2L11.9 15"/>',
 })
 
+# Mise en page (2.96.125) : la feuille avec son cartouche, et un détail (cadre + vue du modèle)
+ICON_SVG.update({
+    'layout': '<rect class="n" x="3" y="3.5" width="18" height="17" rx="1.2"/><rect class="af" x="5.5" y="6" width="7" height="6" rx="0.6"/>'
+              '<path class="g" d="M14.5 7h4M14.5 9.5h4M5.5 14.5h7"/><path class="a" d="M13.5 15.5h7.5M13.5 15.5v5M13.5 18h7.5"/>',
+    'detail': '<rect class="a" x="3" y="4.5" width="18" height="15" rx="1"/><path class="n" d="M12 7.5 16.5 10v5L12 17.5 7.5 15v-5z"/>'
+              '<path class="n" d="M7.5 10 12 12.5 16.5 10M12 12.5v5"/><path class="af" d="M12 7.5 16.5 10 12 12.5 7.5 10z"/>',
+})
+
 ICON_ALIAS = {"scale_2d": "scale2d", "scale_1d": "scale1d", "scale_size": "scalesize", "ellipse_c": "ellipse", "poly_c": "polygon", "camera_target": "camera_t"}
 
 
@@ -1120,7 +1128,7 @@ ICON_FAMILIES = (
     ("blend_srf", "match_srf", "fillet_srf", "chamfer_srf", "extend_srf", "split_iso", "untrim", "untrim_holes", "thicken", "cap", "shell", "extract_srf", "unroll", "rebuild_srf"),
     ("box", "cylinder", "cone", "tcone", "pyramid", "tpyramid", "tube", "sphere", "ellipsoid", "tsphere", "torus", "pipe"),
     ("light_point", "light_spot", "light_sun", "light_area", "camera", "camera_target"),
-    ("dim", "dim_chain", "dim_ord", "dim_arc", "dim_r", "dim_a", "note", "text", "center_mark", "dim_edit", "hatch", "hatch_region", "area", "dist", "id_point", "make2d", "clip_plane"),
+    ("dim", "dim_chain", "dim_ord", "dim_arc", "dim_r", "dim_a", "note", "text", "center_mark", "dim_edit", "hatch", "hatch_region", "area", "dist", "id_point", "make2d", "clip_plane", "layout", "detail"),
     ("subd_box", "subd_sphere", "subd_cylinder", "subd_cone", "subd_torus", "subd_plane", "subdc_to_subd", "subdc_to_mesh",
      "subdc_loft", "subdc_sweep1", "subdc_sweep2", "subdc_revolve",
      "subdc_multipipe", "subdc_display", "subdc_sym_x", "subdc_sym_y", "subdc_sym_z", "subdc_crease", "subdc_uncrease",

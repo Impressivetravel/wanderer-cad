@@ -3,7 +3,9 @@
 import bpy
 import time
 
-from .core import CPLANES, _CPLANE, _LANG_APPLIED, addon_globals, apply_language, lang, pref
+from .core import (
+    CPLANES, _CPLANE, _LANG_APPLIED, addon_globals, apply_language, lang, oneshot_clear, oneshot_keys, oneshot_reset, pref,
+)
 from .snapping import _LOD, _lod_timer, _perf_caches_clear
 from .drawing import (
     _apply_dimension_settings, _on_depsgraph_update, _on_load_clear, _on_load_post, _on_undo_redo, ensure_idle_tool,
@@ -108,6 +110,7 @@ from .surface_edit import (
     DESSIN_OT_untrim_holes,
 )
 from .make2d import DESSIN_OT_make2d
+from .layout import LAYOUT_CLASSES, layout_after_command, layout_register, layout_unregister
 from .lights import (
     DESSIN_OT_camera, DESSIN_OT_camera_target, DESSIN_OT_light_area, DESSIN_OT_light_point, DESSIN_OT_light_spot,
     DESSIN_OT_light_sun,
@@ -118,7 +121,7 @@ from .gumball_handles import (
 )
 from .menus import DESSIN_MT_menu, menu_add
 from .icons import ensure_icon
-from .toolbar import RHINO_TOOLS
+from .toolbar import LAYOUT_TOOLS, RHINO_TOOLS
 from .toolbar import (
     DESSIN_TT_align, DESSIN_TT_annotation, DESSIN_TT_arc_3pts, DESSIN_TT_array_polar, DESSIN_TT_blend_crv,
     DESSIN_TT_blend_srf, DESSIN_TT_block, DESSIN_TT_block_insert, DESSIN_TT_boite, DESSIN_TT_bool_union,
@@ -160,8 +163,9 @@ from .rhino_commands import (
     DESSIN_OT_unroll,
 )
 from .command_line import (
-    CmdKeyEvent, DESSIN_MT_auto_cplane, DESSIN_MT_mouse_menu, DESSIN_MT_polar_angle, DESSIN_OT_command_line,
-    DESSIN_OT_cplane_named, _VBAR, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
+    CmdKeyEvent, DESSIN_MT_auto_cplane, DESSIN_MT_grid_snap, DESSIN_MT_mouse_menu, DESSIN_MT_osnap, DESSIN_MT_polar_angle,
+    DESSIN_OT_command_line, DESSIN_OT_cplane_named, DESSIN_OT_grid_snap_set, DESSIN_OT_grid_snap_step, DESSIN_OT_osnap_hold,
+    DESSIN_OT_osnap_set, _VBAR, register_osnap_hold_keys, unregister_osnap_hold_keys, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
     unregister_cmd_keymap, unregister_mouse_track, views_bar_cb,
 )
 from .preferences import DESSIN_AP_prefs, DESSIN_OT_install_theme, DESSIN_OT_prefs_reset
@@ -437,8 +441,14 @@ classes = (
     DESSIN_OT_trim_mode,
     DESSIN_AP_prefs,
     DESSIN_MT_polar_angle,
+    DESSIN_OT_osnap_set,
+    DESSIN_OT_osnap_hold,
+    DESSIN_MT_osnap,
+    DESSIN_OT_grid_snap_set,
+    DESSIN_OT_grid_snap_step,
+    DESSIN_MT_grid_snap,
     DESSIN_PT_selfilter,
-)
+) + LAYOUT_CLASSES
 
 
 def _tool_list(mode):
@@ -810,10 +820,19 @@ def _wrap_guard(cls):
     orig = cls.modal
 
     def modal(self, context, event):
+        one = oneshot_keys()
+        n0 = len(getattr(self, "points", None) or ()) if one else 0
         try:
-            return orig(self, context, event)
+            res = orig(self, context, event)
         except ReferenceError:
+            oneshot_clear()
             return _modal_scene_lost(self, context)
+        if one and getattr(self, "ONESHOT_USER", False) and (
+                'FINISHED' in res or 'CANCELLED' in res or len(getattr(self, "points", None) or ()) > n0):
+            oneshot_clear()             # accrochage ponctuel : un seul point, et jamais au-delà de la commande
+        if 'FINISHED' in res:
+            layout_after_command(context, self)     # mise en page : les suites de la commande, dans son pas d'annulation
+        return res
     cls.modal = modal
     cls._guard_wrapped = True
 
@@ -959,6 +978,7 @@ def register():
     bpy.types.Scene.dessin_views = bpy.props.CollectionProperty(type=DESSIN_PG_view)
     bpy.types.Scene.dessin_view_tabs = bpy.props.StringProperty(default=DEFAULT_TABS)
     bpy.types.Scene.dessin_view_labels = bpy.props.StringProperty()
+    layout_register()
     bpy.types.STATUSBAR_HT_header.prepend(statusbar_osnap)
     bpy.app.timers.register(ensure_statusbar_osnap, first_interval=1.0)
     bpy.app.timers.register(ensure_statusbar_osnap, first_interval=4.0)
@@ -999,7 +1019,7 @@ def register():
     for _grp in _SUBD_OBJ_LIST + _SUBD_EDIT_LIST:
         for _c in _grp:
             _c.bl_icon = ensure_icon(_c.dessin_icon, "ops.generic.select_box")
-    for _grp in RHINO_TOOLS.values():
+    for _grp in list(RHINO_TOOLS.values()) + [LAYOUT_TOOLS]:
         for _c in _grp:
             _c.bl_icon = ensure_icon(_c.dessin_icon, "ops.generic.select_box")
     DESSIN_TT_selection_boite.bl_icon = ensure_icon("select", "ops.generic.select_box")
@@ -1106,6 +1126,7 @@ def register():
     ]
     for _gi, _fk in ((0, "curves"), (1, "transform"), (2, "modify"), (4, "srf_edit"), (5, "solids")):
         _groups[_gi] = list(_groups[_gi]) + RHINO_TOOLS[_fk]
+    _groups[-1] = list(_groups[-1]) + LAYOUT_TOOLS          # Layout, Detail : à la fin des annotations
     obj_chain = []
     for g in _groups:
         for i, c in enumerate(g):
@@ -1168,6 +1189,7 @@ def register():
     register_cmd_keymap()
     register_mouse_track()
     register_sel_filter_keys()
+    register_osnap_hold_keys()
     if _CMD["handle"] is None:
         _CMD["handle"] = bpy.types.SpaceView3D.draw_handler_add(cmd_bar_cb, (), 'WINDOW', 'POST_PIXEL')
     if _VBAR["handle"] is None:
@@ -1193,6 +1215,8 @@ def unregister():
     unregister_cmd_keymap()
     unregister_mouse_track()
     unregister_sel_filter_keys()
+    unregister_osnap_hold_keys()
+    oneshot_reset()
     if _CMD["handle"] is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_CMD["handle"], 'WINDOW')
@@ -1289,7 +1313,7 @@ def unregister():
                DESSIN_TT_simplify_crv, DESSIN_TT_change_degree, DESSIN_TT_insert_point, DESSIN_TT_remove_point,
                DESSIN_TT_block, DESSIN_TT_block_insert, DESSIN_TT_untrim, DESSIN_TT_untrim_holes):
         bpy.utils.unregister_tool(_c)
-    for _g in RHINO_TOOLS.values():
+    for _g in list(RHINO_TOOLS.values()) + [LAYOUT_TOOLS]:
         for _c in _g:
             try:
                 bpy.utils.unregister_tool(_c)
@@ -1335,6 +1359,7 @@ def unregister():
             _menu.remove(_fn)
         except (ValueError, RuntimeError):
             pass
+    layout_unregister()
     del bpy.types.Scene.dessin_view_labels
     del bpy.types.Scene.dessin_view_tabs
     del bpy.types.Scene.dessin_views

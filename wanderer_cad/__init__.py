@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Wanderer CAD",
     "author": "Hostylmatic",
-    "version": (2, 96, 124),
+    "version": (2, 96, 125),
     "blender": (4, 2, 0),
     "location": "3D Viewport > Left toolbar (Object and Edit mode)  |  Add > Wanderer  |  Sidebar > Wanderer",
-    "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, and run every command from a command line.",
+    "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, lay out paper sheets with detail views at scale and export them to PDF, and run every command from a command line.",
     "category": "3D View",
 }
 
@@ -17,7 +17,7 @@ _MODULES = (
     "core", "snapping", "drawing", "base", "tools_draw", "solids", "subd", "transform",
     "edges", "booleans", "selection", "settings", "dimensions", "layers", "import_dxf", "objects",
     "curve_edit", "display", "gumball", "offset_extrude", "trim", "join_explode", "surfaces", "hatch",
-    "surface_tools", "curve_tools", "blocks", "surface_edit", "make2d", "lights", "gumball_handles", "menus",
+    "surface_tools", "curve_tools", "blocks", "surface_edit", "make2d", "layout_engine", "layout", "lights", "gumball_handles", "menus",
     "icons", "toolbar", "navigation", "views", "cplane", "pushpull", "rhino_commands", "command_line",
     "preferences", "registration",
 )

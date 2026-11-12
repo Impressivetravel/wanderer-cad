@@ -1051,7 +1051,7 @@ def layer_button_menu(self, context):
 
 def tool_families():
     """[(titre, [classes d'outils])] : les mêmes familles que la barre d'outils, avec Select en tête."""
-    from .toolbar import RHINO_TOOLS
+    from .toolbar import LAYOUT_TOOLS, RHINO_TOOLS
     names = [t[0] for t in TOOL_ORDER]
 
     def between(first, last):
@@ -1072,7 +1072,7 @@ def tool_families():
         ("Lights and cameras", [DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun, DESSIN_TT_light_area,
                                 DESSIN_TT_camera, DESSIN_TT_camera_target]),
         ("Annotation", [DESSIN_TT_cotation, DESSIN_TT_cotation_chain, DESSIN_TT_cotation_ordinate, DESSIN_TT_cotation_arc, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_text, DESSIN_TT_center_mark, DESSIN_TT_cotation_edit, DESSIN_TT_hatch, DESSIN_TT_hatch_region,
-                        DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane]),
+                        DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane] + LAYOUT_TOOLS),
     ]
 
 

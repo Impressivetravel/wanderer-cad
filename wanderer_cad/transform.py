@@ -8,7 +8,7 @@ import time
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from mathutils import Matrix, Vector
 
-from .core import TAU, arc_samples, idle_tool, plane_axes, pref
+from .core import TAU, arc_samples, grid_snap_len, grid_snap_step, idle_tool, plane_axes, pref
 from .snapping import (
     collect_snap_points, curve_edit_apply, curve_edit_selection, edit_selection, exclude_snap, merge_snap_data,
 )
@@ -1553,7 +1553,7 @@ class DESSIN_OT_array_rect(DessinArray):
             coord = Vector((mx, my))
             ro = region_2d_to_origin_3d(region, rv3d, coord)
             rv = region_2d_to_vector_3d(region, rv3d, coord)
-            h = view_height(base, o, n, ro, rv, rv3d)
+            h = grid_snap_len(view_height(base, o, n, ro, rv, rv3d), grid_snap_step(context))
         if h is not None:
             self.cur = base + n * h
         elif self.cur is None:

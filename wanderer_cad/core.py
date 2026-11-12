@@ -5,6 +5,7 @@ import bpy
 import math
 import numpy as np
 import re
+import time
 from mathutils import Vector
 
 
@@ -15,7 +16,7 @@ IDLE_TOOL = "dessin.selection_boite_tool"  # outil par défaut (Select / Move) r
 IDLE_FALLBACK = "builtin.select_box"
 
 # Réglages des préférences de l'add-on (valeurs utilisées aussi quand les préférences sont inaccessibles)
-PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "cmd_key": 'SPACE', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -110,6 +111,7 @@ FR_LABELS = {
 }
 
 FR_ALIASES = {
+    "layout_detail_tool": "detail fenetre fmult",
     # alias de l'AutoCAD français (DP, CP, RI, EH, DC, AJ, E, DO, PO, L...) + noms français complets
     "deplacer_tool": "dp deplacer", "copier_tool": "cp copier", "selection_boite_tool": "selectionner", "selection_lasso_tool": "lasso", "selection_rect_tool": "selboite", "selection_cercle_tool": "selcercle",
     "polyligne_tool": "pl po l ligne polyligne", "plan_tool": "plan", "rotation_tool": "ri rotation pivoter",
@@ -130,6 +132,10 @@ FR_ALIASES = {
     "split_face_tool": "diviserface", "project_curve_tool": "projeter", "patch_tool": "remplissage", "blend_srf_tool": "raccordsrf",
     "match_srf_tool": "adapter", "rail_revolve_tool": "revolrail", "shell_tool": "coque", "xline_tool": "do droite",
     "stretch_tool": "e etirer", "divide_tool": "div me diviser mesurer", "overkill_tool": "nettoyer", "clip_plane_tool": "plancoupe plandecoupe clip", "fillet_curve_tool": "raccord", "chamfer_curve_tool": "chanfrein",
+    "pipe_tool": "tuyau", "intersect_tool": "intersectionobjets", "section_tool": "coupe", "contour_tool": "contours",
+    "extract_srf_tool": "extrairesrf", "dup_border_tool": "dupliquerbord dupliquerbordure", "dup_edge_tool": "dupliquerarete",
+    "merge_faces_tool": "fusionnerfaces", "unroll_tool": "developper developpersrf", "rebuild_srf_tool": "reconstruiresrf",
+    "orient_tool": "orienter",
 }
 FR_LABELS.update({
     "Pipe": "Tuyau", "Intersect": "Intersection d'objets", "Section": "Section", "Contour": "Contour",
@@ -137,11 +143,21 @@ FR_LABELS.update({
     "Merge All Faces": "Fusionner les faces coplanaires", "Unroll Surface": "Développer une surface",
     "Rebuild Surface": "Reconstruire une surface", "Orient": "Orienter",
 })
+FR_LABELS.update({
+    "Layout": "Mise en page", "Layouts": "Mises en page", "New Layout": "Nouvelle mise en page", "Open Layout": "Ouvrir la mise en page",
+    "Model Space": "Espace objet", "Next Layout": "Mise en page suivante", "Rename Layout": "Renommer la mise en page",
+    "Delete Layout": "Supprimer la mise en page", "Duplicate Layout": "Dupliquer la mise en page", "Page Setup": "Format du papier",
+    "Detail": "Détail", "Details": "Détails", "Add Detail": "Ajouter un détail", "Update Details": "Mettre à jour les détails",
+    "Fit Detail": "Cadrer le détail", "Detail Scale": "Échelle du détail", "Pan Detail": "Panoramique dans le détail",
+    "Use a Model View": "Utiliser une vue du modèle", "Hide / Show Layer in Detail": "Masquer / afficher le calque dans le détail",
+    "Match Model Text Height": "Ajuster la hauteur de texte du modèle", "Layers in this Detail": "Calques dans ce détail",
+    "Export PDF": "Exporter en PDF", "Export SVG": "Exporter en SVG", "Export DXF": "Exporter en DXF", "Page": "Page", "Print": "Impression",
+})
 FR_ACTION_ALIASES = {
-    "Pipe": "tuyau", "Intersect": "intersectionobjets", "Section": "coupe", "Contour": "contours",
-    "Extract Surface": "extrairesrf", "Duplicate Border": "dupliquerbord dupliquerbordure", "Duplicate Edge": "dupliquerarete",
-    "Merge All Faces": "fusionnerfaces", "Unroll Surface": "developper developpersrf", "Rebuild Surface": "reconstruiresrf",
-    "Orient": "orienter",
+    "Layout": "miseenpage presentation nouvellemiseenpage", "Model Space": "objet espaceobjet modele",
+    "Next Layout": "papier espacepapier", "Update Details": "majdetails regen", "Detail Scale": "echelledetail",
+    "Fit Detail": "cadrerdetail", "Pan Detail": "panodetail", "Page Setup": "formatpapier", "Export PDF": "imprimer tracer exporterpdf",
+    "Export SVG": "exportersvg", "Export DXF": "exporterdxf",
     "Block Edit": "editerbloc modifbloc", "Close Block Edit": "fermerbloc", "Explode Block": "decomposerbloc", "Hatch Base Point": "basehachure", "Explode Hatch": "decomposerhachure", "Hatch Boundary": "contourhachure", "Match Hatch": "copierhachure",
     "Undo": "annuler", "Redo": "retablir", "Delete": "ef effacer supprimer", "Select All": "toutsel", "Select None": "toutdesel",
     "Invert Selection": "inverser", "Hide": "masquer", "Isolate": "isoler", "Show All": "toutafficher", "Zoom Extents": "z zoometendu",
@@ -289,6 +305,36 @@ FR_PHRASES = (
     ("Esc: leave", "Échap : quitter"),
     ("or type ", "ou taper "), ("or taper ", "ou taper "), ("then Enter", "puis Entrée"), ("(type ", "(taper "), ("[type ", "[taper "), ("Enter to confirm", "Entrée pour valider"),
     ("type the", "taper le"), ("type a", "taper a"),
+    # commandes « on désigne les objets, puis Entrée » : indications et messages de la barre de commande
+    ("click the curves first, then Enter", "cliquer d'abord les courbes, puis Entrée"),
+    ("click at least two objects (surfaces, solids or curves), then Enter",
+     "cliquer au moins deux objets (surfaces, solides ou courbes), puis Entrée"),
+    ("the selected objects do not intersect", "les objets sélectionnés ne se coupent pas"),
+    ("click the surfaces first, then Enter", "cliquer d'abord les surfaces, puis Entrée"),
+    ("click the surface first, then Enter", "cliquer d'abord la surface, puis Entrée"),
+    ("click the solids or surfaces first, then Enter", "cliquer d'abord les solides ou les surfaces, puis Entrée"),
+    ("a closed solid has no free border", "un solide fermé n'a pas de bord libre"),
+    ("use Duplicate Edge (DupEdge) to copy one of its edges", "utiliser Dupliquer une arête (DupEdge) pour copier une de ses arêtes"),
+    ("no coplanar faces to merge", "aucune face coplanaire à fusionner"),
+    ("Select the surfaces, solids or curves to cut first", "Sélectionner d'abord les surfaces, solides ou courbes à couper"),
+    ("the plane does not cross the selected objects", "le plan ne traverse pas les objets sélectionnés"),
+    ("no plane crosses the selected objects", "aucun plan ne traverse les objets sélectionnés"),
+    ("Click two objects or more", "Cliquer au moins deux objets"), ("Click the surfaces", "Cliquer les surfaces"),
+    ("Click the surface", "Cliquer la surface"), ("Click the curves", "Cliquer les courbes"), ("Click the objects", "Cliquer les objets"),
+    ("Enter / Space: border curves", "Entrée / Espace : courbes de bordure"),
+    ("Enter / Space: radius and options", "Entrée / Espace : rayon et options"),
+    ("Enter / Space: intersection curves", "Entrée / Espace : courbes d'intersection"),
+    ("Enter / Space: merge coplanar faces", "Entrée / Espace : fusionner les faces coplanaires"),
+    ("Enter / Space: unroll", "Entrée / Espace : développer"),
+    ("Enter / Space: point counts U and V", "Entrée / Espace : nombre de points en U et V"),
+    # accrochage ponctuel (Maj + clic), Grid Snap
+    ("One-shot snap", "Accrochage ponctuel"), ("only, for the next point", "uniquement, pour le prochain point"),
+    ("one shot", "ponctuel"),
+    ("start a command first, it applies to the next point picked", "lancer d'abord une commande : il vaut pour le prochain point désigné"),
+    ("Shift + click: one shot (next point only)", "Maj + clic : accrochage ponctuel (prochain point seulement)"),
+    ("All On", "Tout cocher"), ("All Off", "Tout décocher"), ("Disable (F3)", "Désactiver (F3)"),
+    ("Grid Snap On (F9)", "Accrochage à la grille activé (F9)"), ("Grid Snap Off", "Accrochage à la grille désactivé"),
+    ("Snap spacing", "Pas de l'accrochage"), ("Custom...", "Autre valeur..."), ("Spacing", "Pas"),
 )
 _FR_SORTED = tuple(sorted(FR_PHRASES, key=lambda p: -len(p[0])))
 _TR_CACHE = {}
@@ -380,8 +426,119 @@ DETAIL_SNAP_VERTS = 150000    # détail chargé sous le curseur : tous les somme
 DETAIL_EDGE_CAP = 600000      # ... et jusqu'à ce nombre d'arêtes ; au-delà, un échantillon fin (grille 64³)
 
 
+# ---- Accrochage ponctuel (« one shot », comme Rhino) : pendant qu'une commande demande un point, Maj tenu au-dessus des
+# cases OSnap les montre toutes décochées ; Maj + clic sur une ou plusieurs cases : elles seules agissent pour le prochain
+# point, à la place des accrochages cochés (même coupés par F3) ; puis tout revient. Maj relâché sans clic : rien ne change.
+ONESHOT_KEYS = ("end", "near", "point", "mid", "cen", "int", "perp", "tan", "quad", "knot", "vertex")
+ONESHOT_HOLD_MAX = 20.0          # s : garde-fou si le relâchement de Maj n'a pas été vu (fenêtre quittée touche enfoncée)
+_ONESHOT = {"keys": (), "hold": False, "hold_t": 0.0}
+
+
+def oneshot_keys():
+    """Accrochages ponctuels armés, dans l'ordre de la barre : ("end", "mid")... ; vide s'il n'y en a pas."""
+    return _ONESHOT["keys"]
+
+
+def oneshot_hold():
+    """Maj est tenu au-dessus des cases OSnap (elles paraissent décochées en attendant un clic)."""
+    if _ONESHOT["hold"] and time.monotonic() - _ONESHOT["hold_t"] > ONESHOT_HOLD_MAX:
+        _ONESHOT["hold"] = False
+    return _ONESHOT["hold"]
+
+
+def oneshot_shown():
+    """Les cases montrent l'accrochage ponctuel (et non les réglages cochés)."""
+    return bool(_ONESHOT["keys"]) or oneshot_hold()
+
+
+def osnap_shown(st, key):
+    """État affiché de la case d'un accrochage : Maj tenu ou accrochage ponctuel armé, seuls les ponctuels sont cochés."""
+    if key in ONESHOT_KEYS and oneshot_shown():
+        return key in _ONESHOT["keys"]
+    return bool(getattr(st, "osnap_" + key))
+
+
+def oneshot_set(keys):
+    """Arme ces accrochages ponctuels (une clé ou plusieurs) ; les clés inconnues sont ignorées."""
+    if isinstance(keys, str):
+        keys = (keys,)
+    want = set(keys or ())
+    _ONESHOT["keys"] = tuple(k for k in ONESHOT_KEYS if k in want)
+
+
+def oneshot_toggle(key):
+    """Maj + clic sur une case : l'ajoute aux accrochages ponctuels, ou l'en retire. Retourne ceux qui restent armés."""
+    if key in ONESHOT_KEYS:
+        cur = set(_ONESHOT["keys"])
+        cur.symmetric_difference_update({key})
+        _ONESHOT["keys"] = tuple(k for k in ONESHOT_KEYS if k in cur)
+    return _ONESHOT["keys"]
+
+
+def oneshot_hold_set(on):
+    """Maj tenu / relâché au-dessus des cases. True si l'état a changé (les barres sont redessinées)."""
+    on = bool(on)
+    if on:
+        _ONESHOT["hold_t"] = time.monotonic()
+    if on == _ONESHOT["hold"]:
+        return False
+    _ONESHOT["hold"] = on
+    redraw_bars()
+    return True
+
+
+def oneshot_clear():
+    """Fin de l'accrochage ponctuel ; True s'il y en avait un (les barres sont alors redessinées)."""
+    if not _ONESHOT["keys"]:
+        return False
+    _ONESHOT["keys"] = ()
+    redraw_bars()
+    return True
+
+
+def oneshot_reset():
+    """Plus d'accrochage ponctuel ni de Maj tenu (fin de commande, clic simple sur une case)."""
+    had = bool(_ONESHOT["keys"]) or _ONESHOT["hold"]
+    _ONESHOT["keys"] = ()
+    _ONESHOT["hold"] = False
+    if had:
+        redraw_bars()
+    return had
+
+
+def statusbar_redraw():
+    """Fait redessiner la barre d'état. C'est une zone de la fenêtre, absente de screen.areas : on ne peut pas la marquer
+    comme les autres ; reposer son texte (vide) la fait redessiner."""
+    try:
+        ws = bpy.context.workspace
+        if ws is not None and bpy.context.window is not None:
+            ws.status_text_set_internal(None)
+    except (AttributeError, RuntimeError, ReferenceError, TypeError):
+        pass
+
+
+def redraw_bars():
+    """Redessine les vues (barre de modes) et la barre d'état (cases OSnap)."""
+    _redraw_all_areas()
+    statusbar_redraw()
+
+
+def mouse_over_statusbar(context, event):
+    """La souris est sur la barre d'état de Blender (la bande sous toutes les zones de la fenêtre), où sont les cases OSnap."""
+    try:
+        win = context.window
+        ymin = min(a.y for a in win.screen.areas)
+        return 0 <= event.mouse_y < ymin and 0 <= event.mouse_x <= win.width
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return False
+
+
 def osnap(name):
-    """Réglage OSnap de la scène (panneau OSnap) ; valeur par défaut si la scène n'est pas accessible."""
+    """Réglage OSnap de la scène (panneau OSnap) ; valeur par défaut si la scène n'est pas accessible.
+    Accrochages ponctuels armés : eux seuls répondent oui (« project » garde son réglage, « disable » est ignoré)."""
+    one = _ONESHOT["keys"]
+    if one and name != "project":
+        return name in one
     try:
         return getattr(bpy.context.scene.dessin, "osnap_" + name)
     except (AttributeError, ReferenceError):
@@ -417,6 +574,59 @@ def unit_info(scene):
     scale = us.scale_length if us.scale_length else 1.0
     key = us.length_unit
     return UNIT_TO_M.get(key, 1.0) / scale, UNIT_LABEL.get(key, "")
+
+
+# ---- Accrochage à la grille (Grid Snap, F9, comme Rhino) ----
+GRID_SNAP_PRESETS = (0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0, 500.0, 1000.0)     # en unités affichées
+GRID_SNAP_DEFAULT_M = 0.1        # pas par défaut : 10 cm (le réglage scene.dessin.grid_snap_step est une longueur en mètres)
+
+
+def unit_metres(scene):
+    """Mètres par unité affichée de la scène (1 quand la scène n'a pas de système d'unités)."""
+    us = scene.unit_settings
+    return 1.0 if us.system == 'NONE' else UNIT_TO_M.get(us.length_unit, 1.0)
+
+
+def grid_snap_shown(scene):
+    """Pas de Grid Snap écrit dans l'unité affichée de la scène : 10 cm se lit 100 en mm, 10 en cm, 0.1 en m."""
+    return float(f"{float(scene.dessin.grid_snap_step) / unit_metres(scene):.7g}")
+
+
+def grid_snap_store(scene, shown):
+    """Règle le pas de Grid Snap à partir d'une valeur lue dans l'unité affichée (menu, boîte de saisie)."""
+    scene.dessin.grid_snap_step = float(shown) * unit_metres(scene)
+
+
+def grid_snap_step(context=None):
+    """Pas de l'accrochage à la grille en unités Blender ; 0 si Grid Snap est coupé. Le réglage est une longueur réelle
+    (10 cm par défaut) : changer l'unité affichée de la scène ne change pas le pas, seulement la façon de l'écrire."""
+    try:
+        sc = (context or bpy.context).scene
+        st = sc.dessin
+        if not st.grid_snap:
+            return 0.0
+        step = grid_snap_shown(sc) * unit_info(sc)[0]
+        return float(f"{step:.7g}")       # (les réglages de Blender sont en simple précision : 4,9999998 redevient 5)
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return 0.0
+
+
+def grid_snap_point(p, axis, step):
+    """Point p ramené sur le nœud de grille le plus proche : la grille est celle du plan de construction (origine et
+    axes du plan), de pas step. La hauteur de p au-dessus du plan ne change pas."""
+    if step <= 0.0:
+        return p
+    u, v, n = plane_axes(axis)
+    o = plane_origin(axis)
+    d = p - o
+    return o + u * (round(d.dot(u) / step) * step) + v * (round(d.dot(v) / step) * step) + n * d.dot(n)
+
+
+def grid_snap_len(h, step):
+    """Longueur (hauteur d'une boîte, d'une extrusion...) ramenée au multiple du pas le plus proche."""
+    if h is None or step <= 0.0:
+        return h
+    return round(h / step) * step
 
 
 # ---- Plan de construction (CPlane) : un plan par zone 3D ; sans plan personnalisé, on garde le plan XY / celui de la vue orthogonale ----

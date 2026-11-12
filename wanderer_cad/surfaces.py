@@ -7,7 +7,7 @@ import numpy as np
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from mathutils import Vector, geometry
 
-from .core import _link_object, plane_axes
+from .core import _link_object, grid_snap_len, grid_snap_step, plane_axes
 from .drawing import region_rv3d
 from .base import view_height
 from .transform import DessinTransform
@@ -1167,6 +1167,7 @@ class ExtrudeCrvLogic(DessinTransform):
             n = self.height_axis()
             p0 = self.points[0]
             h = view_height(p0, p0, n, ro, rv, rv3d)     # vue dans l'axe de la hauteur : distance du curseur (Rhino / AutoCAD)
+            h = grid_snap_len(h, grid_snap_step(context))   # Grid Snap : la hauteur avance par pas entiers
         except (AttributeError, ReferenceError, TypeError, RuntimeError):
             return
         if h is not None:
@@ -1754,9 +1755,11 @@ def _point_in_poly(pt, poly):
     return inside
 
 
-def chain_open_paths(paths, tol=None):
+def chain_open_paths(paths, tol=None, keep_open=False):
     """Raccorde, comme PlanarSrf de Rhino, les courbes ouvertes dont les extrémités se touchent (à tol près),
-    même si elles viennent d'objets différents. paths : [(P, closed)] -> ([(P, closed)], nb de chaînes restées ouvertes)."""
+    même si elles viennent d'objets différents. paths : [(P, closed)] -> ([(P, closed)], nb de chaînes restées ouvertes).
+    keep_open : les chaînes restées ouvertes sont rendues aussi (fermée = False), au lieu d'être écartées (une section ou
+    une intersection de surfaces ouvertes est une courbe ouverte)."""
     closed_out = [(P, c) for P, c in paths if c]
     pieces = [np.asarray(P, dtype=np.float64) for P, c in paths if not c and len(P) >= 2]
     if not pieces:
@@ -1811,6 +1814,8 @@ def chain_open_paths(paths, tol=None):
             closed_out.append((chain[:-1], True))
         else:
             open_left += 1
+            if keep_open:
+                closed_out.append((chain, False))
     return closed_out, open_left
 
 

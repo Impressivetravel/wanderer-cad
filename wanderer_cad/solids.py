@@ -6,7 +6,7 @@ import time
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from mathutils import Vector
 
-from .core import TAU, _link_object, arc_samples, edit_add_geometry, plane_axes
+from .core import TAU, _link_object, arc_samples, edit_add_geometry, grid_snap_len, grid_snap_step, plane_axes
 from .drawing import find_window_region, region_rv3d
 from .base import DessinBase, view_height
 
@@ -227,7 +227,7 @@ class DessinSolid(DessinBase):
             coord = Vector((mx, my))
             ro = region_2d_to_origin_3d(region, rv3d, coord)
             rv = region_2d_to_vector_3d(region, rv3d, coord)
-            h = view_height(base, o, n, ro, rv, rv3d)
+            h = grid_snap_len(view_height(base, o, n, ro, rv, rv3d), grid_snap_step(context))
         if h is not None:
             self.cur = base + n * h
         elif self.cur is None:

@@ -9,8 +9,9 @@ from mathutils import Vector, geometry
 
 from .core import (
     AXES3, IDLE_FALLBACK, IDLE_TOOL, SNAP_NAMES, TAU, TRACK_DWELL, TRACK_MAX, TRACK_RADIUS, _LAST_TYPED, arc_samples,
-    build_bezier_arc, build_polyline, build_shape_mesh, drawing_axis, edit_add_geometry, idle_tool, last_typed,
-    osnap, plane_axes, plane_origin, pref, shape_output, unit_info,
+    build_bezier_arc, build_polyline, build_shape_mesh, drawing_axis, edit_add_geometry, grid_snap_len, grid_snap_point,
+    grid_snap_step, idle_tool, last_typed, oneshot_clear, oneshot_keys, osnap, plane_axes, plane_origin, pref, shape_output,
+    unit_info,
 )
 from .snapping import collect_snap_points
 from .drawing import (
@@ -88,7 +89,9 @@ class DessinBase(bpy.types.Operator):
     COORD_OK = True  # saisie #x,y / @x,y / d<angle
     LOCK_OK = True  # X / Y / Z : verrouille le déplacement du curseur sur un axe à partir du dernier point posé
     PLANAR = True  # False : les points accrochés gardent leur vraie position 3D
+    LOCK_3D = False  # True : une commande plane peut tout de même quitter son plan le long d'un axe verrouillé (Polyline : Z)
     PROP = ()      # étapes (nb de points posés) où Maj impose des proportions : 1 = base carrée, 2 = hauteur = côté (cube)
+    ONESHOT_USER = True   # la commande désigne des points : un accrochage ponctuel (Maj + clic) s'éteint avec elle
 
     @classmethod
     def poll(cls, context):
@@ -323,8 +326,8 @@ class DessinBase(bpy.types.Operator):
         self._seen = _HOVER["version"]
 
     def find_snap(self, mx, my, region, rv3d):
-        if not self.snap_on or self.snap_hom is None:
-            return None
+        if (not self.snap_on and not oneshot_keys()) or self.snap_hom is None:
+            return None            # (un accrochage ponctuel passe même si la touche S a coupé les accrochages)
         data = getattr(self, "snap_data", None)
         if data is None or data[0] is not self.snap_pts:
             data = (self.snap_pts, self.snap_hom, self.snap_kinds, self.snap_bias)
@@ -362,7 +365,9 @@ class DessinBase(bpy.types.Operator):
                 autocp_hover(context, region, rv3d, mx, my)
             self.axis = drawing_axis(rv3d)
         _, _, n = plane_axes(self.axis)
-        origin = self.points[0] if self.points else plane_origin(self.axis)
+        # plan du tracé : il passe par le premier point ; pour une courbe qui peut monter le long d'un axe verrouillé
+        # (LOCK_3D), par le dernier point posé : la suite se dessine à sa hauteur, comme le mode Planar de Rhino
+        origin = (self.points[-1] if self.LOCK_3D else self.points[0]) if self.points else plane_origin(self.axis)
 
         snap = self.find_snap(mx, my, region, rv3d)
         self.track_lines = []
@@ -381,18 +386,60 @@ class DessinBase(bpy.types.Operator):
             ray_o = region_2d_to_origin_3d(region, rv3d, coord)
             ray_v = region_2d_to_vector_3d(region, rv3d, coord)
             hit = geometry.intersect_line_plane(ray_o, ray_o + ray_v, origin, n)
+            node = None
             if hit is not None:
-                self.cur = hit
+                # Grid Snap (F9) : sans accrochage objet, le point libre se pose sur la grille du plan de construction
+                step = grid_snap_step(context)
+                node = grid_snap_point(hit, self.axis, step) if step > 0.0 else None
+                self.cur = node if node is not None else hit
             self._snap_pt = None
             if self.snap_on and self.lock is None and pref("smart_tracks"):
                 if not self.track_midpoint(region, rv3d, mx, my, n, origin):
                     self.track_cursor(region, rv3d, mx, my, ray_o, ray_v, origin, n)
+                    if node is not None and self.track_lines and self.track_screen is not None:
+                        # Grid Snap et repérage : celui des deux qui est le plus près de la souris l'emporte (sinon, vue
+                        # dézoomée, la ligne de repérage d'un point voisin empêcherait d'atteindre les nœuds d'à côté)
+                        sp = project_px(rv3d, region, node)
+                        here = Vector((mx, my))
+                        if sp is not None and (sp - here).length <= (Vector(self.track_screen) - here).length:
+                            self.cur = node
+                            self.track_lines, self.track_label, self.track_screen = [], "", None
         if self.lock is not None and self.points and self.cur is not None and self.lock_allowed():
             self.apply_lock(region, rv3d, mx, my)
         elif (self.points and self.cur is not None and self.PLANAR and self.snap_screen is None and not self.track_lines
               and self.lock_allowed()):
             self.apply_ortho_polar(context, region, rv3d)
+        self.grid_snap_on_line(context, region, rv3d)
+        if (self.cur is not None and self.snap_screen is None and self.track_screen is None
+                and grid_snap_step(context) > 0.0):
+            # Grid Snap : une croix marque le nœud où le point va se poser (le réticule, lui, reste sous la souris)
+            sp = project_px(rv3d, region, self.cur)
+            if sp is not None:
+                self.track_screen = (sp.x, sp.y)
         self.refresh(context)
+
+    def grid_snap_on_line(self, context, region, rv3d):
+        """Grid Snap quand une direction est imposée (Ortho, Polar, verrou d'axe, ligne de repérage) : la grille ne peut
+        plus choisir le point, elle garde la main sur la position le long de la ligne. Le long d'un axe du plan de
+        construction, on retombe sur les nœuds de la grille ; dans une direction quelconque (Polar 30°...), la distance
+        depuis le départ de la ligne avance par pas entiers. Un accrochage objet garde toujours le dernier mot."""
+        if self.cur is None or self.snap_screen is not None or len(self.track_lines) != 1:
+            return
+        step = grid_snap_step(context)
+        if step <= 0.0:
+            return
+        O, k = self.track_lines[0]
+        d = k if isinstance(k, Vector) else AXES3[k]
+        if d.length < 1e-12:
+            return
+        d = d.normalized()
+        on_axis = any(abs(abs(d.dot(a)) - 1.0) < 1e-6 for a in plane_axes(self.axis))
+        ref = plane_origin(self.axis) if on_axis else O
+        c = (self.cur - ref).dot(d)
+        self.cur = self.cur + d * (grid_snap_len(c, step) - c)
+        sp = project_px(rv3d, region, self.cur)
+        if sp is not None:
+            self.track_screen = (sp.x, sp.y)
 
     def apply_ortho_polar(self, context, region, rv3d):
         """Ortho (F8) : axes du plan seulement ; Polar (F10) : angles multiples du pas, avec une ligne guide."""
@@ -439,16 +486,29 @@ class DessinBase(bpy.types.Operator):
     def lock_allowed(self):
         return self.LOCK_OK
 
+    def lock_keys(self):
+        """Touches d'axe utiles à la commande : une commande plane n'annonce que les deux axes de son plan."""
+        if not self.PLANAR or self.LOCK_3D:
+            return "X/Y/Z"
+        try:
+            n = plane_axes(self.axis)[2]
+            return "/".join("XYZ"[k] for k in range(3) if abs(AXES3[k].dot(n)) < 0.5) or "X/Y/Z"
+        except (AttributeError, IndexError, TypeError):
+            return "X/Y/Z"
+
     def apply_lock(self, region, rv3d, mx, my):
         k = self.lock
         a = AXES3[k]
         O = self.points[-1]
         n = plane_axes(self.axis)[2]
         in_plane = abs(a.dot(n)) < 0.5
-        if not in_plane and self.PLANAR:
+        if not in_plane and self.PLANAR and not self.LOCK_3D:
             return  # un axe hors du plan ne peut rien faire pour une commande plane
         if in_plane or self.snap_screen is not None:
-            p = O + a * (self.cur - O).dot(a)
+            # axe hors du plan : c'est la vraie position de l'accroche qui compte (monter jusqu'à la hauteur de ce point),
+            # pas sa projection dans le plan de construction
+            q = self._snap_pt if (not in_plane and getattr(self, "_snap_pt", None) is not None) else self.cur
+            p = O + a * (q - O).dot(a)
         else:
             coord = Vector((mx, my))
             ro = region_2d_to_origin_3d(region, rv3d, coord)
@@ -659,10 +719,11 @@ class DessinBase(bpy.types.Operator):
             txt += "   |   Enter: " + " / ".join(x or "_" for x in last[:max(1, self.NUMFIELDS)]) + " (last value)"
         if getattr(self, "track_label", ""):
             txt += f"   |   tracking: {self.track_label}"
+        keys = self.lock_keys()
         if getattr(self, "lock", None) is not None:
-            txt += "   |   [X/Y/Z: change axis, same key: release]"
+            txt += f"   |   [{keys}: change axis, same key: release]"
         elif self.points and self.lock_allowed():
-            txt += "   |   [X/Y/Z: lock axis]"
+            txt += f"   |   [{keys}: lock axis]"
         snap_txt = "ON" if self.snap_on else "OFF"
         if self.snap_on and self.snap_kind is not None and self.snap_screen is not None:
             snap_txt += f" [{SNAP_NAMES[self.snap_kind]}]"
@@ -1016,6 +1077,7 @@ class DessinBase(bpy.types.Operator):
             return {'CANCELLED', 'PASS_THROUGH'}
         et = event.type
         self.shift = bool(event.shift)
+        osnap_hold_event(context, event)        # Maj tenu au-dessus des cases OSnap : elles se décochent (accrochage ponctuel)
 
         if et == 'TIMER':
             self.track_tick()
@@ -1044,6 +1106,12 @@ class DessinBase(bpy.types.Operator):
                 if hit[0] == 'open':
                     bpy.ops.dessin.command_line('INVOKE_DEFAULT')
                     return {'RUNNING_MODAL'}
+                if hit[0] == 'layout' or (hit[0] == 'view' and is_layout(context.scene)):
+                    # onglet d'une mise en page (ou retour au modèle) : la commande en cours se termine, puis la scène change
+                    kind, val = hit[0], hit[1]
+                    done = self.exit(context)
+                    tab_click(context, kind, val)
+                    return done
                 if hit[0] == 'view':
                     bpy.ops.dessin.view_restore('INVOKE_DEFAULT', name=hit[1])
                     return {'RUNNING_MODAL'}
@@ -1112,6 +1180,7 @@ class DessinBase(bpy.types.Operator):
                     if self.points:
                         self.remember_typed()       # valeur tapée puis validée d'un clic : retenue elle aussi
                     self.click(context)
+                    oneshot_clear()                 # accrochage ponctuel : il ne vaut que pour ce point
                     if self.finished:
                         return self.exit(context)
             return {'RUNNING_MODAL'}
@@ -1120,11 +1189,13 @@ class DessinBase(bpy.types.Operator):
             return {'RUNNING_MODAL'}
 
         if event.value == 'PRESS' and not (event.ctrl or event.alt or event.oskey):
-            if et in {'F3', 'F8', 'F10'}:
+            if et in {'F3', 'F8', 'F9', 'F10'}:
                 try:
                     st = context.scene.dessin
                     if et == 'F3':
                         st.osnap_disable = not st.osnap_disable   # F3 : accrochages objet on / off, comme AutoCAD
+                    elif et == 'F9':
+                        st.grid_snap = not st.grid_snap           # F9 : accrochage à la grille, comme Rhino et AutoCAD
                     elif et == 'F8':
                         st.ortho = not st.ortho
                     else:
@@ -1139,7 +1210,7 @@ class DessinBase(bpy.types.Operator):
                 return {'RUNNING_MODAL'}
             if et in {'X', 'Y', 'Z'} and self.points and self.lock_allowed():
                 k = "XYZ".index(et)
-                if self.PLANAR and abs(AXES3[k].dot(plane_axes(self.axis)[2])) >= 0.5:
+                if self.PLANAR and not self.LOCK_3D and abs(AXES3[k].dot(plane_axes(self.axis)[2])) >= 0.5:
                     return {'RUNNING_MODAL'}  # cet axe sort du plan de construction : sans effet ici
                 self.lock = None if self.lock == k else k
                 self.update_cursor(context, event)
@@ -1164,11 +1235,13 @@ class DessinBase(bpy.types.Operator):
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global CmdKeyEvent, _CMD, autocp_hover, cmd_chip_key, cmd_click_idle, cmd_hit, cmd_log, far_origin_check
-    global mode_click, new_view_dialog_later, set_prompt, vbar_toggle
+    global mode_click, new_view_dialog_later, osnap_hold_event, set_prompt, vbar_toggle
     from .curve_edit import far_origin_check
     from .views import _CMD
     from .cplane import cmd_log, set_prompt
     from .pushpull import autocp_hover
     from .command_line import (
-        CmdKeyEvent, cmd_chip_key, cmd_click_idle, cmd_hit, mode_click, new_view_dialog_later, vbar_toggle,
+        CmdKeyEvent, cmd_chip_key, cmd_click_idle, cmd_hit, mode_click, new_view_dialog_later, osnap_hold_event, vbar_toggle,
     )
+    global is_layout, tab_click
+    from .layout import is_layout, tab_click

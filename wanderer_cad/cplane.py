@@ -3,6 +3,7 @@
 import bpy
 import gpu
 import math
+import time
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector, geometry
@@ -22,6 +23,54 @@ from .views import _CMD
 def cmd_log(txt):
     _CMD["log"].append(txt)
     del _CMD["log"][:-50]
+
+
+NOTICE_SECONDS = 7.0        # durée d'affichage d'un message dans la barre de commande
+
+
+def _notice_redraw():
+    try:
+        for win in bpy.context.window_manager.windows:
+            for a in win.screen.areas:
+                if a.type == 'VIEW_3D':
+                    a.tag_redraw()
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    return None
+
+
+def cmd_notice(txt, seconds=NOTICE_SECONDS):
+    """Message bref dans la barre de commande : une commande qui n'a rien pu faire le dit là où l'on regarde (le rapport
+    de Blender, en bas de la fenêtre, passe inaperçu). Il s'efface seul au bout de quelques secondes."""
+    cmd_log(txt)
+    _CMD["notice"] = (txt, time.monotonic() + seconds)
+    _notice_redraw()
+    try:
+        bpy.app.timers.register(_notice_redraw, first_interval=seconds + 0.05)
+    except (RuntimeError, ValueError, AttributeError):
+        pass
+
+
+def cmd_notice_text():
+    """Message en cours d'affichage dans la barre de commande, ou None."""
+    n = _CMD.get("notice")
+    if not n:
+        return None
+    if time.monotonic() >= n[1]:
+        _CMD["notice"] = None
+        return None
+    return n[0]
+
+
+def cmd_notice_clear():
+    _CMD["notice"] = None
+
+
+def nothing_done(op, msg):
+    """Fin d'une commande qui n'a rien fait : le dit clairement (avertissement de Blender + barre de commande)."""
+    op.report({'WARNING'}, tr_text(msg))
+    cmd_notice(msg)
+    return {'CANCELLED'}
 
 
 def set_prompt(area, txt):

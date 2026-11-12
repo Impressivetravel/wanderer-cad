@@ -626,10 +626,10 @@ def collect_snap_points(context, exclude=None, only=None, detail=False):
 
     if detail and only is not None:
         objs_all = [o for o in (context.view_layer.objects.get(n_) for n_ in only)
-                    if o is not None and o.visible_get() and "dessin_hatch" not in o.keys()]
+                    if o is not None and o.visible_get() and "dessin_hatch" not in o.keys() and "wd_nosnap" not in o.keys()]
     else:
         objs_all = [o for o in context.view_layer.objects if o.visible_get() and not (exclude and o.name in exclude)
-                    and (only is None or o.name in only) and "dessin_hatch" not in o.keys()]
+                    and (only is None or o.name in only) and "dessin_hatch" not in o.keys() and "wd_nosnap" not in o.keys()]
     box_tier = _snap_box_tier(objs_all) if (only is None and not detail) else None
     edge_cap = DETAIL_EDGE_CAP if detail else EDGE_CAP
     for obj in objs_all + (

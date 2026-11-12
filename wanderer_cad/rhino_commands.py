@@ -19,7 +19,7 @@ from .join_explode import EXPLODE_SHARP_DEG
 from .surfaces import chain_open_paths, delete_objects, mesh_object_from_arrays, object_paths
 from .hatch import _select_only
 from .curve_tools import _curve_targets
-from .cplane import cmd_log, set_prompt
+from .cplane import cmd_log, cmd_notice, nothing_done, set_prompt
 from .pushpull import (
     DESSIN_OT_pushpull, IMPRINT_LAYER, PP_PREVIEW_EDGES, pp_boundary, pp_curved_region, pp_draw_cb, pp_region,
 )
@@ -271,15 +271,13 @@ class DESSIN_OT_pipe(bpy.types.Operator):
 
     def invoke(self, context, event):
         if not _curve_targets(context):
-            self.report({'INFO'}, "Select the curves to pipe first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Pipe: click the curves first, then Enter")
         return context.window_manager.invoke_props_dialog(self, width=260)
 
     def execute(self, context):
         objs = _curve_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the curves to pipe first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Pipe: click the curves first, then Enter")
         dg = context.evaluated_depsgraph_get()
         sides = max(12, int(round(48 * curve_quality_factor())))
         made = []
@@ -375,7 +373,7 @@ def _segments_to_chains(P, Q, tol):
             continue            # même segment vu depuis deux triangles voisins (arête posée sur le plan de coupe)
         seen.add(key)
         paths.append((np.array([p, q]), False))
-    chains, _open = chain_open_paths(paths, tol)
+    chains, _open = chain_open_paths(paths, tol, keep_open=True)      # les courbes ouvertes comptent (surfaces ouvertes)
     out = []
     for C, closed in chains:
         C = _drop_collinear(C, closed, tol * 0.1)
@@ -504,12 +502,10 @@ class DESSIN_OT_intersect(bpy.types.Operator):
     def execute(self, context):
         objs = [o for o in context.selected_objects if o.type in {'MESH', 'CURVE'}]
         if len(objs) < 2:
-            self.report({'INFO'}, "Select at least two objects (surfaces, solids or curves) to intersect")
-            return {'CANCELLED'}
+            return nothing_done(self, "Intersect: click at least two objects (surfaces, solids or curves), then Enter")
         chains, points = intersect_objects(context, objs)
         if not chains and not points:
-            self.report({'INFO'}, "Intersect: the selected objects do not intersect")
-            return {'CANCELLED'}
+            return nothing_done(self, "Intersect: the selected objects do not intersect")
         made = []
         if chains:
             made.append(build_polylines(context, "Intersection", [([Vector(p) for p in C], c) for C, c in chains]))
@@ -600,13 +596,11 @@ class _SliceTool(DessinBase):
                 except RuntimeError:
                     pass
                 if not _slice_targets(context):
-                    cmd_log(self.TITLE + ": " + self.NO_SELECTION)
+                    cmd_notice(self.TITLE + ": " + self.NO_SELECTION)
                 return {'CANCELLED'}
             return {'CANCELLED', 'PASS_THROUGH'}
         if not names:
-            self.report({'INFO'}, self.NO_SELECTION)
-            cmd_log(self.TITLE + ": " + self.NO_SELECTION)
-            return {'CANCELLED'}
+            return nothing_done(self, self.TITLE + ": " + self.NO_SELECTION)
         self._targets = names
         return super().invoke(context, event)
 
@@ -660,8 +654,7 @@ class DESSIN_OT_section(_SliceTool):
         sl.set_normal(no)
         made, n_crv, n_pts = self.emit(context, "Section", [sl.cut(float(Vector(a).dot(no)))])
         if not made:
-            self.report({'INFO'}, "Section: the plane does not cross the selected objects")
-            cmd_log("Section: the plane does not cross the selected objects")
+            nothing_done(self, "Section: the plane does not cross the selected objects")
             return None
         _select_only(context, made)
         cmd_log(f"Section: {n_crv} curve(s)" + (f", {n_pts} point(s)" if n_pts else ""))
@@ -736,7 +729,7 @@ class DESSIN_OT_contour(_SliceTool):
             return None
         made, n_crv, n_pts = self.emit(context, "Contour", [sl.cut(c0 + k * step) for k in range(k0, k1 + 1)])
         if not made:
-            self.report({'INFO'}, "Contour: no plane crosses the selected objects")
+            nothing_done(self, "Contour: no plane crosses the selected objects")
             return None
         _select_only(context, made)
         cmd_log(f"Contour: {n_crv} curve(s) on {k1 - k0 + 1} plane(s), distance {self.fmt(step)}"
@@ -1061,8 +1054,7 @@ class DESSIN_OT_dup_border(bpy.types.Operator):
     def execute(self, context):
         objs = _mesh_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the surfaces whose border to duplicate first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Duplicate Border: click the surfaces first, then Enter")
         made, n = [], 0
         for o in objs:
             chains = border_chains(o)
@@ -1071,8 +1063,8 @@ class DESSIN_OT_dup_border(bpy.types.Operator):
                 made.append(crv)
                 n += len(chains)
         if not made:
-            self.report({'INFO'}, "Duplicate Border: the selected objects are closed solids, they have no free border")
-            return {'CANCELLED'}
+            return nothing_done(self, "Duplicate Border: a closed solid has no free border  ·  "
+                                      "use Duplicate Edge (DupEdge) to copy one of its edges")
         _select_only(context, made)
         msg = f"Duplicate Border: {n} curve(s)"
         cmd_log(msg)
@@ -1129,17 +1121,18 @@ class DESSIN_OT_merge_faces(bpy.types.Operator):
     def execute(self, context):
         objs = _mesh_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the solids or surfaces whose coplanar faces to merge first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Merge All Faces: click the solids or surfaces first, then Enter")
         a = b = 0
         for o in objs:
             n0, n1 = merge_coplanar_faces(o)
             a += n0
             b += n1
-        msg = (f"Merge All Faces: {a} faces -> {b}" if b < a else "Merge All Faces: no coplanar faces to merge")
+        if b >= a:
+            return nothing_done(self, "Merge All Faces: no coplanar faces to merge")
+        msg = f"Merge All Faces: {a} faces -> {b}"
         cmd_log(msg)
         self.report({'INFO'}, msg)
-        return {'FINISHED'} if b < a else {'CANCELLED'}
+        return {'FINISHED'}
 
 
 # ---- Unroll ----
@@ -1270,8 +1263,7 @@ class DESSIN_OT_unroll(bpy.types.Operator):
     def execute(self, context):
         objs = _mesh_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the surfaces to unroll first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Unroll Surface: click the surfaces first, then Enter")
         try:
             axis = drawing_axis(context.region_data) if context.region_data is not None else 2
         except (AttributeError, ReferenceError, TypeError):
@@ -1298,8 +1290,7 @@ class DESSIN_OT_unroll(bpy.types.Operator):
         for e in errors:
             cmd_log("Unroll: " + e)
         if not made:
-            self.report({'WARNING'}, "Unroll: " + (errors[0] if errors else "nothing to unroll"))
-            return {'CANCELLED'}
+            return nothing_done(self, "Unroll: " + (errors[0] if errors else "nothing to unroll"))
         _select_only(context, made)
         self.report({'INFO'}, f"Unroll: {len(made)} flat pattern(s) created" + (f", {len(errors)} refused" if errors else ""))
         return {'FINISHED'}
@@ -1460,8 +1451,7 @@ class DESSIN_OT_rebuild_srf(bpy.types.Operator):
     def invoke(self, context, event):
         objs = _mesh_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the surfaces to rebuild first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Rebuild Surface: click the surface first, then Enter")
         bm = bmesh.new()
         try:
             bm.from_mesh(objs[0].data)
@@ -1475,8 +1465,7 @@ class DESSIN_OT_rebuild_srf(bpy.types.Operator):
     def execute(self, context):
         objs = _mesh_targets(context)
         if not objs:
-            self.report({'INFO'}, "Select the surfaces to rebuild first")
-            return {'CANCELLED'}
+            return nothing_done(self, "Rebuild Surface: click the surface first, then Enter")
         done, dev, err = 0, 0.0, ""
         for o in objs:
             d, msg = rebuild_surface(o, self.count_u, self.count_v)
@@ -1486,9 +1475,7 @@ class DESSIN_OT_rebuild_srf(bpy.types.Operator):
             done += 1
             dev = max(dev, d)
         if not done:
-            self.report({'WARNING'}, "Rebuild Surface: " + err)
-            cmd_log("Rebuild Surface: " + err)
-            return {'CANCELLED'}
+            return nothing_done(self, "Rebuild Surface: " + err)
         msg = f"Rebuild Surface: {done} surface(s), {self.count_u} x {self.count_v} points, max deviation {dev / unit_scale_of(context):.4g}"
         cmd_log(msg)
         self.report({'INFO'}, msg)

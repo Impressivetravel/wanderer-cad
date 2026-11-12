@@ -18,8 +18,16 @@ COTATIONS = "Dimensions"
 LEGACY_COTATIONS = "Cotations"  # ancien nom de la collection (versions françaises)
 
 
-def dimension_objects():
-    """Objets de cotation de la scène, y compris ceux de l'ancienne collection « Cotations »."""
+def dimension_objects(scene=None):
+    """Objets de cotation de la scène, y compris ceux de l'ancienne collection « Cotations ».
+    Une mise en page (Layout) a ses propres cotes, rangées dans sa collection."""
+    try:
+        scene = scene or bpy.context.scene
+        if is_layout(scene):
+            col = layout_dims_collection(scene, create=False)
+            return list(col.objects) if col is not None else []
+    except (AttributeError, ReferenceError, NameError):
+        pass
     out = []
     for name in (COTATIONS, LEGACY_COTATIONS):
         col = bpy.data.collections.get(name)
@@ -53,7 +61,7 @@ def cotation_material(color=None):
 
 
 def _cotation_thickness_update(self, context):
-    for o in dimension_objects():
+    for o in dimension_objects(self.id_data):
         if o.type == 'CURVE' and "dessin_cotation" in o.keys():
             h = o.get("dessin_hauteur", 0.0)
             o.data.bevel_depth = 0.05 * h * self.epaisseur_trait if self.epaisseur_trait > 0.0 else 0.0
@@ -66,14 +74,14 @@ def _cotation_thickness_update(self, context):
 
 
 def _cotation_render_update(self, context):
-    for o in dimension_objects():
+    for o in dimension_objects(self.id_data):
         o.hide_render = not self.visible_rendu
 
 
 def _cotation_color_update(self, context):
     """Changer la couleur met aussi à jour les cotations déjà tracées (matériau partagé)."""
     cotation_material(tuple(self.couleur))
-    for o in dimension_objects():
+    for o in dimension_objects(self.id_data):
         o.color = (self.couleur[0], self.couleur[1], self.couleur[2], 1.0)
 
 
@@ -87,7 +95,9 @@ def _cotation_restyle_update(self, context):
     _RESTYLE["busy"] = True
     try:
         ctx = bpy.context
-        for o in list(dimension_objects()):
+        if self.id_data != ctx.scene:
+            return          # les cotes sont reconstruites avec le style de la scène affichée : pas depuis une autre scène
+        for o in list(dimension_objects(self.id_data)):
             try:
                 if o.type == 'CURVE' and "dessin_dim" in o.keys():
                     rebuild_dimension(ctx, o)
@@ -382,6 +392,14 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
         description="Snapped points are projected onto the construction plane, so everything stays in the same plane")
     osnap_disable: bpy.props.BoolProperty(name="Disable", default=False, description="Turns every object snap off (F3 while drawing)",
                                           update=lambda self, context: _update_cursor(self, context))
+    grid_snap: bpy.props.BoolProperty(
+        name="Grid Snap", default=False,
+        description="The cursor snaps to the grid of the construction plane, every snap spacing (F9 while drawing). "
+                    "Object snaps and typed coordinates still win")
+    grid_snap_step: bpy.props.FloatProperty(
+        name="Snap Spacing", default=0.1, min=1e-9, precision=6,
+        description="Spacing of the Grid Snap points, as a real length in metres (0.1 = 10 cm). "
+                    "The Grid Snap menu shows and sets it in the unit of the scene")
     ortho: bpy.props.BoolProperty(
         name="Ortho", default=False, update=_update_ortho,
         description="Constrains the cursor to the horizontal and vertical directions of the construction plane (F8). Object snaps still win")
@@ -454,6 +472,8 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
 
 
 def cotation_collection(context):
+    if is_layout(context.scene):
+        return layout_dims_collection(context.scene)      # mise en page : ses cotes ne se mêlent pas à celles du modèle
     col = bpy.data.collections.get(COTATIONS)
     if col is None:
         col = bpy.data.collections.new(COTATIONS)
@@ -545,7 +565,8 @@ def _op_plane(op):
     return plane_axes(op.axis)
 
 
-DIM_DEF_EXTRA = ("fixed_e", "arc_param")    # attributs supplémentaires mémorisés avec une cote (s'ils existent)
+DIM_DEF_EXTRA = ("fixed_e", "arc_param", "lfac")    # attributs supplémentaires mémorisés avec une cote (s'ils existent)
+# lfac : [facteur] appliqué à la longueur mesurée (cote posée sur un détail d'une mise en page : échelle du détail)
 
 
 def dim_store_def(obj, op, spec):
@@ -597,6 +618,7 @@ def _dim_replay_spec(data):
     fake.uvn = data.get("uvn")
     for key in DIM_DEF_EXTRA:
         setattr(fake, key, data.get(key))
+    fake.ldet = data.get("ldet")          # mise en page : détail auquel la cote est attachée (son échelle fait foi)
     fake.screen_right = lambda: (right, towards)
     fake.text_height = lambda mid, e: st.taille_texte if st.taille_texte > 0.0 else h0
     for name in ("unit_for_text", "text_for", "angle_text", "geometry", "arc_geometry", "compute"):
@@ -652,4 +674,6 @@ def _late_imports():
     )
     from .hatch import HatchTooDense, is_hatch, rebuild_hatch
     from .curve_tools import _block_items
+    global is_layout, layout_dims_collection
+    from .layout import is_layout, layout_dims_collection
     from .navigation import _update_cursor

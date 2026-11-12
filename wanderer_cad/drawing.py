@@ -40,8 +40,18 @@ def _same_region(op):
         return False
 
 
+def on_paper():
+    """La scène affichée est une mise en page (Layout) : on dessine sur du papier blanc, les aperçus sont sombres."""
+    try:
+        return bool(bpy.context.scene.dessin_layout.is_layout)
+    except AttributeError:
+        return False
+
+
 def preview_colors():
     """(couleur du tracé en cours, couleur des points posés) : trait blanc sur fond sombre (noir sur fond clair), points bleus."""
+    if on_paper():
+        return (0.1, 0.11, 0.13, 1.0), (0.1, 0.4, 0.85, 1.0)
     try:
         bg = bpy.context.preferences.themes[0].view_3d.space.gradients.high_gradient
         lum = 0.299 * bg[0] + 0.587 * bg[1] + 0.114 * bg[2]
@@ -58,6 +68,7 @@ def draw_view_cb(op):
     gpu.state.blend_set('ALPHA')
     gpu.state.depth_test_set('NONE')
     shader.bind()
+    paper = on_paper()      # mise en page : fond blanc, les traits d'aide clairs deviennent sombres
 
     # Fantôme transparent de la position initiale (outil Déplacer)
     ghost = getattr(op, "ghost_pts", None)
@@ -65,7 +76,7 @@ def draw_view_cb(op):
         if getattr(op, "ghost_batch", None) is None:
             op.ghost_batch = batch_for_shader(shader, 'LINES', {"pos": ghost})
         gpu.state.line_width_set(1.0)
-        shader.uniform_float("color", (0.85, 0.9, 1.0, 0.45))
+        shader.uniform_float("color", (0.25, 0.35, 0.55, 0.6) if paper else (0.85, 0.9, 1.0, 0.45))
         op.ghost_batch.draw(shader)
 
     boxes = getattr(op, "light_boxes", None)
@@ -100,7 +111,7 @@ def draw_view_cb(op):
     for g in op.guides:
         if len(g) >= 2:
             batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": [tuple(p) for p in g]})
-            shader.uniform_float("color", (0.75, 0.75, 0.75, 0.8))
+            shader.uniform_float("color", (0.42, 0.43, 0.46, 0.9) if paper else (0.75, 0.75, 0.75, 0.8))
             batch.draw(shader)
 
     hl = getattr(op, "hatch_lines", None)
@@ -227,6 +238,8 @@ def draw_rhino_cursor(x, y):
     style AutoCAD : deux lignes qui traversent la vue (taille en % de la vue) + carré de sélection."""
     sc = px_scale(1.0)
     col = tuple(pref("cursor_color")) + (1.0,)
+    if on_paper() and 0.299 * col[0] + 0.587 * col[1] + 0.114 * col[2] > 0.6:
+        col = (0.05, 0.05, 0.06, 1.0)        # réticule clair : illisible sur le papier blanc d'une mise en page
     r = max(1.0, pref("cursor_pick")) * sc
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')

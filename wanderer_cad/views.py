@@ -149,6 +149,8 @@ class DESSIN_OT_view_restore(NamedViewOp, bpy.types.Operator):
     bl_description = "Restores this view in the viewport. Double-click a tab to rename it, right-click for more"
 
     def invoke(self, context, event):
+        if is_layout(context.scene):
+            return self.execute(context)
         now = time.monotonic()
         double = _LAST_TAB["name"] == self.name and now - _LAST_TAB["time"] < 0.45
         _LAST_TAB["name"], _LAST_TAB["time"] = self.name, now
@@ -158,9 +160,12 @@ class DESSIN_OT_view_restore(NamedViewOp, bpy.types.Operator):
         return self.execute(context)
 
     def execute(self, context):
+        came_from_layout = is_layout(context.scene)
+        if came_from_layout:
+            layout_close(context)                     # une vue du modèle demandée depuis une mise en page : retour au modèle
         scene = context.scene
         leaving = current_view_name(context)
-        if leaving == self.name:
+        if leaving == self.name and not came_from_layout:
             return {'FINISHED'}                       # déjà dans cette vue : elle reste telle quelle
         if leaving:
             save_into_view(context, leaving)          # la vue quittée garde son dernier cadrage et son affichage
@@ -311,7 +316,7 @@ class DESSIN_MT_named_views(bpy.types.Menu):
     def draw(self, context):
         layout = self.layout
         layout.operator_context = 'INVOKE_DEFAULT'
-        scene = context.scene
+        scene = model_of(context.scene) or context.scene      # dans une mise en page : les vues de son modèle
         for name, _axis in BASE_VIEWS:
             layout.operator(DESSIN_OT_view_restore.bl_idname, text=view_label(scene, name)).name = name
         users = [v.name for v in scene.dessin_views if not v.base]
@@ -320,7 +325,9 @@ class DESSIN_MT_named_views(bpy.types.Menu):
             for name in users:
                 layout.operator(DESSIN_OT_view_restore.bl_idname, text=name).name = name
         layout.separator()
-        layout.operator(DESSIN_OT_view_save.bl_idname, text="New Viewport...", icon='ADD')
+        if not is_layout(context.scene):
+            layout.operator(DESSIN_OT_view_save.bl_idname, text="New Viewport...", icon='ADD')
+        menu_layouts(layout, context)
 
 
 def tab_names(scene):
@@ -467,12 +474,13 @@ def named_views_header(self, context):
 
 
 # ---- Ligne de commande (barre en bas de la vue 3D : invite de l'outil actif, saisie du nom d'une commande) ----
-_CMD = {"hit": {}, "op": {}, "mouse": {}, "prompt": {}, "cleared": set(), "log": [], "hist": [], "last": None, "input": None, "handle": None}
+_CMD = {"hit": {}, "op": {}, "mouse": {}, "prompt": {}, "cleared": set(), "log": [], "hist": [], "last": None, "input": None, "handle": None, "notice": None}
 CMD_KEY_ITEMS = (('SPACE', "Space", "Space opens the command line (Space again on an empty line repeats the last command)"),
                  ('RET', "Enter", "Enter opens the command line (Enter again on an empty line repeats the last command)"),
                  ('ACCENT_GRAVE', "` (backtick)", "The ` key opens the command line"),
                  ('NONE', "None", "No key: click the command bar at the bottom of the viewport"))
 CMD_ALIASES = {
+    "layout_detail_tool": "detail mview vports",
     "deplacer_tool": "m move", "copier_tool": "co cp copy", "selection_boite_tool": "select sel", "selection_lasso_tool": "lasso", "selection_rect_tool": "selbox", "selection_cercle_tool": "selcircle",
     "polyligne_tool": "pl line polyline", "plan_tool": "plane srf", "rotation_tool": "ro rot rotate", "echelle_tool": "sc scale",
     "echelle_2d_tool": "s2 scale2d", "echelle_1d_tool": "s1 scale1d", "echelle_taille_tool": "ss scalesize scaletosize", "rectangle_tool": "rec rect", "mirror_tool": "mi mirror",
@@ -488,6 +496,11 @@ CMD_ALIASES = {
     "make2d_tool": "m2d make2d", "revolve_tool": "rev revolve", "loft_tool": "loft", "sweep1_tool": "sweep1 sw1", "sweep2_tool": "sweep2 sw2",
     "light_point_tool": "pointlight", "light_spot_tool": "spotlight", "light_sun_tool": "sunlight", "light_area_tool": "arealight",
     "camera_tool": "cam camera", "camera_target_tool": "camt", "offset_surface_tool": "offsrf", "extrude_tool": "ext extrude", "extrude_crv_tool": "extrudecrv extc ec", "extrude_srf_tool": "extrudesrf exts es", "planar_srf_tool": "ps planarsrf", "edge_srf_tool": "edgesrf esrf", "thicken_tool": "thicken th", "cap_tool": "cap", "split_face_tool": "splitface sf", "project_curve_tool": "project proj", "patch_tool": "patch", "xline_tool": "xl xline", "stretch_tool": "st stretch", "divide_tool": "div divide", "overkill_tool": "overkill ok", "clip_plane_tool": "clip clippingplane clp", "fillet_curve_tool": "fc filletcurve fillet2d", "chamfer_curve_tool": "cc chamfercurve chamfer2d", "blend_srf_tool": "blendsrf bs", "match_srf_tool": "matchsrf ms", "rail_revolve_tool": "railrev rr", "shell_tool": "shell sh",
+    # commandes Rhino de la 2.96.124 (une seule entrée dans la ligne de commande : l'outil de la barre)
+    "pipe_tool": "pipe", "intersect_tool": "int intersect", "section_tool": "sec section", "contour_tool": "contour",
+    "extract_srf_tool": "extractsrf", "dup_border_tool": "dupborder", "dup_edge_tool": "dupedge",
+    "merge_faces_tool": "mergeallfaces mergeallcoplanarfaces", "unroll_tool": "unroll unrollsrf",
+    "rebuild_srf_tool": "rebuildsrf", "orient_tool": "orient orient2pt",
 }
 
 
@@ -495,3 +508,5 @@ def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global DESSIN_OT_command_line
     from .command_line import DESSIN_OT_command_line
+    global is_layout, layout_close, menu_layouts, model_of
+    from .layout import is_layout, layout_close, menu_layouts, model_of
