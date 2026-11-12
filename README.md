@@ -2,7 +2,7 @@
 
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
-> **Status: stable (2.96.124).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+> **Status: stable (2.96.125).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 
 ![The dimensioned drawing on the left, the model and the command line on the right](docs/images/napoleone-00-hero.jpg)
 
@@ -20,8 +20,9 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 - **Gumball**: move, rotate and scale handles on the selection, plus an **extrusion sphere** and a **cut handle**: a closed flat curve cuts the solids on its way, or adds to them with Ctrl/Cmd.
 - **Surfaces and solids**: planar, edge and network surfaces, patch, extrude (straight, along a curve, both sides, tapered, to a point), revolve, loft, sweep, **Pipe**, booleans (each result is checked: closed solid, coherent volume), **PushPull on flat and curved faces**, fillet and chamfer on edges and between surfaces, extend, split at isocurve, untrim, offset surface, **Extract Surface**, **Merge All Faces**, **Unroll Surface**, **Rebuild Surface**. Explode separates a solid into its smooth surfaces.
 - **SubD**: boxes, spheres, cylinders, cones, tori and planes, loft, sweep, revolve and MultiPipe over a quad control cage, with cage editing tools (crease, insert edge, bevel, inset, bridge...) and live symmetry.
-- **Precision**: object snaps (End, Near, Point, Mid, Cen, Int, Perp, Tan, Quad, Knot, Vertex), smart tracking (X / Y / Z lines and **the extension of the segment that ends at a tracked point**), polar tracking. A snap budget keeps very large scenes responsive.
+- **Precision**: object snaps (End, Near, Point, Mid, Cen, Int, Perp, Tan, Quad, Knot, Vertex) from the status bar or the OSnap menu, **one-shot snaps** (hold Shift over the snap boxes and click the ones you want for the next point), **Grid Snap** (`F9`, 10 cm by default), Ortho, axis locks (`X` / `Y` / `Z`), smart tracking (X / Y / Z lines and **the extension of the segment that ends at a tracked point**), polar tracking. A snap budget keeps very large scenes responsive.
 - **Annotation**: linear, continued / baseline, ordinate, radius, angle and arc length dimensions, center marks, text, area and length measurement, **Make 2D** drawings from a 3D model.
+- **Layouts**: paper sheets (A5 to A0, Letter, ANSI, Arch, custom) with **detail views of the model at scale** (hidden lines removed or dashed), a title block, dimensions on the sheet that give the length of the model and follow their detail, and vector **PDF / SVG / DXF** export.
 - **Hatches**: ten patterns with scale, rotation and spacing, hatch by picking a point, match, base point, boundary, explode.
 - **Blocks**: make, insert, edit in place (every copy follows), explode, select copies.
 - **Layers** built on Blender collections: colors, sublayers, visibility and lock, saved layer states.
@@ -62,6 +63,18 @@ The finished models were measured against the reference: same overall sizes (720
 
 *The reference models (grey) are the **Napoleone** coffee table, designed by **Claudio Salocchi** and produced by **Acerbis**. The design, its name and the Acerbis name belong to their owners; they are used here as a modeling exercise only, and this project is not affiliated with the designer or the manufacturer.*
 
+## Layouts: from the model to a sheet
+
+A layout is a tab next to the view tabs. It is a paper sheet in millimetres: details show the model in a view and at a scale, dimensions placed on a detail give the real length of the model, and the sheet is exported as a vector PDF at the exact paper size.
+
+![A layout with four details, dimensions and the Layout panel](docs/images/layout-01-sheet.png)
+
+*`layout` creates the sheet (here A3 with four details), `detail` draws another one, `dim` snaps to the linework of a detail: the table reads 144.00 x 72.00, the wall 250.00. Changing the scale of a detail or panning it takes its dimensions along.*
+
+![The PDF exported from that layout](docs/images/layout-02-pdf.png)
+
+*`pdf` writes the sheet: visible edges 0.35 mm, hidden edges dashed 0.18 mm, title block filled from the panel.*
+
 ## The interface
 
 Layers are Blender collections, with a color, visibility, lock and saved states. Selection filters decide what a click can pick. Everything else lives in the add-on preferences: language, icon style, Gumball behaviour, snap budget, curve quality.
@@ -97,7 +110,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## Source layout
 
-Since 2.96.124 the add-on is a package of 42 modules in `wanderer_cad/` (one per family of tools: `tools_draw`, `transform`, `booleans`, `gumball`, `pushpull`, `rhino_commands`, `layers`...). `__init__.py` only loads them.
+The add-on is a package of 44 modules in `wanderer_cad/` (one per family of tools: `tools_draw`, `transform`, `booleans`, `gumball`, `pushpull`, `rhino_commands`, `layers`, `layout`...). `__init__.py` only loads them.
 
 ## Build the zip yourself
 
