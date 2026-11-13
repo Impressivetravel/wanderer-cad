@@ -1,3 +1,30 @@
+# Wanderer CAD 2.96.126 — what's new since 2.96.125
+
+2.96.126 makes the layouts work **like the layouts of AutoCAD**: a viewport has **grips**, a **double-click** enters it, and `MV`, `MS` and `PS` do what an AutoCAD user expects. It also adds the **export of the model to DXF**, and the **import and export of DWG** through the free ODA File Converter.
+
+## Layout viewports, as in AutoCAD
+
+- **"Detail" is now "Viewport"** in the menus, the panels and the commands, as in AutoCAD. The former command names still work (`detail`, `dpan`, `detailscale`, `fitdetail`, `updatedetails`).
+- **Grips.** A selected viewport shows four blue grips at its corners. Click a grip, move, click again; or press it, drag and release. The opposite corner stays where it is and **the model does not move on the sheet**: the viewport shows more or less of it. Object snaps and Grid Snap work, and you can type the size (width, Tab, height, Enter). Esc gives up. A locked viewport can still be resized: the lock protects its scale and its framing, not its border.
+- **Move grip.** With the Gumball off, a grip at the center moves the viewport. With the Gumball on, the Gumball does it, as before.
+- **Scale grip.** The small triangle next to the center opens the list of scales, with *Custom...*, *Fit* and *Display Locked*.
+- **Double-click inside a viewport** to work in it, as in model space: its border gets thick, dragging pans the model, the wheel goes to the next standard scale. **Double-click outside**, Enter or Esc to come back to the sheet. Clicking in another viewport makes it the active one. In a locked viewport, panning and the wheel do nothing.
+- **Commands.** `MV` (or `MVIEW`) draws a viewport. `MS` enters the selected viewport. `PS` comes back to the sheet; from the model it opens the layout. `MODEL` goes back to the model.
+- **Changed aliases.** `mspace` used to go back to the model: use `model`. `pspace` used to open the next layout: use `nextlayout`. In the model, `ms` still runs Match Surface; Mark Seam is now `seam`.
+
+## DXF and DWG
+
+- **Export Model** (File > Export > *DXF / DWG drawing (Wanderer)*, or `exportmodel`): the visible model, or the selection, as a DXF R12 drawing that AutoCAD, Rhino and the others read. Lines and polylines keep their exact points (flat polylines with their elevation, the others as 3D polylines). Round curves are written as true **ARC** and **CIRCLE** entities. Solids are written as **3DFACE** (faces with more than four sides are split, their inner edges hidden). Text keeps its height, rotation and alignment. Layers keep their names and colors. The units are those of the scene, or the ones you choose.
+- **DWG.** Import (File > Import > *DXF / DWG drawing (Wanderer)*, or `importdwg`) and export (the model, and the sheets of a layout with the new **DWG** button of the Print panel, or `exportdwg`) go through the free **ODA File Converter**. Install it once (opendesign.com): the add-on finds it in its usual place on Windows and macOS, or set its location in Preferences > Add-ons > Wanderer CAD > DXF / DWG. The DWG version is 2018 by default (2013 to 2000 on request). Without the converter the command says so and writes nothing; DXF keeps working.
+
+## Good to know
+
+- DXF R12 has no spline entity: NURBS and Bézier curves are exported as polylines along the curve. A block is exported as its geometry, not as a block.
+- A polyline is taken for an arc or a circle from 32 points on; a polygon with fewer sides stays a polyline.
+- On macOS the ODA File Converter shows its window for a moment while it works.
+
+---
+
 # Wanderer CAD 2.96.125 — what's new since 2.96.124
 
 2.96.125 adds **Layouts**: paper sheets with detail views of the model at scale, a title block, dimensions and notes in paper millimetres, and vector **PDF / SVG / DXF** export. It also answers user feedback: object snaps are easier to find and can be used **one shot** as in Rhino, **Grid Snap** joins the mode bar, the bottom bars **fit in a split view**, the **Z lock works on Polyline**, and the commands typed on the command line no longer do nothing in silence. Nothing else changes in the modeling tools.
@@ -133,19 +160,13 @@ They are in the toolbar, in the Wanderer menu and on the command line.
 - The add-on is now a **package of 42 modules** instead of one file. It is still one extension and installs the same way.
 - 60 regression suites, with new ones for the new commands, the Gumball handles, units, pasting, tracking and the rebuilding of old dimensions.
 
-## How it was tested
-
-- **Automated:** 60 suites out of 60 pass. No mouse move above 16 ms out of 11,232 measured.
-- **With the real mouse and keyboard, in Blender 5.1.1 on Windows:** the complete modeling session shown in the README (Polyline, Fillet Curve, Offset, object snaps, Join, Extrude Curve, Box, Gumball cut by dragging and by entering a value, Fillet Edge, Circle, Copy, Mirror, Stretch, Dimension). Numbers and coordinates were entered with Ctrl/Cmd + V. The finished parts were measured: every one is a closed solid and the overall sizes match the reference model. The **Angular Dimension** was then placed by hand on the fold of the "V" and reads 90.00 degrees, and the height dimension was placed again from the underside of the base plates (355.5 mm, not 375.16 mm from the floor).
-- **Not tested by hand yet:** Pipe, Intersect, Section, Contour, Extract Surface, Duplicate Border / Edge, Merge All Faces, Unroll, Rebuild Surface, Orient and PushPull on curved faces (automated tests only), and `#` / `@` typed with a real AltGr key. Mac and Blender 4.2 to 5.0 were not re-tested for this release.
-
 ---
 
 # Wanderer CAD 2.96.123 — what's new since 2.96.122
 
 123 adds **hatching**, **blocks**, more **dimension** tools, a set of Rhino-style **curve and surface** tools, **sub-object selection**, a **Mac** pass, two new looks (**Ghost** theme, **Target** icons) and a lot of work on **precision, stability and speed in big scenes**.
 
-It is also the release where the add-on moves from beta to **stable**: every tool was run again for geometric precision, Undo/Redo, odd scenes and speed (see "How it was tested").
+It is also the release where the add-on moves from beta to **stable**: every tool was run again for geometric precision, Undo/Redo, odd scenes and speed.
 
 ## New tools
 
@@ -221,12 +242,6 @@ It is also the release where the add-on moves from beta to **stable**: every too
 - **Quadrant** points of circles and arcs were not found at all (Midpoint, Near or nothing): see Workflow.
 - **Dense meshes in Edit Mode**: a click on a vertex could find no snap (see above).
 - **Navigation gizmo** on Retina screens (see Mac).
-
-## How it was tested
-
-- **More than 40 regression suites** replay the tools in a headless Blender with the same mouse and keyboard events a user would send, and **measure** the result: coordinates, lengths and volumes against exact values, Undo/Redo states compared field by field for every tool, every tool on empty scenes, wrong selections and extreme typed values (97 tools × 7 scenarios × 6 variants: no exception), and time per mouse move. They are in the `tests/` folder (`python scripts/run_tests.py`).
-- Tested on **Blender 5.1 and 5.2**. The declared minimum is 4.2.
-- Tried by hand on a Mac for the SubD tools, Offset Edge / PushPull and Ctrl/Cmd + Shift + click, and run on a 10,000-object city scene in Blender on Windows.
 
 ## Good to know
 

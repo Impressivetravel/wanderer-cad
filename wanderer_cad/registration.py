@@ -58,7 +58,7 @@ from .layers import (
     DESSIN_OT_layer_set, DESSIN_OT_layer_show_all, DESSIN_OT_layer_state, DESSIN_PG_layer, DESSIN_PT_layers,
     DESSIN_PT_layers_filter, DESSIN_PT_toolbox, layer_button_menu,
 )
-from .import_dxf import DESSIN_OT_import_cad, menu_import_cad
+from .import_dxf import DESSIN_OT_export_cad, DESSIN_OT_import_cad, menu_export_cad, menu_import_cad
 from .objects import (
     DESSIN_MT_ctx_material, DESSIN_MT_ctx_polyline, DESSIN_MT_ctx_select, DESSIN_OT_extend_crv, DESSIN_OT_group,
     DESSIN_OT_material_remove_all, DESSIN_OT_poly_edit, DESSIN_OT_track_to, DESSIN_OT_ungroup, _GROUP_SEL,
@@ -375,6 +375,7 @@ classes = (
     DESSIN_OT_dimstyle_remove,
     DESSIN_OT_cotations_supprimer,
     DESSIN_OT_import_cad,
+    DESSIN_OT_export_cad,
     DESSIN_PG_layer,
     DESSIN_OT_layer_current,
     DESSIN_OT_layer_new,
@@ -986,6 +987,7 @@ def register():
     bpy.types.UI_MT_button_context_menu.prepend(named_view_button_menu)
     bpy.types.VIEW3D_MT_add.append(menu_add)
     bpy.types.TOPBAR_MT_file_import.append(menu_import_cad)
+    bpy.types.TOPBAR_MT_file_export.append(menu_export_cad)
     bpy.types.UI_MT_button_context_menu.append(layer_button_menu)
     bpy.types.VIEW3D_MT_object_context_menu.prepend(menu_group)
     install_ctx_object_menu()
@@ -1351,6 +1353,7 @@ def unregister():
         pass
     try:
         bpy.types.TOPBAR_MT_file_import.remove(menu_import_cad)
+        bpy.types.TOPBAR_MT_file_export.remove(menu_export_cad)
     except (ValueError, RuntimeError):
         pass
     for _menu, _fn in ((bpy.types.UI_MT_button_context_menu, named_view_button_menu),

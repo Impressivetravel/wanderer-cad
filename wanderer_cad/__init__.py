@@ -1,10 +1,10 @@
 bl_info = {
     "name": "Wanderer CAD",
     "author": "Hostylmatic",
-    "version": (2, 96, 125),
+    "version": (2, 96, 126),
     "blender": (4, 2, 0),
     "location": "3D Viewport > Left toolbar (Object and Edit mode)  |  Add > Wanderer  |  Sidebar > Wanderer",
-    "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, lay out paper sheets with detail views at scale and export them to PDF, and run every command from a command line.",
+    "description": "Precision CAD modeling for Blender: draw with snapping and typed values, build curves, surfaces and solids, edit with trim, split, fillet and booleans, add dimensions and clipping planes, lay out paper sheets with viewports at scale and export them to PDF, and run every command from a command line.",
     "category": "3D View",
 }
 

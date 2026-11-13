@@ -480,7 +480,7 @@ CMD_KEY_ITEMS = (('SPACE', "Space", "Space opens the command line (Space again o
                  ('ACCENT_GRAVE', "` (backtick)", "The ` key opens the command line"),
                  ('NONE', "None", "No key: click the command bar at the bottom of the viewport"))
 CMD_ALIASES = {
-    "layout_detail_tool": "detail mview vports",
+    "layout_detail_tool": "viewport mview mv vports detail",
     "deplacer_tool": "m move", "copier_tool": "co cp copy", "selection_boite_tool": "select sel", "selection_lasso_tool": "lasso", "selection_rect_tool": "selbox", "selection_cercle_tool": "selcircle",
     "polyligne_tool": "pl line polyline", "plan_tool": "plane srf", "rotation_tool": "ro rot rotate", "echelle_tool": "sc scale",
     "echelle_2d_tool": "s2 scale2d", "echelle_1d_tool": "s1 scale1d", "echelle_taille_tool": "ss scalesize scaletosize", "rectangle_tool": "rec rect", "mirror_tool": "mi mirror",

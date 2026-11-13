@@ -19,6 +19,7 @@ def reset(kind):
 st=dict(runs=0,changed=0,undo_bad=0,redo_bad=0,exc=0)
 for label,aliases,_x,desc,fn in m.CMD_ACTIONS:
     if label in ("Undo","Redo"): continue          # ces deux actions sont elles-mêmes une annulation : rien à comparer
+    if label in ("Layout","Model","Paper Space","Next Layout"): continue   # elles changent la scène affichée : leur annulation est mesurée dans t_layout.py
     for kind in ('mesh','meshes','curve','curves'):
         reset(kind); bpy.ops.ed.undo_push(message="A"); A=snapshot(bpy); st['runs']+=1
         try:

@@ -10,12 +10,12 @@ import time
 import numpy as np
 from bpy.app.handlers import persistent
 from gpu_extras.batch import batch_for_shader
-from mathutils import Euler, Quaternion, Vector
+from mathutils import Euler, Matrix, Quaternion, Vector
 
 from . import layout_engine as le
 from .core import cp_set, cp_state, idle_tool, lang
 from .base import DessinBase
-from .drawing import get_shader, px_scale
+from .drawing import find_window_region, get_shader, px_scale
 from .tools_draw import DESSIN_OT_rectangle
 
 
@@ -36,10 +36,11 @@ ISO_TILT = math.acos(1.0 / math.sqrt(3.0))
 ISO_TURN = {'ISO_SE': 45.0, 'ISO_SW': -45.0, 'ISO_NE': 135.0, 'ISO_NW': -135.0}
 
 _STATE = {"busy": False, "views": {}, "model_ver": {}, "built": {}, "cache": {}, "last_model": {}, "paper": set(), "items": None,
-          "hold": 0.0}
+          "hold": 0.0, "active_vp": None}
 # hold : heure du dernier Annuler / Rétablir. Tant que rien d'autre n'a changé, le minuteur ne retouche pas la mise en page :
 # l'état affiché est celui d'un pas de l'historique, et Annuler / Rétablir continuent de le parcourir normalement
 # views : état de chaque vue 3D avant la mise en page (rendu au retour) ; paper : vues 3D actuellement en espace papier
+# active_vp : nom de la fenêtre dans laquelle on travaille (double-clic dedans, comme l'espace objet d'AutoCAD) ; None sinon
 
 PAPER_ITEMS = [(k, n, "") for k, n, _w, _h in le.PAPERS] + [('CUSTOM', "Custom", "Width and height typed below")]
 SCALE_ITEMS = [(k, n, "") for k, n, _d in le.SCALES] + [('CUSTOM', "Custom", "Scale typed below")]
@@ -210,7 +211,7 @@ def layout_collection(scene, key, create=True):
             return c
     if not create:
         return None
-    name = {"sheet": "Sheet", "details": "Details", "annot": "Annotations", "dims": "Layout dimensions"}[key]
+    name = {"sheet": "Sheet", "details": "Viewports", "annot": "Annotations", "dims": "Layout dimensions"}[key]
     c = bpy.data.collections.new(name)
     c[COL] = key
     scene.collection.children.link(c)
@@ -334,7 +335,7 @@ def _detail_preset_update(self, context):
 
 class DESSIN_PG_layout(bpy.types.PropertyGroup):
     is_layout: bpy.props.BoolProperty(default=False)
-    model: bpy.props.PointerProperty(type=bpy.types.Scene, name="Model", description="Scene shown by the detail views of this layout")
+    model: bpy.props.PointerProperty(type=bpy.types.Scene, name="Model", description="Scene shown by the viewports of this layout")
     order: bpy.props.IntProperty(default=0)
     paper: bpy.props.EnumProperty(name="Paper", items=PAPER_ITEMS, default='A3', update=_layout_update,
                                   description="Paper size of the sheet")
@@ -357,9 +358,9 @@ class DESSIN_PG_layout(bpy.types.PropertyGroup):
     t_number: bpy.props.StringProperty(name="Sheet", default="01", update=_layout_update, description="Sheet number")
     t_revision: bpy.props.StringProperty(name="Revision", default="", update=_layout_update)
     t_scale: bpy.props.StringProperty(name="Scale", default="", update=_layout_update,
-                                      description="Scale written in the title block (empty: the scale of the details, or 'As noted' when they differ)")
+                                      description="Scale written in the title block (empty: the scale of the viewports, or 'As noted' when they differ)")
     label_size: bpy.props.FloatProperty(name="Label height", default=3.0, min=1.0, max=20.0, update=_layout_update,
-                                        description="Height of the label written under each detail (view name and scale), in millimeters")
+                                        description="Height of the label written under each viewport (view name and scale), in millimeters")
     lw_visible: bpy.props.FloatProperty(name="Visible edges", default=0.35, min=0.01, max=2.0, step=5, precision=2,
                                         update=_layout_lw_update, description="Printed line width of the visible edges, in millimeters")
     lw_hidden: bpy.props.FloatProperty(name="Hidden edges", default=0.18, min=0.01, max=2.0, step=5, precision=2,
@@ -369,24 +370,24 @@ class DESSIN_PG_layout(bpy.types.PropertyGroup):
                                       description="Printed line width of dimensions, hatches and of everything drawn on the sheet, in millimeters")
     lw_frame: bpy.props.FloatProperty(name="Frame", default=0.5, min=0.01, max=2.0, step=5, precision=2,
                                       update=_layout_lw_update, description="Printed line width of the sheet frame and title block, in millimeters")
-    lw_border: bpy.props.FloatProperty(name="Detail borders", default=0.18, min=0.01, max=2.0, step=5, precision=2,
-                                       update=_layout_lw_update, description="Printed line width of the detail borders, in millimeters")
+    lw_border: bpy.props.FloatProperty(name="Viewport borders", default=0.18, min=0.01, max=2.0, step=5, precision=2,
+                                       update=_layout_lw_update, description="Printed line width of the viewport borders, in millimeters")
     show_lineweights: bpy.props.BoolProperty(name="Show line widths", default=False, update=_layout_lw_update,
                                              description="Displays the lines with their printed width (zoom in to see it). Off: thin lines, like a CAD screen")
     print_color: bpy.props.EnumProperty(name="Colors", default='BLACK',
                                         items=(('BLACK', "Black", "Everything is printed in black"),
                                                ('COLOR', "Layer colors", "Lines keep the color of their object / layer (white becomes black)")))
     auto_update: bpy.props.BoolProperty(name="Update when opened", default=True,
-                                        description="The details are redrawn from the model each time the layout is opened after the model changed. "
-                                                    "Turn it off for very heavy models and use Update Details")
+                                        description="The viewports are redrawn from the model each time the layout is opened after the model changed. "
+                                                    "Turn it off for very heavy models and use Update Viewports")
     new_view: bpy.props.EnumProperty(name="View", items=VIEW_ITEMS[:-1], default='TOP',
-                                     description="View shown by the next detail you draw")
+                                     description="View shown by the next viewport you draw")
 
 
 class DESSIN_PG_detail(bpy.types.PropertyGroup):
     is_detail: bpy.props.BoolProperty(default=False)
     model: bpy.props.PointerProperty(type=bpy.types.Scene, name="Model", update=_detail_update,
-                                     description="Scene shown by this detail (empty: the model of the layout)")
+                                     description="Scene shown by this viewport (empty: the model of the layout)")
     view: bpy.props.EnumProperty(name="View", items=VIEW_ITEMS, default='TOP', update=_detail_update,
                                  description="Direction the model is seen from")
     rot: bpy.props.FloatVectorProperty(size=4, default=(1.0, 0.0, 0.0, 0.0))
@@ -398,29 +399,29 @@ class DESSIN_PG_detail(bpy.types.PropertyGroup):
                                    update=_detail_scale_update,
                                    description="Scale denominator: 20 means 1:20 (1 mm on paper = 20 mm of the model); 0.5 means 2:1")
     scale_preset: bpy.props.EnumProperty(name="Scale", items=SCALE_ITEMS, default='S1_10', update=_detail_preset_update,
-                                         description="Scale of the detail")
+                                         description="Scale of the viewport")
     center: bpy.props.FloatVectorProperty(name="Center", size=3, subtype='XYZ', default=(0.0, 0.0, 0.0), update=_detail_update,
-                                          description="Point of the model shown at the center of the detail")
+                                          description="Point of the model shown at the center of the viewport")
     width: bpy.props.FloatProperty(name="Width", default=120.0, min=1.0, update=_detail_update,
-                                   description="Width of the detail on the sheet, in millimeters")
+                                   description="Width of the viewport on the sheet, in millimeters")
     height: bpy.props.FloatProperty(name="Height", default=90.0, min=1.0, update=_detail_update,
-                                    description="Height of the detail on the sheet, in millimeters")
+                                    description="Height of the viewport on the sheet, in millimeters")
     locked: bpy.props.BoolProperty(name="Locked", default=False,
-                                   description="Locks the scale and the framing of the detail: Fit, Pan and the scale list do nothing")
+                                   description="Locks the scale and the framing of the viewport: Fit, Pan and the scale list do nothing")
     display: bpy.props.EnumProperty(name="Display", items=DISPLAY_ITEMS, default='HIDDEN', update=_detail_update,
-                                    description="How the model is drawn in the detail")
+                                    description="How the model is drawn in the viewport")
     show_annotations: bpy.props.BoolProperty(name="Model annotations", default=True, update=_detail_update,
-                                             description="Shows the dimensions, texts and hatches of the model in the detail")
+                                             description="Shows the dimensions, texts and hatches of the model in the viewport")
     tangent_edges: bpy.props.BoolProperty(name="Tangent edges", default=False, update=_detail_update,
                                           description="Also draws the edges between smooth surfaces")
     sharp_angle: bpy.props.FloatProperty(name="Sharp edge angle", default=math.radians(25.0), min=0.0, max=math.pi, subtype='ANGLE',
                                          update=_detail_update, description="Edges between faces that make a larger angle are drawn")
     show_border: bpy.props.BoolProperty(name="Border", default=True, update=_detail_update,
-                                        description="Prints the rectangle of the detail (it stays visible on screen, lighter, to select the detail)")
+                                        description="Prints the rectangle of the viewport (it stays visible on screen, lighter, to select the viewport)")
     show_label: bpy.props.BoolProperty(name="Label", default=True, update=_detail_update,
-                                       description="Writes the view name and the scale under the detail")
+                                       description="Writes the view name and the scale under the viewport")
     label: bpy.props.StringProperty(name="Caption", default="", update=_detail_update,
-                                    description="Text written under the detail before the scale (empty: the name of the view)")
+                                    description="Text written under the viewport before the scale (empty: the name of the view)")
     hidden_layers: bpy.props.StringProperty(default="", update=_detail_update)
 
 
@@ -661,14 +662,14 @@ def detail_rebuild(obj, force=False):
                 col = shown_color(color)
                 if role == 'hid':
                     # la source (non tiretée, masquée) sert à l'export ; les tirets ne servent qu'à l'affichage
-                    _child(obj, f"{obj.name} hidden", _new_curve("Detail hidden", paths), 'hid', col, hidden=True)
-                    cu = _new_curve("Detail hidden dashes", le.dash_paths(paths))
+                    _child(obj, f"{obj.name} hidden", _new_curve("Viewport hidden", paths), 'hid', col, hidden=True)
+                    cu = _new_curve("Viewport hidden dashes", le.dash_paths(paths))
                     _line_width(cu, L.lw_hidden, show)
                     shade = tuple(0.35 + 0.65 * c for c in col) if max(col) < 0.05 else col
                     _child(obj, f"{obj.name} hidden dashes", cu, 'hid_show', shade)
                     n += 2
                 else:
-                    cu = _new_curve("Detail " + role, paths)
+                    cu = _new_curve("Viewport " + role, paths)
                     _line_width(cu, L.lw_visible if role == 'vis' else L.lw_annot, show)
                     _child(obj, f"{obj.name} {'lines' if role == 'vis' else 'annotations'}", cu, role, col)
                     n += 1
@@ -681,7 +682,7 @@ def detail_rebuild(obj, force=False):
                     colors += list(color[:3])
                     flags.append(1 if is_text else 0)
                     shown.setdefault(shown_color(color), []).extend(polys)
-                src = _child(obj, f"{obj.name} fills", _new_curve("Detail fills", loops), 'fill', hidden=True)
+                src = _child(obj, f"{obj.name} fills", _new_curve("Viewport fills", loops), 'fill', hidden=True)
                 src["wd_fill_n"] = counts
                 src["wd_fill_c"] = colors
                 src["wd_fill_t"] = flags
@@ -694,13 +695,13 @@ def detail_rebuild(obj, force=False):
                         faces.append(tuple(range(base, base + len(poly))))
                     if not faces:
                         continue
-                    me = bpy.data.meshes.new("Detail fills")
+                    me = bpy.data.meshes.new("Viewport fills")
                     me.from_pydata(verts, [], faces)
                     fo = _child(obj, f"{obj.name} fills shown", me, 'fill_show', col, z=Z_FILL)
                     fo["wd_nosnap"] = 1            # les triangles d'un texte ne sont pas des points d'accrochage
                     n += 1
         if d.show_label:
-            fc = bpy.data.curves.new("Detail label", 'FONT')
+            fc = bpy.data.curves.new("Viewport label", 'FONT')
             fc.body = detail_label_text(d)
             fc.size = L.label_size
             fc.align_x = 'LEFT'
@@ -721,10 +722,10 @@ def detail_rebuild(obj, force=False):
 def detail_create(scene, cx, cy, w, h, view='TOP', scale=None, fit=True, name=None):
     """Nouveau détail sur la mise en page `scene`, centré en (cx, cy), de w x h mm."""
     with quiet():
-        cu = bpy.data.curves.new("Detail", 'CURVE')
+        cu = bpy.data.curves.new("Viewport", 'CURVE')
         cu.dimensions = '3D'
         cu.resolution_u = 1
-        obj = bpy.data.objects.new(name or ("Detail " + VIEW_LABELS.get(view, "View")), cu)
+        obj = bpy.data.objects.new(name or ("Viewport " + VIEW_LABELS.get(view, "View")), cu)
         obj[GEN] = 'detail'
         detail_id(obj)
         layout_collection(scene, 'details').objects.link(obj)
@@ -1523,7 +1524,7 @@ def layout_open(context, scene, fit=None):
                 redrawn += 1
         title_refresh(scene)
         if redrawn:
-            _undo_push(win, "Update Details")       # (objets refaits hors d'une commande annulable : voir _undo_push)
+            _undo_push(win, "Update Viewports")       # (objets refaits hors d'une commande annulable : voir _undo_push)
     return True
 
 
@@ -1739,7 +1740,10 @@ def layout_draw_cb():
         if not is_layout(sc) or context.mode != 'OBJECT':
             return
         sel = [o for o in details(sc) if o.select_get()]
-        if not sel:
+        live = sc.objects.get(_STATE["active_vp"]) if _STATE["active_vp"] else None
+        if live is not None and not is_detail(live):
+            live = None
+        if not sel and live is None:
             return
         act = context.view_layer.objects.active
         shader = get_shader('3D')
@@ -1753,6 +1757,14 @@ def layout_draw_cb():
             w, h = d.width / 2.0, d.height / 2.0
             c = [tuple(M @ Vector((x, y, 0.0))) for x, y in ((-w, -h), (w, -h), (w, h), (-w, h))]
             shader.uniform_float("color", (0.04, 0.4, 0.95, 1.0) if o == act else (0.25, 0.55, 0.95, 0.85))
+            batch_for_shader(shader, 'LINES', {"pos": [c[0], c[1], c[1], c[2], c[2], c[3], c[3], c[0]]}).draw(shader)
+        if live is not None:              # fenêtre dans laquelle on travaille : bord épais, comme l'espace objet d'AutoCAD
+            d = live.dessin_detail
+            M = live.matrix_world
+            w, h = d.width / 2.0, d.height / 2.0
+            c = [tuple(M @ Vector((x, y, 0.0))) for x, y in ((-w, -h), (w, -h), (w, h), (-w, h))]
+            gpu.state.line_width_set(ACTIVE_VP_WIDTH * px_scale())
+            shader.uniform_float("color", (0.04, 0.4, 0.95, 1.0))
             batch_for_shader(shader, 'LINES', {"pos": [c[0], c[1], c[1], c[2], c[2], c[3], c[3], c[0]]}).draw(shader)
         gpu.state.line_width_set(1.0)
         gpu.state.blend_set('NONE')
@@ -1810,7 +1822,7 @@ def layout_entities(scene):
         if not _shown(det, vl):
             continue
         if det.dessin_detail.show_border:
-            lines.append(('L', _spline_paths(det), L.lw_border, (0.0, 0.0, 0.0), None, "Detail borders"))
+            lines.append(('L', _spline_paths(det), L.lw_border, (0.0, 0.0, 0.0), None, "Viewport borders"))
         for c in det.children:
             role = c.get(GEN)
             if c.type != 'CURVE' or role not in ('vis', 'hid', 'ann', 'fill'):
@@ -1877,7 +1889,7 @@ def _layout_by_name(name):
 class DESSIN_OT_layout_new(bpy.types.Operator):
     bl_idname = "dessin.layout_new"
     bl_label = "New Layout"
-    bl_description = ("Creates a layout: a paper sheet with detail views of the model at scale, a title block, "
+    bl_description = ("Creates a layout: a paper sheet with viewports of the model at scale, a title block, "
                       "and vector PDF / SVG / DXF export")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -1889,9 +1901,9 @@ class DESSIN_OT_layout_new(bpy.types.Operator):
     custom_h: bpy.props.FloatProperty(name="Height (mm)", default=297.0, min=10.0)
     margin: bpy.props.FloatProperty(name="Margin (mm)", default=10.0, min=0.0, soft_max=40.0)
     title_block: bpy.props.BoolProperty(name="Title block", default=True)
-    initial: bpy.props.EnumProperty(name="Details", default='FOUR',
-                                    items=(('NONE', "None", "Empty sheet: draw the details yourself"),
-                                           ('ONE', "1 view", "One detail: the Top view"),
+    initial: bpy.props.EnumProperty(name="Viewports", default='FOUR',
+                                    items=(('NONE', "None", "Empty sheet: draw the viewports yourself"),
+                                           ('ONE', "1 view", "One viewport: the Top view"),
                                            ('FOUR', "4 views", "Top, Front, Right and an isometric view, aligned, at the same scale")))
 
     def invoke(self, context, event):
@@ -1926,7 +1938,7 @@ class DESSIN_OT_layout_new(bpy.types.Operator):
             idle_tool()            # le bouton Layout de la barre reste armé sinon : chaque clic rouvrirait la boîte
         except (RuntimeError, TypeError, AttributeError):
             pass
-        self.report({'INFO'}, f"Layout '{sc.name}': {paper_label(sc.dessin_layout)}, {len(details(sc))} detail(s)")
+        self.report({'INFO'}, f"Layout '{sc.name}': {paper_label(sc.dessin_layout)}, {len(details(sc))} viewport(s)")
         return {'FINISHED'}
 
 
@@ -2063,7 +2075,7 @@ class DESSIN_OT_layout_delete(bpy.types.Operator):
 class DESSIN_OT_layout_erase(bpy.types.Operator):
     bl_idname = "dessin.layout_erase"
     bl_label = "Delete"
-    bl_description = ("Layout: deletes the selected objects. A detail goes with its linework and the dimensions placed on it, "
+    bl_description = ("Layout: deletes the selected objects. A viewport goes with its linework and the dimensions placed on it, "
                       "in a single undo step")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -2123,7 +2135,7 @@ def erase_keys_unregister():
 class DESSIN_OT_layout_duplicate(bpy.types.Operator):
     bl_idname = "dessin.layout_duplicate"
     bl_label = "Duplicate Layout"
-    bl_description = "Makes a copy of this layout: same sheet, same details, same annotations"
+    bl_description = "Makes a copy of this layout: same sheet, same viewports, same annotations"
     bl_options = {'REGISTER', 'UNDO'}
 
     name: bpy.props.StringProperty(options={'SKIP_SAVE'})
@@ -2217,11 +2229,11 @@ def active_detail(context):
 
 class DESSIN_OT_layout_detail(DessinBase):
     bl_idname = "dessin.layout_detail"
-    bl_label = "Detail"
-    bl_description = ("Layout: draws a detail view of the model on the sheet (first corner, then opposite corner). "
+    bl_label = "Viewport"
+    bl_description = ("Layout: draws a viewport of the model on the sheet (first corner, then opposite corner). "
                       "The view is the one chosen in the Layout panel; the scale is fitted, then set in the panel")
 
-    TITLE = "Detail"
+    TITLE = "Viewport"
     PROP = ()
     NEEDED = 2
     NUMFIELDS = 2
@@ -2238,7 +2250,7 @@ class DESSIN_OT_layout_detail(DessinBase):
                 return {'CANCELLED', 'PASS_THROUGH'}
             if event is not None and event.type == 'LEFTMOUSE' and cmd_click_idle(context, event):
                 return {'CANCELLED'}
-            self.report({'WARNING'}, "Detail: open a layout first (Layout command, or the tabs under the view)")
+            self.report({'WARNING'}, "Viewport: open a layout first (Layout command, or the tabs under the view)")
             return {'CANCELLED'}
         return DessinBase.invoke(self, context, event)
 
@@ -2254,7 +2266,7 @@ class DESSIN_OT_layout_detail(DessinBase):
         ys = [p.y for p in spec[1]]
         w, h = max(xs) - min(xs), max(ys) - min(ys)
         if w < 2.0 or h < 2.0:
-            self.report({'WARNING'}, "Detail too small")
+            self.report({'WARNING'}, "Viewport too small")
             return None
         sc = context.scene
         obj = detail_create(sc, (min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0, w, h, sc.dessin_layout.new_view)
@@ -2277,8 +2289,8 @@ class DESSIN_OT_layout_detail(DessinBase):
 
 class DESSIN_OT_detail_add(bpy.types.Operator):
     bl_idname = "dessin.detail_add"
-    bl_label = "Add Detail"
-    bl_description = "Adds a detail with this view in the middle of the free area of the sheet (move and resize it afterwards)"
+    bl_label = "Add Viewport"
+    bl_description = "Adds a viewport with this view in the middle of the free area of the sheet (move and resize it afterwards)"
     bl_options = {'REGISTER', 'UNDO'}
 
     view: bpy.props.EnumProperty(name="View", items=VIEW_ITEMS[:-1], default='TOP')
@@ -2302,8 +2314,8 @@ class DESSIN_OT_detail_add(bpy.types.Operator):
 
 class DESSIN_OT_detail_update(bpy.types.Operator):
     bl_idname = "dessin.detail_update"
-    bl_label = "Update Details"
-    bl_description = "Redraws the detail views from the model (the selected ones, or all of them)"
+    bl_label = "Update Viewports"
+    bl_description = "Redraws the viewports from the model (the selected ones, or all of them)"
     bl_options = {'REGISTER', 'UNDO'}
 
     all: bpy.props.BoolProperty(name="All", default=False, options={'SKIP_SAVE'})
@@ -2321,14 +2333,14 @@ class DESSIN_OT_detail_update(bpy.types.Operator):
             detail_rebuild(o, force=True)
         title_refresh(sc)
         layout_refresh_dims(sc)
-        self.report({'INFO'}, f"{len(objs)} detail(s) updated in {time.monotonic() - t0:.1f} s")
+        self.report({'INFO'}, f"{len(objs)} viewport(s) updated in {time.monotonic() - t0:.1f} s")
         return {'FINISHED'}
 
 
 class DESSIN_OT_detail_fit(bpy.types.Operator):
     bl_idname = "dessin.detail_fit"
-    bl_label = "Fit Detail"
-    bl_description = ("Frames the whole model in the selected details: centers it and picks the largest standard scale that fits "
+    bl_label = "Fit Viewport"
+    bl_description = ("Frames the whole model in the selected viewports: centers it and picks the largest standard scale that fits "
                       "(Keep scale: only centers)")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -2341,7 +2353,7 @@ class DESSIN_OT_detail_fit(bpy.types.Operator):
     def execute(self, context):
         objs = [o for o in selected_details(context)]
         if not objs:
-            self.report({'INFO'}, "Select a detail first (click its border)")
+            self.report({'INFO'}, "Select a viewport first (click its border)")
             return {'CANCELLED'}
         done = 0
         for o in objs:
@@ -2350,15 +2362,15 @@ class DESSIN_OT_detail_fit(bpy.types.Operator):
             if detail_fit(o, pick_scale=not self.keep_scale):
                 done += 1
         if not done:
-            self.report({'INFO'}, "Nothing to fit (detail locked, or empty model)")
+            self.report({'INFO'}, "Nothing to fit (viewport locked, or empty model)")
             return {'CANCELLED'}
         return {'FINISHED'}
 
 
 class DESSIN_OT_detail_scale(bpy.types.Operator):
     bl_idname = "dessin.detail_scale"
-    bl_label = "Detail Scale"
-    bl_description = "Sets the scale of the selected details: type 1:20, 1/50, 2:1, or just 25 for 1:25"
+    bl_label = "Viewport Scale"
+    bl_description = "Sets the scale of the selected viewports: type 1:20, 1/50, 2:1, or just 25 for 1:25"
     bl_options = {'REGISTER', 'UNDO'}
 
     text: bpy.props.StringProperty(name="Scale", default="1:10")
@@ -2370,7 +2382,7 @@ class DESSIN_OT_detail_scale(bpy.types.Operator):
     def invoke(self, context, event):
         objs = selected_details(context)
         if not objs:
-            self.report({'INFO'}, "Select a detail first (click its border)")
+            self.report({'INFO'}, "Select a viewport first (click its border)")
             return {'CANCELLED'}
         self.text = le.fmt_scale(objs[0].dessin_detail.scale)
         return context.window_manager.invoke_props_dialog(self, width=240)
@@ -2389,7 +2401,7 @@ class DESSIN_OT_detail_scale(bpy.types.Operator):
                 o.dessin_detail.scale = den
                 n += 1
         if not n:
-            self.report({'INFO'}, "The detail is locked")
+            self.report({'INFO'}, "The viewport is locked")
             return {'CANCELLED'}
         title_refresh(context.scene)
         return {'FINISHED'}
@@ -2413,7 +2425,7 @@ _model_view_items.cache = []
 class DESSIN_OT_detail_view_set(bpy.types.Operator):
     bl_idname = "dessin.detail_view_set"
     bl_label = "Use a Model View"
-    bl_description = ("Shows in the selected detail a view copied from the model: the 3D view you had before opening the layout, "
+    bl_description = ("Shows in the selected viewport a view copied from the model: the 3D view you had before opening the layout, "
                       "or one of the named views (a perspective view stays in perspective)")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -2425,7 +2437,7 @@ class DESSIN_OT_detail_view_set(bpy.types.Operator):
 
     def invoke(self, context, event):
         if not selected_details(context):
-            self.report({'INFO'}, "Select a detail first (click its border)")
+            self.report({'INFO'}, "Select a viewport first (click its border)")
             return {'CANCELLED'}
         return context.window_manager.invoke_props_dialog(self, width=280)
 
@@ -2477,8 +2489,8 @@ class DESSIN_OT_detail_view_set(bpy.types.Operator):
 
 class DESSIN_OT_detail_layer(bpy.types.Operator):
     bl_idname = "dessin.detail_layer"
-    bl_label = "Hide / Show Layer in Detail"
-    bl_description = "Hides or shows this layer of the model in the selected details only"
+    bl_label = "Hide / Show Layer in Viewport"
+    bl_description = "Hides or shows this layer of the model in the selected viewports only"
     bl_options = {'REGISTER', 'UNDO'}
 
     layer: bpy.props.StringProperty(options={'SKIP_SAVE'})
@@ -2504,14 +2516,17 @@ class DESSIN_OT_detail_layer(bpy.types.Operator):
 
 class DESSIN_OT_detail_pan(bpy.types.Operator):
     bl_idname = "dessin.detail_pan"
-    bl_label = "Pan Detail"
-    bl_description = ("Moves the model inside a detail: click in the detail and drag. Wheel: next / previous standard scale. "
-                      "Enter, Esc or right-click: done")
+    bl_label = "Pan Viewport"
+    bl_description = ("Works inside a viewport, like model space in AutoCAD: double-click inside it (or MS), then drag to pan "
+                      "the model; wheel: next / previous standard scale. Double-click outside, Enter, Esc or right-click: "
+                      "back to the sheet")
     bl_options = {'REGISTER', 'UNDO'}
+
+    pick: bpy.props.BoolProperty(default=False, options={'SKIP_SAVE', 'HIDDEN'})     # lancé par un double-clic dans la vue
 
     @classmethod
     def poll(cls, context):
-        return is_layout(context.scene) and context.area is not None and context.area.type == 'VIEW_3D'
+        return is_layout(context.scene) and context.area is not None and context.area.type == 'VIEW_3D' and context.mode == 'OBJECT'
 
     def paper_point(self, context, event):
         from bpy_extras.view3d_utils import region_2d_to_location_3d
@@ -2526,15 +2541,41 @@ class DESSIN_OT_detail_pan(bpy.types.Operator):
         self.obj = None
         self.start = None
         self.changed = False
+        if self.pick:
+            # double-clic : seulement dans une fenêtre, et pas sur une barre ou un panneau (le clic garde alors son usage)
+            o = None
+            if event is not None and not double_click_blocked(context, event):
+                p = self.paper_point(context, event)
+                o = detail_at(context.scene, p.x, p.y) if p is not None else None
+            if o is None:
+                return {'CANCELLED', 'PASS_THROUGH'}
+        else:
+            o = active_detail(context)
+        self.activate(context, o)
         context.window_manager.modal_handler_add(self)
         self.status(context)
         return {'RUNNING_MODAL'}
 
+    def activate(self, context, o):
+        """La fenêtre dans laquelle on travaille : son bord est épaissi (les poignées s'effacent pendant ce temps)."""
+        _STATE["active_vp"] = o.name if o is not None else None
+        _redraw()
+
     def status(self, context, done=False):
         try:
-            context.workspace.status_text_set(None if done else "Pan Detail: drag inside a detail  ·  Wheel: scale  ·  Enter / Esc: done")
+            context.workspace.status_text_set(None if done else "Viewport: drag inside it to pan the model  ·  Wheel: scale  ·  "
+                                              "Double-click outside, Enter or Esc: back to the sheet")
         except (AttributeError, RuntimeError):
             pass
+
+    def leave(self, context):
+        for c in (detail_children(self.obj) if self.obj is not None and self.start is not None else ()):
+            c.location.x = c.location.y = 0.0
+        self.status(context, True)
+        self.activate(context, None)
+        if self.changed:
+            layout_refresh_dims(context.scene)
+        return {'FINISHED'} if self.changed else {'CANCELLED'}
 
     def apply(self, context, delta):
         o = self.obj
@@ -2550,19 +2591,17 @@ class DESSIN_OT_detail_pan(bpy.types.Operator):
     def modal(self, context, event):
         et = event.type
         if et in {'ESC', 'RET', 'NUMPAD_ENTER', 'RIGHTMOUSE', 'SPACE'} and event.value == 'PRESS':
-            for c in (detail_children(self.obj) if self.obj is not None and self.start is not None else ()):
-                c.location.x = c.location.y = 0.0
-            self.status(context, True)
-            if self.changed:
-                layout_refresh_dims(context.scene)
-            return {'FINISHED'} if self.changed else {'CANCELLED'}
-        if et == 'LEFTMOUSE' and event.value == 'PRESS':
+            return self.leave(context)
+        if et == 'LEFTMOUSE' and event.value in {'PRESS', 'DOUBLE_CLICK'}:
             p = self.paper_point(context, event)
             o = detail_at(context.scene, p.x, p.y) if p is not None else None
             if o is None:
+                if event.value == 'DOUBLE_CLICK':          # double-clic hors de toute fenêtre : retour à la feuille (AutoCAD)
+                    return self.leave(context)
                 return {'RUNNING_MODAL'}
+            self.activate(context, o)                      # (cliquer dans une autre fenêtre la rend active)
             if o.dessin_detail.locked:
-                self.report({'INFO'}, "This detail is locked")
+                self.report({'INFO'}, "This viewport is locked (Display Locked): uncheck Locked to pan or zoom in it")
                 return {'RUNNING_MODAL'}
             self.obj, self.start = o, p
             self.base = {c.name: (c.location.x, c.location.y) for c in detail_children(o)}
@@ -2597,6 +2636,7 @@ class DESSIN_OT_detail_pan(bpy.types.Operator):
                 nxt = min([x for x in dens if x > d.scale * (1 + 1e-9)], default=None)
             if nxt is not None:
                 self.obj = o
+                self.activate(context, o)
                 d.scale = nxt
                 self.changed = True
                 title_refresh(context.scene)
@@ -2610,7 +2650,7 @@ class DESSIN_OT_detail_text_match(bpy.types.Operator):
     bl_idname = "dessin.detail_text_match"
     bl_label = "Match Model Text Height"
     bl_description = ("Sets the text height of the model dimensions so that they print at the height typed here, "
-                      "in the scale of the selected detail (the dimensions of the model are rebuilt)")
+                      "in the scale of the selected viewport (the dimensions of the model are rebuilt)")
     bl_options = {'REGISTER', 'UNDO'}
 
     height: bpy.props.FloatProperty(name="Height on paper (mm)", default=2.5, min=0.5, max=50.0)
@@ -2621,7 +2661,7 @@ class DESSIN_OT_detail_text_match(bpy.types.Operator):
 
     def invoke(self, context, event):
         if not selected_details(context):
-            self.report({'INFO'}, "Select a detail first (click its border)")
+            self.report({'INFO'}, "Select a viewport first (click its border)")
             return {'CANCELLED'}
         return context.window_manager.invoke_props_dialog(self, width=280)
 
@@ -2711,10 +2751,13 @@ class _LayoutExport:
                             detail_rebuild(o)
                             redrawn += 1
             if redrawn:
-                _undo_push(context.window, "Update Details")
+                _undo_push(context.window, "Update Viewports")
             written = self.write(path, [layout_page(sc) for sc in scs])
         except OSError as e:
             self.report({'ERROR'}, f"Cannot write the file: {e}")
+            return {'CANCELLED'}
+        except RuntimeError as e:              # (DWG : pas de convertisseur sur cet ordinateur, ou il a échoué)
+            self.report({'ERROR'}, str(e))
             return {'CANCELLED'}
         self.report({'INFO'}, f"{len(scs)} layout(s) exported in {time.monotonic() - t0:.1f} s: {written}")
         self.after(written)
@@ -2777,9 +2820,413 @@ class DESSIN_OT_layout_export_dxf(_LayoutExport, bpy.types.Operator):
         return path
 
 
+class DESSIN_OT_layout_export_dwg(_LayoutExport, bpy.types.Operator):
+    bl_idname = "dessin.layout_export_dwg"
+    bl_label = "Export DWG"
+    bl_description = ("DWG in paper millimeters for AutoCAD: the same drawing as Export DXF, converted by the free ODA File "
+                      "Converter installed on this computer")
+    EXT = ".dwg"
+    filter_glob: bpy.props.StringProperty(default="*.dwg", options={'HIDDEN'})
+
+    def write(self, path, pages):
+        import shutil
+        import tempfile
+        from .import_dxf import cad_convert
+        tmp = tempfile.mkdtemp(prefix="wd_layout_dwg_")
+        try:
+            dxf = os.path.join(tmp, os.path.splitext(os.path.basename(path))[0] + ".dxf")
+            le.write_dxf(dxf, pages)
+            made = cad_convert(dxf, "DWG")
+            try:
+                shutil.move(made, path)
+            finally:
+                shutil.rmtree(os.path.dirname(made), ignore_errors=True)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        return path
+
+
 # --------------------------------------------------------------------------
 # Interface : onglets de la barre de vues, menus, panneaux
 # --------------------------------------------------------------------------
+
+# --------------------------------------------------------------------------
+# Poignées d'une fenêtre sélectionnée, comme les grips d'AutoCAD : 4 aux coins pour la redimensionner (le coin opposé ne
+# bouge pas, le modèle reste à sa place sur la feuille), 1 au centre pour la déplacer (quand le Gumball est coupé, sinon
+# c'est lui qui la déplace), 1 triangle qui ouvre la liste d'échelles.
+# --------------------------------------------------------------------------
+GRIP_CORNERS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
+GRIP_MOVE = 4                     # numéro de la poignée centrale
+GRIP_PX = 4.5                     # demi-côté d'une poignée, en pixels d'interface
+GRIP_MIN = 2.0                    # plus petit côté d'une fenêtre (mm)
+GRIP_COLOR = (0.05, 0.36, 0.95)   # bleu des poignées d'AutoCAD
+GRIP_HOT = (1.0, 0.36, 0.26)      # poignée survolée
+GRIP_SCALE_OFFSET = (20.0, -20.0)  # le triangle d'échelle, en pixels depuis le centre (hors des flèches du Gumball)
+ACTIVE_VP_WIDTH = 4.5             # épaisseur du bord de la fenêtre dans laquelle on travaille
+GRIP_SQUARE = [(-1.0, -1.0, 0.0), (1.0, -1.0, 0.0), (1.0, 1.0, 0.0), (-1.0, -1.0, 0.0), (1.0, 1.0, 0.0), (-1.0, 1.0, 0.0)]
+GRIP_TRIANGLE = [(-1.25, 0.9, 0.0), (1.25, 0.9, 0.0), (0.0, -1.1, 0.0)]
+
+
+def detail_rect(obj):
+    """Rectangle papier d'une fenêtre : (x et y du centre, largeur, hauteur), en millimètres."""
+    d = obj.dessin_detail
+    return (float(obj.location.x), float(obj.location.y), float(d.width), float(d.height))
+
+
+def grip_points(rect):
+    """Les quatre coins d'un rectangle papier, dans l'ordre de GRIP_CORNERS."""
+    cx, cy, w, h = rect
+    return [(cx + sx * w / 2.0, cy + sy * h / 2.0) for sx, sy in GRIP_CORNERS]
+
+
+def grip_opposite(rect, corner):
+    """Le coin qui ne bouge pas quand on tire le coin `corner`."""
+    return grip_points(rect)[(corner + 2) % 4]
+
+
+def grip_rect(rect, corner, p, min_size=GRIP_MIN):
+    """Nouveau rectangle (cx, cy, w, h) quand le coin `corner` est tiré jusqu'au point papier p : le coin opposé ne bouge
+    pas. Tiré au-delà du coin opposé, le cadre se retourne ; il garde toujours une taille minimale."""
+    sx, sy = GRIP_CORNERS[corner]
+    ox, oy = grip_opposite(rect, corner)
+    dx, dy = p[0] - ox, p[1] - oy
+    if abs(dx) < min_size:
+        dx = math.copysign(min_size, dx if abs(dx) > 1e-12 else sx)
+    if abs(dy) < min_size:
+        dy = math.copysign(min_size, dy if abs(dy) > 1e-12 else sy)
+    return (ox + dx / 2.0, oy + dy / 2.0, abs(dx), abs(dy))
+
+
+def detail_set_rect(obj, rect, keep_model=True):
+    """Donne à une fenêtre le rectangle papier (cx, cy, w, h).
+    keep_model : le dessin du modèle ne bouge pas sur la feuille (une fenêtre d'AutoCAD dont on tire un coin découvre plus
+    ou moins du modèle, elle ne le déplace pas) ; sinon le modèle suit la fenêtre (elle est déplacée)."""
+    if not is_detail(obj):
+        return False
+    d = obj.dessin_detail
+    cx, cy, w, h = rect
+    sx, sy = cx - obj.location.x, cy - obj.location.y
+    with quiet():
+        if keep_model and not d.persp and (abs(sx) > 1e-12 or abs(sy) > 1e-12):
+            model = detail_model(obj)
+            if model is not None:
+                k = mm_per_unit(model) / max(d.scale, 1e-9)
+                proj = detail_projector(d)
+                d.center = Vector(d.center) + (proj.right * sx + proj.up * sy) / k
+        d.width, d.height = max(float(w), 1.0), max(float(h), 1.0)
+        obj.location.x, obj.location.y = cx, cy
+    detail_rebuild(obj)
+    with quiet():
+        detail_dims_follow(obj)             # ses cotes restent sur les mêmes points du modèle
+    return True
+
+
+def grip_target(context):
+    """La fenêtre qui montre ses poignées : l'objet actif, s'il est une fenêtre sélectionnée de la mise en page affichée."""
+    try:
+        sc = context.scene
+        if not is_layout(sc) or context.mode != 'OBJECT' or _STATE["active_vp"]:
+            return None
+        act = context.view_layer.objects.active
+        if is_detail(act) and act.select_get() and act.name in sc.objects:
+            return act
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    return None
+
+
+def double_click_blocked(context, event):
+    """True si le double-clic tombe sur une barre du bas, un panneau ou hors de la vue : il n'entre pas dans une fenêtre."""
+    area = context.area
+    if area is None or area.type != 'VIEW_3D':
+        return True
+    if find_window_region(area, event.mouse_x, event.mouse_y) is None or event.alt or event.oskey or event.ctrl:
+        return True
+    for r in area.regions:
+        if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
+                and r.y <= event.mouse_y < r.y + r.height):
+            return True
+    try:
+        return cmd_hit(area, event.mouse_x, event.mouse_y) is not None
+    except (AttributeError, TypeError, RuntimeError):
+        return False
+
+
+class DESSIN_OT_viewport_grip(DessinBase):
+    bl_idname = "dessin.viewport_grip"
+    bl_label = "Viewport Grip"
+    bl_description = ("Layout: grip of the selected viewport. Corner: click it (or drag it) to the new position; the opposite "
+                      "corner stays in place and the model does not move on the sheet. Center: moves the viewport. "
+                      "Object snaps, Grid Snap and typed sizes work as in the drawing tools")
+    bl_options = {'REGISTER', 'UNDO', 'INTERNAL'}
+
+    TITLE = "Viewport"
+    PROP = ()
+    NEEDED = 2
+    NUMFIELDS = 2
+    HAS_CENTER = False
+    EDIT_OK = False
+
+    corner: bpy.props.IntProperty(default=0, min=0, max=GRIP_MOVE, options={'SKIP_SAVE', 'HIDDEN'})
+
+    def invoke(self, context, event):
+        obj = grip_target(context)
+        if obj is None:
+            return {'CANCELLED', 'PASS_THROUGH'}
+        self.vp_name = obj.name
+        self.rect0 = detail_rect(obj)
+        self.press = (event.mouse_x, event.mouse_y) if event is not None else (0, 0)
+        self.released = False
+        res = DessinBase.invoke(self, context, event)
+        if 'RUNNING_MODAL' not in res:
+            return res
+        if self.corner == GRIP_MOVE:
+            base = (self.rect0[0], self.rect0[1])
+        else:
+            base = grip_opposite(self.rect0, self.corner)
+        self.points = [Vector((base[0], base[1], 0.0))]        # le point fixe : la suite est un seul clic
+        self.typed = ['', '', '']
+        self.update_cursor(context, event)
+        self.refresh(context)
+        return res
+
+    def prompt(self):
+        if self.corner == GRIP_MOVE:
+            return "new position of the viewport"
+        return "new corner of the viewport   (or type width, Tab, height, Enter)"
+
+    def compute(self):
+        if not self.points or self.cur is None:
+            return [], [], "", None
+        if self.corner == GRIP_MOVE:
+            cx, cy, w, h = self.rect0
+            d = self.cur - self.points[0]
+            c = [Vector((x + d.x, y + d.y, 0.0)) for x, y in grip_points(self.rect0)]
+            return c + [c[0]], [], f"Move {self.fmt(math.hypot(d.x, d.y))}", ("move", (cx + d.x, cy + d.y, w, h))
+        return DESSIN_OT_rectangle.compute(self)
+
+    def modal(self, context, event):
+        # la poignée a été pressée puis tirée : relâcher pose le point (cliquer la poignée, bouger, puis cliquer marche aussi)
+        if event.type == 'LEFTMOUSE' and event.value == 'RELEASE' and not self.released:
+            self.released = True
+            moved = math.hypot(event.mouse_x - self.press[0], event.mouse_y - self.press[1]) > 5.0 * px_scale()
+            if moved and self.points:
+                self.update_cursor(context, event)
+                if self.cur is not None:
+                    self.click(context)
+                    if self.finished:
+                        return self.exit(context)
+            return {'RUNNING_MODAL'}
+        return DessinBase.modal(self, context, event)
+
+    def build(self, context, spec):
+        obj = context.scene.objects.get(self.vp_name)
+        if obj is None or not is_detail(obj):
+            return None
+        if spec[0] == 'move':
+            rect, keep = spec[1], False
+        elif spec[0] == 'rect':
+            xs = [p.x for p in spec[1]]
+            ys = [p.y for p in spec[1]]
+            w, h = max(xs) - min(xs), max(ys) - min(ys)
+            if w < GRIP_MIN or h < GRIP_MIN:
+                self.report({'WARNING'}, "Viewport too small")
+                return None
+            rect, keep = ((min(xs) + max(xs)) / 2.0, (min(ys) + max(ys)) / 2.0, w, h), True
+        else:
+            return None
+        detail_set_rect(obj, rect, keep_model=keep)
+        _redraw()
+        return obj
+
+    def after_finish(self, context):
+        if getattr(self, "tool_id", None):
+            try:
+                idle_tool()
+            except (RuntimeError, TypeError):
+                pass
+
+
+class DESSIN_GT_vp_grip(bpy.types.Gizmo):
+    """Poignée carrée d'une fenêtre (Blender la surligne et la détecte lui-même)."""
+    bl_idname = "DESSIN_GT_vp_grip"
+    __slots__ = ("shape",)
+
+    def setup(self):
+        if not hasattr(self, "shape"):
+            self.shape = self.new_custom_shape('TRIS', GRIP_SQUARE)
+
+    def draw(self, context):
+        self.draw_custom_shape(self.shape)
+
+    def draw_select(self, context, select_id):
+        self.draw_custom_shape(self.shape, select_id=select_id)
+
+
+class DESSIN_GT_vp_scale(bpy.types.Gizmo):
+    """Triangle d'échelle d'une fenêtre : il ouvre la liste d'échelles."""
+    bl_idname = "DESSIN_GT_vp_scale"
+    __slots__ = ("shape",)
+
+    def setup(self):
+        if not hasattr(self, "shape"):
+            self.shape = self.new_custom_shape('TRIS', GRIP_TRIANGLE)
+
+    def draw(self, context):
+        self.draw_custom_shape(self.shape)
+
+    def draw_select(self, context, select_id):
+        self.draw_custom_shape(self.shape, select_id=select_id)
+
+
+def grip_layout(rect, px, gumball_on):
+    """Où placer les poignées d'une fenêtre : {"corners": [4 points], "move": point ou None, "scale": point}, en
+    millimètres de papier. px : millimètres par pixel d'interface ; la poignée du centre s'efface quand le Gumball est là."""
+    cx, cy, _w, _h = rect
+    return {"corners": grip_points(rect), "move": None if gumball_on else (cx, cy),
+            "scale": (cx + GRIP_SCALE_OFFSET[0] * px, cy + GRIP_SCALE_OFFSET[1] * px)}
+
+
+class DESSIN_GGT_viewport_grips(bpy.types.GizmoGroup):
+    bl_idname = "DESSIN_GGT_viewport_grips"
+    bl_label = "Viewport Grips"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'WINDOW'
+    bl_options = {'3D', 'PERSISTENT'}
+
+    @classmethod
+    def poll(cls, context):
+        try:
+            if grip_target(context) is None or foreign_modal(context):
+                return False
+            tool = context.workspace.tools.from_space_view3d_mode(context.mode, create=False)
+        except (AttributeError, RuntimeError, TypeError):
+            return False
+        return tool is None or tool.idname in _GUMBALL_TOOLS
+
+    def setup(self, context):
+        self.gz_corner, self.gz_move, self.gz_scale = [], None, None
+        for i in range(4):
+            gz = self.gizmos.new(DESSIN_GT_vp_grip.bl_idname)
+            gz.target_set_operator(DESSIN_OT_viewport_grip.bl_idname).corner = i
+            self.gz_corner.append(gz)
+        self.gz_move = self.gizmos.new(DESSIN_GT_vp_grip.bl_idname)
+        self.gz_move.target_set_operator(DESSIN_OT_viewport_grip.bl_idname).corner = GRIP_MOVE
+        self.gz_scale = self.gizmos.new(DESSIN_GT_vp_scale.bl_idname)
+        self.gz_scale.target_set_operator("wm.call_menu").name = DESSIN_MT_viewport_scale.bl_idname
+        for gz in self.gz_corner + [self.gz_move, self.gz_scale]:
+            for k, v in (("color", GRIP_COLOR), ("alpha", 1.0), ("color_highlight", GRIP_HOT), ("alpha_highlight", 1.0),
+                         ("use_draw_modal", False), ("use_draw_scale", False), ("scale_basis", 1.0), ("select_bias", 3.0)):
+                try:
+                    setattr(gz, k, v)
+                except (AttributeError, TypeError, ValueError):
+                    pass
+
+    def place(self, context):
+        obj = grip_target(context)
+        rv3d, region = context.region_data, context.region
+        every = list(getattr(self, "gz_corner", [])) + [g for g in (getattr(self, "gz_move", None), getattr(self, "gz_scale", None)) if g]
+        if obj is None or rv3d is None or region is None:
+            for gz in every:
+                gz.hide = True
+            return
+        rect = detail_rect(obj)
+        v = rv3d.perspective_matrix @ Vector((rect[0], rect[1], 0.0, 1.0))
+        proj = rv3d.window_matrix[0][0] or 1.0
+        px = max(abs(v.w), 1e-6) / (0.5 * region.width * proj) * px_scale()      # millimètres par pixel d'interface
+        try:
+            gumball_on = bool(context.scene.dessin.gumball)
+        except AttributeError:
+            gumball_on = False
+        where = grip_layout(rect, px, gumball_on)
+        z = float(obj.location.z)
+        size = Matrix.Scale(GRIP_PX * px, 4)
+        for gz, (x, y) in zip(self.gz_corner, where["corners"]):
+            gz.matrix_basis = Matrix.Translation((x, y, z)) @ size
+            gz.hide = False
+        if where["move"] is None:
+            self.gz_move.hide = True
+        else:
+            self.gz_move.matrix_basis = Matrix.Translation((where["move"][0], where["move"][1], z)) @ size
+            self.gz_move.hide = False
+        self.gz_scale.matrix_basis = Matrix.Translation((where["scale"][0], where["scale"][1], z)) @ Matrix.Scale(GRIP_PX * 1.25 * px, 4)
+        self.gz_scale.hide = False
+
+    def refresh(self, context):
+        self.place(context)
+
+    def draw_prepare(self, context):
+        self.place(context)
+
+
+class DESSIN_MT_viewport_scale(bpy.types.Menu):
+    bl_idname = "DESSIN_MT_viewport_scale"
+    bl_label = "Viewport Scale"
+
+    def draw(self, context):
+        lay = self.layout
+        obj = active_detail(context)
+        if obj is None:
+            lay.label(text="Select a viewport first")
+            return
+        d = obj.dessin_detail
+        lay.enabled = True
+        col = lay.column()
+        col.enabled = not d.locked and not d.persp
+        col.operator_context = 'EXEC_DEFAULT'
+        for _key, name, den in le.SCALES:
+            on = abs(den - d.scale) <= 1e-9 * max(1.0, den)
+            col.operator(DESSIN_OT_detail_scale.bl_idname, text=name, icon='RADIOBUT_ON' if on else 'RADIOBUT_OFF').text = name
+        col.separator()
+        col.operator_context = 'INVOKE_DEFAULT'
+        col.operator(DESSIN_OT_detail_scale.bl_idname, text="Custom...")
+        col.operator(DESSIN_OT_detail_fit.bl_idname, text="Fit")
+        lay.separator()
+        lay.prop(d, "locked", text="Display Locked")
+        lay.operator(DESSIN_OT_detail_pan.bl_idname, text="Activate (pan inside)")
+
+
+class DESSIN_OT_viewport_paper(bpy.types.Operator):
+    bl_idname = "dessin.viewport_paper"
+    bl_label = "Paper Space"
+    bl_description = "Back to the sheet of the layout (paper space, PS in AutoCAD). From the model, opens the layout"
+
+    def execute(self, context):
+        if is_layout(context.scene):
+            self.report({'INFO'}, "Paper space: you are on the sheet (double-click inside a viewport, or MS, to work in it)")
+            return {'CANCELLED'}
+        try:
+            return bpy.ops.dessin.layout_next()
+        except RuntimeError:
+            return {'CANCELLED'}
+
+
+_VP_KEYS = []
+
+
+def viewport_keys_register():
+    """Double-clic dans une fenêtre d'une mise en page : on y entre (comme l'espace objet d'AutoCAD)."""
+    try:
+        wm = bpy.context.window_manager
+        kc = wm.keyconfigs.addon if wm is not None else None
+        if kc is None:
+            return
+        km = kc.keymaps.new(name="Object Mode", space_type='EMPTY')
+        kmi = km.keymap_items.new(DESSIN_OT_detail_pan.bl_idname, 'LEFTMOUSE', 'DOUBLE_CLICK')
+        kmi.properties.pick = True
+        _VP_KEYS.append((km, kmi))
+    except (AttributeError, RuntimeError, TypeError):
+        pass
+
+
+def viewport_keys_unregister():
+    for km, kmi in _VP_KEYS:
+        try:
+            km.keymap_items.remove(kmi)
+        except (RuntimeError, ReferenceError, TypeError):
+            pass
+    _VP_KEYS.clear()
+
 
 def bar_tabs(context):
     """Onglets de la barre du bas : vues du modèle, puis mises en page, puis « + ».
@@ -2898,7 +3345,7 @@ class DESSIN_PT_layout_page(bpy.types.Panel):
 
 
 class DESSIN_PT_layout_detail(bpy.types.Panel):
-    bl_label = "Details"
+    bl_label = "Viewports"
     bl_idname = "DESSIN_PT_layout_detail"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -2915,7 +3362,7 @@ class DESSIN_PT_layout_detail(bpy.types.Panel):
             return
         L = sc.dessin_layout
         row = lay.row(align=True)
-        row.operator(DESSIN_OT_layout_detail.bl_idname, text="Draw a Detail", icon='ADD')
+        row.operator(DESSIN_OT_layout_detail.bl_idname, text="Draw a Viewport", icon='ADD')
         row.prop(L, "new_view", text="")
         row = lay.row(align=True)
         row.operator(DESSIN_OT_detail_update.bl_idname, text="Update", icon='FILE_REFRESH')
@@ -2923,7 +3370,7 @@ class DESSIN_PT_layout_detail(bpy.types.Panel):
         row.operator(DESSIN_OT_detail_fit.bl_idname, text="Fit", icon='FULLSCREEN_ENTER')
         obj = active_detail(context)
         if obj is None:
-            lay.label(text="Click the border of a detail", icon='INFO')
+            lay.label(text="Click the border of a viewport", icon='INFO')
             lay.label(text="to see its settings here.")
             return
         d = obj.dessin_detail
@@ -2964,7 +3411,7 @@ class DESSIN_PT_layout_detail(bpy.types.Panel):
 
 
 class DESSIN_PT_layout_layers(bpy.types.Panel):
-    bl_label = "Layers in this Detail"
+    bl_label = "Layers in this Viewport"
     bl_idname = "DESSIN_PT_layout_layers"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'
@@ -2982,7 +3429,7 @@ class DESSIN_PT_layout_layers(bpy.types.Panel):
         if model is None:
             return
         hidden = set(detail_hidden(obj.dessin_detail))
-        lay.label(text="Hide model layers in this detail only:")
+        lay.label(text="Hide model layers in this viewport only:")
         col = lay.column(align=True)
 
         def walk(c, depth):
@@ -3032,6 +3479,7 @@ class DESSIN_PT_layout_print(bpy.types.Panel):
         row = col.row(align=True)
         row.operator(DESSIN_OT_layout_export_svg.bl_idname, text="SVG")
         row.operator(DESSIN_OT_layout_export_dxf.bl_idname, text="DXF")
+        row.operator(DESSIN_OT_layout_export_dwg.bl_idname, text="DWG")
 
 
 LAYOUT_CLASSES = (
@@ -3040,7 +3488,8 @@ LAYOUT_CLASSES = (
     DESSIN_OT_layout_delete, DESSIN_OT_layout_duplicate, DESSIN_OT_layout_page_setup, DESSIN_OT_layout_erase,
     DESSIN_OT_layout_detail, DESSIN_OT_detail_add, DESSIN_OT_detail_update, DESSIN_OT_detail_fit, DESSIN_OT_detail_scale,
     DESSIN_OT_detail_view_set, DESSIN_OT_detail_layer, DESSIN_OT_detail_pan, DESSIN_OT_detail_text_match,
-    DESSIN_OT_layout_export_pdf, DESSIN_OT_layout_export_svg, DESSIN_OT_layout_export_dxf,
+    DESSIN_OT_layout_export_pdf, DESSIN_OT_layout_export_svg, DESSIN_OT_layout_export_dxf, DESSIN_OT_layout_export_dwg,
+    DESSIN_OT_viewport_grip, DESSIN_OT_viewport_paper, DESSIN_MT_viewport_scale, DESSIN_GT_vp_grip, DESSIN_GT_vp_scale, DESSIN_GGT_viewport_grips,
     DESSIN_PT_layout, DESSIN_PT_layout_page, DESSIN_PT_layout_detail, DESSIN_PT_layout_layers, DESSIN_PT_layout_print,
 )
 
@@ -3063,10 +3512,13 @@ def layout_register():
     if _DRAW["handle"] is None and not bpy.app.background:
         _DRAW["handle"] = bpy.types.SpaceView3D.draw_handler_add(layout_draw_cb, (), 'WINDOW', 'POST_VIEW')
     erase_keys_register()
+    viewport_keys_register()
 
 
 def layout_unregister():
     erase_keys_unregister()
+    viewport_keys_unregister()
+    _STATE["active_vp"] = None
     try:                                   # (Pan Detail interrompu par la désactivation : son message ne doit pas rester)
         for ws in bpy.data.workspaces:
             ws.status_text_set(None)
@@ -3101,8 +3553,9 @@ def layout_unregister():
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global DIM_STYLE_FIELDS, _axis_quat, current_view_name, ensure_dim_styles, find_view, rebuild_dimension
-    global cmd_click_idle, tab_names, view_label
-    from .command_line import cmd_click_idle
+    global cmd_click_idle, cmd_hit, tab_names, view_label, foreign_modal, _GUMBALL_TOOLS
+    from .command_line import cmd_click_idle, cmd_hit
+    from .gumball_handles import foreign_modal, _GUMBALL_TOOLS
     global _dim_replay_spec
     from .settings import DIM_STYLE_FIELDS, _dim_replay_spec, ensure_dim_styles, rebuild_dimension
     from .navigation import _axis_quat

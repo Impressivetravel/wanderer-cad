@@ -1043,14 +1043,14 @@ RHINO_TOOLS = {
 # ---- mise en page (2.96.125) : Layout = nouvelle feuille, Detail = vue du modèle à l'échelle sur la feuille ----
 DESSIN_TT_layout = _draw_tool_cls(
     "DESSIN_TT_layout", "dessin.layout_tool", "dessin.layout_new", "Layout",
-    "Layout: a paper sheet with detail views of the model at scale, a title block, dimensions and notes, and vector PDF / SVG / DXF export. "
+    "Layout: a paper sheet with viewports of the model at scale, a title block, dimensions and notes, and vector PDF / SVG / DXF export. "
     "Click in the view to choose the paper",
-    "Click in the view: name, paper size, details  ·  layouts are the tabs under the view  ·  Esc: leave", hover=False)
+    "Click in the view: name, paper size, viewports  ·  layouts are the tabs under the view  ·  Esc: leave", hover=False)
 DESSIN_TT_layout.dessin_cmd_hidden = True      # la ligne de commande a déjà la commande « Layout » (elle ouvre la boîte tout de suite)
 DESSIN_TT_layout_detail = _draw_tool_cls(
-    "DESSIN_TT_layout_detail", "dessin.layout_detail_tool", "dessin.layout_detail", "Detail",
-    "Layout: draws a detail view of the model on the sheet (first corner, then opposite corner). Its view, scale and layers are set in the Layout panel",
-    "On a layout: first corner then opposite corner of the detail  ·  C: from center  ·  width, Tab, height + Enter")
+    "DESSIN_TT_layout_detail", "dessin.layout_detail_tool", "dessin.layout_detail", "Viewport",
+    "Layout: draws a viewport of the model on the sheet (first corner, then opposite corner). Its view, scale and layers are set in the Layout panel",
+    "On a layout: first corner then opposite corner of the viewport  ·  C: from center  ·  width, Tab, height + Enter")
 DESSIN_TT_layout_detail._in_group = True        # menu déroulant de Layout
 DESSIN_TT_layout.dessin_icon = "layout"
 DESSIN_TT_layout_detail.dessin_icon = "detail"

@@ -16,7 +16,7 @@ IDLE_TOOL = "dessin.selection_boite_tool"  # outil par défaut (Select / Move) r
 IDLE_FALLBACK = "builtin.select_box"
 
 # Réglages des préférences de l'add-on (valeurs utilisées aussi quand les préférences sont inaccessibles)
-PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "mode_icons": False, "oda_path": "", "cmd_key": 'SPACE', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -111,7 +111,7 @@ FR_LABELS = {
 }
 
 FR_ALIASES = {
-    "layout_detail_tool": "detail fenetre fmult",
+    "layout_detail_tool": "fenetre fmult detail",
     # alias de l'AutoCAD français (DP, CP, RI, EH, DC, AJ, E, DO, PO, L...) + noms français complets
     "deplacer_tool": "dp deplacer", "copier_tool": "cp copier", "selection_boite_tool": "selectionner", "selection_lasso_tool": "lasso", "selection_rect_tool": "selboite", "selection_cercle_tool": "selcercle",
     "polyligne_tool": "pl po l ligne polyligne", "plan_tool": "plan", "rotation_tool": "ri rotation pivoter",
@@ -145,18 +145,19 @@ FR_LABELS.update({
 })
 FR_LABELS.update({
     "Layout": "Mise en page", "Layouts": "Mises en page", "New Layout": "Nouvelle mise en page", "Open Layout": "Ouvrir la mise en page",
-    "Model Space": "Espace objet", "Next Layout": "Mise en page suivante", "Rename Layout": "Renommer la mise en page",
+    "Model": "Objet (modèle)", "Paper Space": "Espace papier", "Next Layout": "Mise en page suivante", "Rename Layout": "Renommer la mise en page",
     "Delete Layout": "Supprimer la mise en page", "Duplicate Layout": "Dupliquer la mise en page", "Page Setup": "Format du papier",
-    "Detail": "Détail", "Details": "Détails", "Add Detail": "Ajouter un détail", "Update Details": "Mettre à jour les détails",
-    "Fit Detail": "Cadrer le détail", "Detail Scale": "Échelle du détail", "Pan Detail": "Panoramique dans le détail",
-    "Use a Model View": "Utiliser une vue du modèle", "Hide / Show Layer in Detail": "Masquer / afficher le calque dans le détail",
-    "Match Model Text Height": "Ajuster la hauteur de texte du modèle", "Layers in this Detail": "Calques dans ce détail",
+    "Viewport": "Fenêtre", "Viewports": "Fenêtres", "Add Viewport": "Ajouter une fenêtre", "Update Viewports": "Mettre à jour les fenêtres",
+    "Fit Viewport": "Cadrer la fenêtre", "Viewport Scale": "Échelle de la fenêtre", "Pan Viewport": "Panoramique dans la fenêtre",
+    "Viewport Grip": "Poignée de fenêtre", "Draw a Viewport": "Dessiner une fenêtre", "Display Locked": "Affichage verrouillé",
+    "Use a Model View": "Utiliser une vue du modèle", "Hide / Show Layer in Viewport": "Masquer / afficher le calque dans la fenêtre",
+    "Match Model Text Height": "Ajuster la hauteur de texte du modèle", "Layers in this Viewport": "Calques dans cette fenêtre",
     "Export PDF": "Exporter en PDF", "Export SVG": "Exporter en SVG", "Export DXF": "Exporter en DXF", "Page": "Page", "Print": "Impression",
 })
 FR_ACTION_ALIASES = {
-    "Layout": "miseenpage presentation nouvellemiseenpage", "Model Space": "objet espaceobjet modele",
-    "Next Layout": "papier espacepapier", "Update Details": "majdetails regen", "Detail Scale": "echelledetail",
-    "Fit Detail": "cadrerdetail", "Pan Detail": "panodetail", "Page Setup": "formatpapier", "Export PDF": "imprimer tracer exporterpdf",
+    "Layout": "miseenpage presentation nouvellemiseenpage", "Model": "objet modele ongletobjet",
+    "Next Layout": "miseenpagesuivante", "Paper Space": "papier espacepapier epapier", "Update Viewports": "majfenetres majdetails regen", "Viewport Scale": "echellefenetre echelledetail",
+    "Fit Viewport": "cadrerfenetre cadrerdetail", "Pan Viewport": "eobjet espaceobjet panofenetre panodetail", "Page Setup": "formatpapier", "Export PDF": "imprimer tracer exporterpdf",
     "Export SVG": "exportersvg", "Export DXF": "exporterdxf",
     "Block Edit": "editerbloc modifbloc", "Close Block Edit": "fermerbloc", "Explode Block": "decomposerbloc", "Hatch Base Point": "basehachure", "Explode Hatch": "decomposerhachure", "Hatch Boundary": "contourhachure", "Match Hatch": "copierhachure",
     "Undo": "annuler", "Redo": "retablir", "Delete": "ef effacer supprimer", "Select All": "toutsel", "Select None": "toutdesel",

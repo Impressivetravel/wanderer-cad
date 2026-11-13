@@ -1,7 +1,7 @@
 schema_version = "1.0.0"
 
 id = "wanderer"
-version = "2.96.125"
+version = "2.96.126"
 name = "Wanderer CAD"
 tagline = "Precision CAD modeling with snapping and a command line"
 maintainer = "Hostylmatic"

@@ -173,17 +173,21 @@ CMD_ACTIONS = (
     ("Explode Hatch", "explodehatch", "", "Turn the selected hatches into curves (a solid hatch becomes a planar surface)", _act_op("dessin.hatch_explode")),
     ("Hatch Boundary", "hatchboundary", "", "Create curves on the boundary and the holes of the selected hatches", _act_op("dessin.hatch_boundary")),
     ("Match Hatch", "matchhatch", "", "Give the selected hatches the pattern, scale and rotation of the active one (clicked last)", _act_op("dessin.hatch_match")),
-    ("Layout", "layout lo newlayout", "", "New layout: a paper sheet (A4 to A0...) with detail views of the model at scale, a title block and PDF / SVG / DXF export", _act_invoke("dessin.layout_new")),
-    ("Model Space", "model mspace tilemode", "", "Leave the layout and go back to the model", _act_op("dessin.layout_close")),
-    ("Next Layout", "pspace nextlayout", "", "Open the next layout (paper space)", _act_op("dessin.layout_next")),
-    ("Update Details", "updatedetails regen regenall", "", "Layout: redraw the detail views from the model", _act_op("dessin.detail_update", all=True)),
-    ("Detail Scale", "detailscale vpscale zoomxp", "", "Layout: type the scale of the selected details (1:20, 2:1, or 25 for 1:25)", _act_invoke("dessin.detail_scale")),
-    ("Fit Detail", "detailfit fitdetail", "", "Layout: frame the whole model in the selected details at the largest standard scale that fits", _act_op("dessin.detail_fit")),
-    ("Pan Detail", "detailpan pandetail dpan", "", "Layout: move the model inside a detail (drag), change its scale (wheel)", _act_invoke("dessin.detail_pan")),
+    ("Layout", "layout lo newlayout", "", "New layout: a paper sheet (A4 to A0...) with viewports of the model at scale, a title block and PDF / SVG / DXF export", _act_invoke("dessin.layout_new")),
+    ("Model", "model tilemode modeltab", "", "Leave the layout and go back to the model (the Model tab of AutoCAD)", _act_op("dessin.layout_close")),
+    ("Next Layout", "nextlayout", "", "Open the next layout (paper space)", _act_op("dessin.layout_next")),
+    ("Paper Space", "pspace ps", "", "Layout: back to the sheet (from the model: opens the layout). Inside a viewport, double-click outside it, Enter or Esc do the same", _act_op("dessin.viewport_paper")),
+    ("Update Viewports", "updateviewports updatedetails regen regenall", "", "Layout: redraw the viewports from the model", _act_op("dessin.detail_update", all=True)),
+    ("Viewport Scale", "viewportscale vpscale zoomxp detailscale", "", "Layout: type the scale of the selected viewports (1:20, 2:1, or 25 for 1:25)", _act_invoke("dessin.detail_scale")),
+    ("Fit Viewport", "viewportfit fitviewport detailfit fitdetail", "", "Layout: frame the whole model in the selected viewports at the largest standard scale that fits", _act_op("dessin.detail_fit")),
+    ("Pan Viewport", "mspace ms viewportpan panviewport detailpan pandetail dpan", "", "Layout: work inside a viewport like model space in AutoCAD (same as a double-click inside it): drag to pan the model, wheel to change the scale", _act_invoke("dessin.detail_pan")),
     ("Page Setup", "pagesetup", "", "Layout: paper size, orientation, margin and title block of the current layout", _act_invoke("dessin.layout_page_setup")),
     ("Export PDF", "exportpdf pdf print plot", "", "Layout: vector PDF at the exact paper size, one page per layout (print at 100 % for a drawing at scale)", _act_invoke("dessin.layout_export_pdf")),
     ("Export SVG", "exportsvg svg", "", "Layout: vector SVG in millimeters (Illustrator, Inkscape...)", _act_invoke("dessin.layout_export_svg")),
     ("Export DXF", "exportdxf dxfout", "", "Layout: DXF in paper millimeters for AutoCAD, Rhino, CADCraft...", _act_invoke("dessin.layout_export_dxf")),
+    ("Export DWG", "exportdwg dwgout", "", "Layout: the sheets as a DWG drawing in paper millimeters (needs the free ODA File Converter)", _act_invoke("dessin.layout_export_dwg")),
+    ("Export Model (DXF / DWG)", "exportmodel exportcad saveasdwg saveasdxf wblock", "", "Exports the model as a DXF or DWG drawing: curves, arcs and circles, 3D faces of the solids, text, layers and colors", _act_invoke("dessin.export_cad")),
+    ("Import DXF / DWG", "importdwg importdxf importcad dxfin dwgin", "", "Imports a DXF or DWG drawing with its layers, colors, blocks and text (DWG needs the free ODA File Converter)", _act_invoke("dessin.import_cad")),
 )
 
 
@@ -214,7 +218,7 @@ CMD_OBJECT_OPS = (("Apply Transforms", "object", "transform_apply", {}, "apply f
                   ("Loop Cut", "mesh", "loopcut_slide", {}, "lc loopcut"), ("Inset Faces", "mesh", "inset", {}, "inset"),
                   ("Bevel Edges", "mesh", "bevel", {}, "bev bevel"),
                   ("Unwrap", "uv", "unwrap", {}, "uw unwrap"), ("Smart UV Project", "uv", "smart_project", {}, "suv smartuv"),
-                  ("Pack Islands", "uv", "pack_islands", {}, "pk pack"), ("Mark Seam", "uv", "mark_seam", {"clear": False}, "ms seam"),
+                  ("Pack Islands", "uv", "pack_islands", {}, "pk pack"), ("Mark Seam", "uv", "mark_seam", {"clear": False}, "seam markseam"),
                   ("Clear Seam", "uv", "mark_seam", {"clear": True}, "cls clearseam"))
 
 
@@ -382,13 +386,20 @@ def cmd_native_ok(e):
         return False
 
 
+CMD_PAPER_FIRST = {"Pan Viewport", "Paper Space"}      # commandes d'une mise en page qui partagent un alias avec une commande du modèle
+
+
 def cmd_suggest(text, limit=8):
     """Commandes correspondant au texte saisi, les meilleures d'abord (exact, début, mot, contient, lettres dans l'ordre).
     Les opérateurs natifs génériques passent après les outils et n'apparaissent qu'à partir de 2 lettres."""
     q = cmd_norm(text)
     if not q:
         return []
-    memo = _SUGG_MEMO.get((q, limit))
+    try:
+        paper = bool(is_layout(bpy.context.scene))
+    except (AttributeError, RuntimeError):
+        paper = False
+    memo = _SUGG_MEMO.get((q, limit, paper))
     if memo is not None:
         return memo
     found = []
@@ -402,6 +413,8 @@ def cmd_suggest(text, limit=8):
                 sc_ += 0.0005 * j
                 best = sc_ if best is None else min(best, sc_)
         if best is not None:
+            if e["label"] in CMD_PAPER_FIRST:          # même alias que dans AutoCAD : la commande des fenêtres passe devant
+                best += -0.02 if paper else 0.02       # sur une mise en page, derrière dans le modèle (ms : Match Surface)
             found.append((best + (1.5 if e.get("gen") else (0.01 if e["kind"] == "native" else 0.0)), i, e))     # à égalité, l'outil passe avant la commande native de Blender
     found.sort(key=lambda t: (t[0], t[1]))
     out = []
@@ -411,7 +424,7 @@ def cmd_suggest(text, limit=8):
         out.append(e)
         if len(out) >= limit:
             break
-    _SUGG_MEMO[(q, limit)] = out
+    _SUGG_MEMO[(q, limit, paper)] = out
     return out
 
 

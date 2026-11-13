@@ -260,6 +260,10 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     cmd_size: bpy.props.IntProperty(
         name="Command bar size", default=100, min=40, max=250, subtype='PERCENTAGE', update=_update_cmd_line,
         description="Size of the command bar text and pill (lower it if it looks too big on your screen)")
+    oda_path: bpy.props.StringProperty(
+        name="ODA File Converter", default="", subtype='FILE_PATH',
+        description="DWG import and export go through the free ODA File Converter (opendesign.com). Leave empty when it is "
+                    "installed in its usual place; otherwise choose the program here (on a Mac: ODAFileConverter.app)")
     mode_icons: bpy.props.BoolProperty(
         name="Mode bar: icons only", default=False, update=_update_cmd_line,
         description="Always show the mode buttons at the bottom right of the 3D viewport (Grid Snap, Ortho, Polar, OSnap, "
@@ -342,6 +346,19 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         row = cbox.row()
         row.enabled = self.cmd_line
         row.prop(self, "cmd_key")
+        dbox = layout.box()
+        dbox.label(text="DXF / DWG")
+        dbox.prop(self, "oda_path")
+        try:
+            from .import_dxf import cad_converter
+            found = cad_converter()
+        except Exception:
+            found = None
+        if found is None:
+            dbox.label(text="No DWG converter found: DXF works, DWG needs the free ODA File Converter", icon='INFO')
+        else:
+            dbox.label(text=("ODA File Converter found" if found[0] == 'oda' else "LibreDWG tools found") + ": DWG import and export are available",
+                       icon='CHECKMARK')
         cbox.label(text="Examples: rec, c, pl, m, trim, zoom  ·  Tab completes  ·  Enter / Space on an empty line repeats the last command.")
         vbox = layout.box()
         vbox.label(text="View")
