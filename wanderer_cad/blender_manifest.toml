@@ -1,10 +1,10 @@
 schema_version = "1.0.0"
 
 id = "wanderer"
-version = "2.96.126"
+version = "2.96.127"
 name = "Wanderer CAD"
 tagline = "Precision CAD modeling with snapping and a command line"
-maintainer = "Hostylmatic"
+maintainer = "Hostylmatic / OZLUK Tolga"
 type = "add-on"
 website = "https://github.com/Impressivetravel/wanderer-cad"
 
@@ -13,7 +13,7 @@ tags = ["3D View", "Modeling", "Mesh", "Object", "User Interface"]
 blender_version_min = "4.2.0"
 
 license = ["SPDX:GPL-3.0-or-later"]
-copyright = ["2026 Hostylmatic"]
+copyright = ["2026 Hostylmatic / OZLUK Tolga"]
 
 [permissions]
 clipboard = "Copies measurements to the clipboard, pastes into command line"

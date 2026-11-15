@@ -6,6 +6,7 @@ import math
 import numpy as np
 from mathutils import Matrix, Vector, geometry
 
+from .history import history_pipe
 from .core import NAV_TYPES, TAU, build_polyline, drawing_axis, plane_axes, plane_origin
 from .drawing import find_window_region, main_window_region, region_rv3d
 from .base import DessinBase
@@ -264,6 +265,10 @@ class DESSIN_OT_pipe(bpy.types.Operator):
     radius: bpy.props.FloatProperty(name="Radius", default=0.1, min=1e-6, subtype='DISTANCE', unit='LENGTH')
     cap: bpy.props.BoolProperty(name="Cap ends", default=True, description="Closes the ends of open curves (solid)")
     delete_input: bpy.props.BoolProperty(name="Delete input", default=False)
+    history: bpy.props.BoolProperty(
+        name="History (editable radius)", default=False,
+        description="Creates a curve with a thickness instead of a mesh: the radius can be changed later "
+                    "(Data tab of the curve > Geometry > Bevel > Depth)")
 
     @classmethod
     def poll(cls, context):
@@ -281,7 +286,16 @@ class DESSIN_OT_pipe(bpy.types.Operator):
         dg = context.evaluated_depsgraph_get()
         sides = max(12, int(round(48 * curve_quality_factor())))
         made = []
-        for o in objs:
+        if self.history:
+            # History : une courbe épaisse (rayon modifiable) au lieu d'un maillage
+            for o in objs:
+                new = history_pipe(context, o, None if o.type == 'CURVE' else object_paths(o, dg), self.radius, self.cap, sides)
+                if new is not None:
+                    made.append(new)
+            objs_mesh = []
+        else:
+            objs_mesh = objs
+        for o in objs_mesh:
             V, F, S, ring_of = [], [], [], {}
             for P, closed in object_paths(o, dg):
                 built = pipe_mesh(P, closed, self.radius, sides, self.cap)
@@ -313,6 +327,9 @@ class DESSIN_OT_pipe(bpy.types.Operator):
             delete_objects(objs)
         _select_only(context, made)
         msg = f"Pipe: {len(made)} object(s), radius {self.radius / unit_scale_of(context):.4g}"
+        if self.history:
+            msg += ". History = Yes: change the radius in the curve's Data tab (Geometry > Bevel > Depth)"
+            cmd_notice(msg)
         cmd_log(msg)
         self.report({'INFO'}, msg)
         return {'FINISHED'}
@@ -1026,6 +1043,94 @@ class DESSIN_OT_dup_edge(_FacePickOp):
         cmd_log("Duplicate Edge: 1 curve created")
 
 
+def border_curves(context, name, chains):
+    """Une polyligne par contour, comme DupBorder / DupFaceBorder de Rhino (une courbe par boucle, jamais un seul objet qui
+    réunit le haut et le bas d'un cylindre) : chacune se sélectionne, se décale ou s'explose seule."""
+    return [build_polyline(context, name, P, closed) for P, closed in chains]
+
+
+def feature_chain_edges(bm, e0):
+    """Indices des arêtes de maillage qui forment l'arête (au sens de Rhino) passant par e0 : le cercle entier du haut d'un
+    cylindre, le bord entier d'une surface courbe. [e0.index] si e0 n'est ni un bord libre ni une arête vive."""
+    lay = bm.edges.layers.int.get(IMPRINT_LAYER)
+    if not _is_feature_edge(e0, lay):
+        return [e0.index]
+    cos_lim = math.cos(math.radians(EXPLODE_SHARP_DEG))
+    found = {e0.index}
+
+    def extend(e, v):
+        while True:
+            cand = [x for x in v.link_edges if x is not e and _is_feature_edge(x, lay)]
+            if len(cand) != 1 or cand[0].index in found:
+                return
+            x = cand[0]
+            d1 = (v.co - e.other_vert(v).co)
+            d2 = (x.other_vert(v).co - v.co)
+            if d1.length < 1e-12 or d2.length < 1e-12 or d1.normalized().dot(d2.normalized()) < cos_lim:
+                return
+            found.add(x.index)
+            v = x.other_vert(v)
+            e = x
+
+    a, b = e0.verts
+    extend(e0, b)
+    extend(e0, a)
+    return sorted(found)
+
+
+# ---- DupFaceBorder ----
+
+def face_border_chains(obj, bm, idx):
+    """Pourtour de la face (au sens de Rhino) qui contient la facette idx : [(points monde, fermée)], trous compris."""
+    bound = pp_boundary(rhino_face(bm, bm.faces[idx]))
+    mw = obj.matrix_world
+    return [([mw @ v.co for v in chain], closed) for chain, closed in _edge_chains(bound) if len(chain) >= 2]
+
+
+class DESSIN_OT_dup_face_border(DESSIN_OT_dup_edge):
+    bl_idname = "dessin.dup_face_border"
+    bl_label = "Duplicate Face Border"
+    bl_description = ("Like DupFaceBorder: click a face of a surface or a solid to create a curve on its border, holes "
+                      "included (the border under the cursor lights up). Enter or Esc to finish")
+
+    def show_prompt(self):
+        n = len(self.made)
+        set_prompt(self.area, "Duplicate Face Border: click a face" + (f"  ({n} created)" if n else "") + "  |  Enter / Esc: finish")
+
+    def chain(self, obj, idx, loc):
+        c = getattr(self, "_bmc", None)
+        try:
+            if c is None or c[0] != obj.name:
+                self.free_bm()
+                bm = bmesh.new()
+                bm.from_mesh(obj.data)
+                bm.faces.ensure_lookup_table()
+                bm.normal_update()
+                c = self._bmc = (obj.name, bm, {})
+            chains = c[2].get(idx)
+            if chains is None:
+                chains = c[2][idx] = face_border_chains(obj, c[1], idx)
+            return chains or None
+        except (RuntimeError, ReferenceError, ValueError, IndexError):
+            return None
+
+    def hover(self, context, obj, idx, loc):
+        lines = []
+        for P, closed in self.chain(obj, idx, loc) or ():
+            for a, b in zip(P, P[1:] + (P[:1] if closed else [])):
+                lines += [a, b]
+        return lines
+
+    def pick(self, context, obj, idx, loc):
+        chains = self.chain(obj, idx, loc)
+        if not chains:
+            cmd_log("Duplicate Face Border: this face has no border (closed smooth surface)")
+            return
+        for crv in border_curves(context, "Border", chains):
+            self.made.append(crv.name)
+        cmd_log(f"Duplicate Face Border: {len(chains)} curve(s) created")
+
+
 # ---- DupBorder ----
 
 def border_chains(obj):
@@ -1040,18 +1145,65 @@ def border_chains(obj):
         bm.free()
 
 
+def edit_face_chains(context):
+    """Faces sélectionnées en mode Édition (Ctrl+Maj+clic sur une face d'un solide) : [(objet, [(points monde, fermée)])].
+    Chaque face est prise au sens de Rhino (le côté entier d'un cylindre, pas ses facettes), trous compris."""
+    out = []
+    for obj in context.objects_in_mode_unique_data:
+        if obj.type != 'MESH':
+            continue
+        try:
+            bm = bmesh.from_edit_mesh(obj.data)
+        except ValueError:
+            continue
+        bm.faces.ensure_lookup_table()
+        bm.normal_update()
+        done, chains = set(), []
+        for f in bm.faces:
+            if f.select and f.index not in done:
+                reg = rhino_face(bm, f)
+                done.update(x.index for x in reg)
+                chains += face_chains_of(obj, reg)
+        if chains:
+            out.append((obj, chains))
+    return out
+
+
+def face_chains_of(obj, faces):
+    """Pourtour (points monde, fermée) d'une face de Rhino donnée par ses facettes, trous compris."""
+    mw = obj.matrix_world
+    return [([mw @ v.co for v in chain], closed) for chain, closed in _edge_chains(pp_boundary(faces)) if len(chain) >= 2]
+
+
 class DESSIN_OT_dup_border(bpy.types.Operator):
     bl_idname = "dessin.dup_border"
     bl_label = "Duplicate Border"
-    bl_description = ("Like DupBorder: creates curves on the free borders of the selected surfaces and open polysurfaces "
-                      "(a closed solid has no border)")
+    bl_description = ("Like DupBorder: creates curves on the free borders of the selected surfaces and open polysurfaces. "
+                      "On a solid, select a face first (Ctrl+Shift+click, as in Rhino): its border is created")
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return context.mode == 'OBJECT'
+        return context.mode in {'OBJECT', 'EDIT_MESH'}
 
     def execute(self, context):
+        if context.mode == 'EDIT_MESH':
+            groups = edit_face_chains(context)
+            if not groups:
+                return nothing_done(self, "Duplicate Border: select a face first (Ctrl+Shift+click), then DupBorder")
+            try:
+                from .selection import _SUBOBJ
+                _SUBOBJ["objs"] = set()
+            except ImportError:
+                pass
+            bpy.ops.object.mode_set(mode='OBJECT')
+            made = [crv for _o, chains in groups for crv in border_curves(context, "Border", chains)]
+            _select_only(context, made)
+            n = sum(len(c) for _o, c in groups)
+            msg = f"Duplicate Border: {n} curve(s) on the selected face(s)"
+            cmd_log(msg)
+            self.report({'INFO'}, msg)
+            return {'FINISHED'}
         objs = _mesh_targets(context)
         if not objs:
             return nothing_done(self, "Duplicate Border: click the surfaces first, then Enter")
@@ -1059,12 +1211,11 @@ class DESSIN_OT_dup_border(bpy.types.Operator):
         for o in objs:
             chains = border_chains(o)
             if chains:
-                crv = build_polylines(context, "Border", chains)
-                made.append(crv)
+                made += border_curves(context, "Border", chains)
                 n += len(chains)
         if not made:
             return nothing_done(self, "Duplicate Border: a closed solid has no free border  ·  "
-                                      "use Duplicate Edge (DupEdge) to copy one of its edges")
+                                      "Ctrl+Shift+click a face, or use DupFaceBorder")
         _select_only(context, made)
         msg = f"Duplicate Border: {n} curve(s)"
         cmd_log(msg)
@@ -1515,7 +1666,9 @@ class DESSIN_OT_orient(DessinTransform):
         return "target point 2" + opt
 
     def lock_allowed(self):
-        return False
+        # X / Y / Z verrouille la direction d'une paire (référence 2 depuis référence 1, cible 2 depuis cible 1) : dresser un
+        # objet à la verticale sans rien avoir à accrocher. La cible 1 est un point libre, sans direction à verrouiller
+        return self.LOCK_OK and len(self.points) in (1, 3)
 
     def click(self, context):
         if len(self.points) == 1 and self.cur is not None and (self.cur - self.points[0]).length < 1e-9:

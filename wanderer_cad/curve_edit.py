@@ -4,11 +4,12 @@ import bpy
 import gpu
 import math
 import numpy as np
+from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from gpu_extras.batch import batch_for_shader
-from mathutils import Vector
+from mathutils import Vector, geometry
 
-from .core import idle_tool, plane_axes, pref, unit_info
-from .drawing import draw_px_points, get_shader, project_px, px_scale, region_rv3d
+from .core import AXES3, idle_tool, plane_axes, pref, unit_info
+from .drawing import draw_px_points, get_shader, line_px, project_px, px_scale, region_rv3d
 from .base import DessinBase
 
 
@@ -20,12 +21,13 @@ class DESSIN_OT_xline(DessinBase):
     bl_idname = "dessin.xline"
     bl_label = "Construction Line"
     bl_description = ("Draws a very long construction line through a point: click the point, then a second point for the direction "
-                      "(Shift: orthogonal, or type the angle in degrees)")
+                      "(X / Y / Z: line along that axis, Shift: orthogonal, or type the angle in degrees)")
 
     TITLE = "Construction Line"
     NEEDED = 2
     NUMFIELDS = 1
     EDIT_OK = False
+    LOCK_3D = True      # Z : la ligne peut quitter le plan de construction (ligne verticale en perspective)
     ortho = False
 
     def prompt(self):
@@ -59,10 +61,14 @@ class DESSIN_OT_xline(DessinBase):
         ang = self.typed_raw(0)
         if ang is not None:
             du, dv = math.cos(math.radians(ang)), math.sin(math.radians(ang))
+        L = self.half_length()
+        if self.lock is not None and ang is None:
+            direction = AXES3[self.lock]        # axe verrouillé : la ligne suit cet axe, même s'il sort du plan (Z)
+            a, b = o - direction * L, o + direction * L
+            return [a, b], [], f"Along {'XYZ'[self.lock]}", ("line", a, b)
         if math.hypot(du, dv) < 1e-9:
             return [], [], "", None
         direction = (u * du + v * dv).normalized()
-        L = self.half_length()
         a, b = o - direction * L, o + direction * L
         angle = math.degrees(math.atan2(dv, du))
         return [a, b], [], f"Angle {angle:.2f}°", ("line", a, b)
@@ -80,13 +86,19 @@ class DESSIN_OT_stretch(DessinBase):
     bl_idname = "dessin.stretch"
     bl_label = "Stretch"
     bl_description = ("Stretches the points inside a crossing window: two corners for the window, then a base point and a destination point "
-                      "(Shift: orthogonal, or type the distance). Works on the selected objects, or on all visible curves and meshes")
+                      "(X / Y / Z: lock an axis, Shift: orthogonal, or type the distance). Works on the selected objects, or on all visible curves and meshes")
 
     TITLE = "Stretch"
     NEEDED = 4
     NUMFIELDS = 1
     EDIT_OK = False
     ortho = False
+    # la fenêtre se trace dans le plan de construction ; le point de base et la destination sont de vrais points 3D
+    # (accrochages à leur hauteur, verrou Z), comme pour Move
+    PLANAR = property(lambda self: len(self.points) < 2)
+
+    def lock_allowed(self):
+        return self.LOCK_OK and len(self.points) == 3      # la direction base -> destination
 
     def prompt(self):
         n = len(self.points)
@@ -101,6 +113,24 @@ class DESSIN_OT_stretch(DessinBase):
     def update_cursor(self, context, event):
         self.ortho = bool(event.shift)
         super().update_cursor(context, event)
+        if (len(self.points) == 3 and self.cur is not None and self.snap_screen is None and self.lock is None
+                and not self.track_lines and self.coord_pt is None):
+            # point de base en hauteur (accroché au-dessus du plan) : la souris libre désigne la destination à cette hauteur,
+            # sous le curseur, et non sur le plan de construction
+            n = plane_axes(self.axis)[2]
+            base = self.points[2]
+            if abs((base - self.points[0]).dot(n)) > 1e-9:
+                try:
+                    region = self.region
+                    rv3d = region_rv3d(region, self.area)
+                    coord = Vector((event.mouse_x - region.x, event.mouse_y - region.y))
+                    ro = region_2d_to_origin_3d(region, rv3d, coord)
+                    hit = geometry.intersect_line_plane(ro, ro + region_2d_to_vector_3d(region, rv3d, coord), base, n)
+                except (AttributeError, ReferenceError, TypeError):
+                    hit = None
+                if hit is not None:
+                    self.cur = hit
+                    self.refresh(context)
 
     def window_corners(self, a, b):
         u, v, _ = plane_axes(self.axis)
@@ -112,12 +142,16 @@ class DESSIN_OT_stretch(DessinBase):
         u, v, _ = plane_axes(self.axis)
         d = self.cur - self.points[2]
         du, dv = d.dot(u), d.dot(v)
-        if self.ortho:
+        # hauteur : seulement si elle est désignée (point accroché, verrou d'axe, ligne de repérage) ; la souris libre
+        # déplace parallèlement au plan de construction, même si le point de base est en hauteur
+        free = self.snap_screen is None and self.lock is None and not self.track_lines
+        if self.ortho and self.lock is None:
             if abs(du) >= abs(dv):
                 dv = 0.0
             else:
                 du = 0.0
-        vec = u * du + v * dv if self.PLANAR else d
+            free = True
+        vec = u * du + v * dv if free else d.copy()
         t = self.typed_value(0)
         if t is not None:
             vec = (vec / vec.length if vec.length > 1e-9 else u.copy()) * t
@@ -762,7 +796,7 @@ class DessinCornerRound(bpy.types.Operator):
             return
         shader = get_shader('3D')
         gpu.state.blend_set('ALPHA')
-        gpu.state.line_width_set(3.0 * px_scale())
+        gpu.state.line_width_set(line_px(3.0))
         batch = batch_for_shader(shader, 'LINES', {"pos": segs})
         shader.bind()
         shader.uniform_float("color", (1.0, 0.8, 0.1, 1.0))

@@ -48,7 +48,7 @@ class Lay:
     def split(self, *a, **k): return Lay()
     def grid_flow(self, *a, **k): return Lay()
     def column_flow(self, *a, **k): return Lay()
-    def panel(self, *a, **k): return Lay(), None            # (rubrique repliée)
+    def panel(self, key, **k): calls.append(("panel", key)); return Lay(), Lay()   # rubrique dépliée
     def prop(self, data, name, *a, **k): calls.append(("prop", name, self.enabled))
     def label(self, *a, **k): calls.append(("label", k.get("text", "")))
     def operator(self, idname, *a, **k): calls.append(("op", idname)); return Lay()
@@ -67,11 +67,11 @@ def panel():
         return repr(e)
 err = panel()
 props = [c[1] for c in calls if c[0] == "prop"]
-i_cmd = calls.index(("label", "Command line")) if ("label", "Command line") in calls else -1
-i_view = calls.index(("label", "View")) if ("label", "View") in calls else -1
+i_cmd = next((i for i, c in enumerate(calls) if c[0] == "panel" and c[1] == "dessin_prefs_command"), -1)
+i_view = next((i for i, c in enumerate(calls) if c[0] == "panel" and c[1] == "dessin_prefs_drawing"), -1)
 i_me = next((i for i, c in enumerate(calls) if c[:2] == ("prop", "mode_icons")), -1)
 chk("le panneau des préférences se dessine sans erreur et montre le réglage une seule fois", err is None and props.count("mode_icons") == 1, (err, props.count("mode_icons")))
-chk("... dans la rubrique « Command line », juste après « Command bar size »", 0 <= i_cmd < i_me < i_view and props[props.index("mode_icons") - 1] == "cmd_size", props[max(0, props.index("mode_icons") - 2): props.index("mode_icons") + 2] if "mode_icons" in props else props[:6])
+chk("... dans la rubrique « Command line and aliases », juste après « Command bar size »", 0 <= i_cmd < i_me < i_view and props[props.index("mode_icons") - 1] == "cmd_size", props[max(0, props.index("mode_icons") - 2): props.index("mode_icons") + 2] if "mode_icons" in props else props[:6])
 prefs.cmd_line = False
 err = panel()
 row = {c[1]: c[2] for c in calls if c[0] == "prop"}
@@ -88,6 +88,10 @@ def registered(cls):
     bpy.utils.unregister_class(cls)
     return False
 giz = [c.__name__ for c in (LAY.DESSIN_GGT_viewport_grips, LAY.DESSIN_GT_vp_grip, LAY.DESSIN_GT_vp_scale) if not registered(c)]
+GH = _sys.modules[_PKG + ".gumball_handles"]
+gb = [c.__name__ for c in (GH.DESSIN_GGT_gumball, GH.DESSIN_GT_gb_arc, GH.DESSIN_GT_gb_plane, GH.DESSIN_GT_gb_dot, GH.DESSIN_GT_gb_bar) if not registered(c)]
+kinds = [i.identifier for i in bpy.ops.dessin.gumball.get_rna_type().properties["kind"].enum_items]
+chk("Gumball : le groupe de poignées, l'arc de rotation, le carré de déplacement plan, la sphère et le trait sont enregistrés ; l'opération connaît le déplacement plan", not gb and 'PLANE' in kinds, (gb, kinds))
 ops_ = [n for n in ("DESSIN_MT_viewport_scale", "DESSIN_OT_viewport_grip", "DESSIN_OT_viewport_paper", "DESSIN_OT_export_cad", "DESSIN_OT_layout_export_dwg") if not hasattr(bpy.types, n)]
 chk("poignées des fenêtres : le groupe de poignées, ses deux formes, la commande et le menu d'échelle sont enregistrés dans Blender", not giz and not ops_, (giz, ops_))
 G = LAY.DESSIN_GGT_viewport_grips
@@ -98,7 +102,7 @@ chk("menus File > Import et File > Export : l'entrée « DXF / DWG drawing (Wand
     ([f.__name__ for f in exp][-2:], [f.__name__ for f in imp][-2:]))
 oda = prefs.bl_rna.properties.get("oda_path")
 chk("préférences : le réglage « ODA File Converter » existe (un chemin de fichier, vide par défaut) et il est dans le panneau", oda is not None and oda.subtype == 'FILE_PATH' and prefs.oda_path == ""
-    and props.count("oda_path") == 1 and ("label", "DXF / DWG") in calls, (oda and oda.subtype, props.count("oda_path")))
+    and props.count("oda_path") == 1 and ("panel", "dessin_prefs_dxf") in calls, (oda and oda.subtype, props.count("oda_path")))
 prefs.cmd_line = True
 r = bpy.ops.dessin.prefs_reset('EXEC_DEFAULT')
 chk("« Reset to defaults » décoche le réglage ; la barre repasse en libellés", r == {'FINISHED'} and prefs.mode_icons is False and core.pref("mode_icons") is False and CL.modes_icons(0) is False

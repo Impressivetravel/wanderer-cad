@@ -5,6 +5,7 @@ import bpy
 from mathutils import Vector
 
 from .core import idle_tool
+from .history import history_boolean, history_label, history_on, history_set
 from .drawing import find_window_region
 from .base import DessinBase
 
@@ -242,11 +243,13 @@ class DessinBoolean(DessinBase):
     TWO_SETS = False
     STEP_TEXT = ("select the objects to join",)
     DELETE_DEFAULT = True
+    HISTORY_OK = True       # H : History = Yes / No (modificateurs Boolean modifiables) ; pas pour Boolean Split
 
     def invoke(self, context, event):
         self.stage = 0
         self.setA = []
         self.delete_inputs = self.DELETE_DEFAULT
+        self.history = self.HISTORY_OK and history_on("boolean")
         self.committed = False
         self._ev = event
         return super().invoke(context, event)
@@ -265,10 +268,18 @@ class DessinBoolean(DessinBase):
         return ""
 
     def refresh(self, context):
-        n = len(self.selected_meshes(context))
+        sel = self.selected_meshes(context)
+        if self.TWO_SETS and self.stage == 1:
+            names = set(self.setA)
+            n = len([o for o in sel if o.name not in names])
+            done = f"first set: {len(self.setA)} kept highlighted   |   "
+        else:
+            n = len(sel)
+            done = ""
         txt = (f"{self.TITLE} : {self.STEP_TEXT[min(self.stage, len(self.STEP_TEXT) - 1)]}   "
-               f"(click: select / deselect, A: all)   |   {n} selected   |   "
-               f"Enter/Space: confirm   D: delete input = {'yes' if self.delete_inputs else 'no'}   Esc: cancel")
+               f"(click: select / deselect, A: all)   |   {done}{n} selected   |   "
+               f"Enter/Space: confirm   D: delete input = {'yes' if self.delete_inputs else 'no'}   "
+               + (history_label(self.history) + "   " if self.HISTORY_OK else "") + "Esc: cancel")
         try:
             set_prompt(self.area, txt)
             self.area.tag_redraw()
@@ -292,7 +303,23 @@ class DessinBoolean(DessinBase):
                 bpy.ops.view3d.select(location=(ev.mouse_x - region.x, ev.mouse_y - region.y), toggle=True)
         except (RuntimeError, TypeError):
             pass
+        self.keep_first_set(context)
         self.refresh(context)
+
+    def keep_first_set(self, context):
+        """Deuxième étape : le premier jeu reste sélectionné (en surbrillance, comme dans Rhino) ; un clic dessus
+        ne le désélectionne pas, il ne peut pas non plus passer dans le second jeu."""
+        if not (self.TWO_SETS and self.stage == 1):
+            return
+        for n in self.setA:
+            o = bpy.data.objects.get(n)
+            if o is None:
+                continue
+            try:
+                if not o.select_get():
+                    o.select_set(True)
+            except RuntimeError:
+                pass
 
     def select_all_meshes(self, context):
         for o in context.view_layer.objects:
@@ -309,9 +336,12 @@ class DessinBoolean(DessinBase):
                 self.report({'WARNING'}, "Select at least one object")
                 return {'RUNNING_MODAL'}
             self.setA = [o.name for o in sel]
+            # le premier jeu reste sélectionné pendant qu'on choisit le second (comme Rhino) : on voit qu'il est
+            # bien retenu ; tout le reste est désélectionné
+            names = set(self.setA)
             for o in context.view_layer.objects:
                 try:
-                    o.select_set(False)
+                    o.select_set(o.name in names)
                 except RuntimeError:
                     pass
             self.stage = 1
@@ -326,7 +356,11 @@ class DessinBoolean(DessinBase):
         if self.TWO_SETS and not B:
             self.report({'WARNING'}, "Select at least one object in this step")
             return {'RUNNING_MODAL'}
-        created, err = run_boolean(self.KIND, A, B, self.delete_inputs)
+        if self.history:
+            created, err = history_boolean(self.KIND, A, B)      # modificateurs Boolean : les opérandes restent, en fil de fer
+            run_boolean.unsafe = False
+        else:
+            created, err = run_boolean(self.KIND, A, B, self.delete_inputs)
         if err:
             self.report({'WARNING'}, err)
             return {'RUNNING_MODAL'}
@@ -385,6 +419,11 @@ class DessinBoolean(DessinBase):
             self.delete_inputs = not self.delete_inputs
             self.refresh(context)
             return {'RUNNING_MODAL'}
+        if et == 'H' and self.HISTORY_OK and not (event.ctrl or event.alt or event.oskey or event.shift):
+            self.history = not self.history
+            history_set("boolean", self.history)
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
         if et == 'TAB':
             return {'RUNNING_MODAL'}
         return {'PASS_THROUGH'}
@@ -400,7 +439,7 @@ class DessinBoolean(DessinBase):
 class DESSIN_OT_bool_union(DessinBoolean):
     bl_idname = "dessin.bool_union"
     bl_label = "Boolean Union"
-    bl_description = "Joins several solids into one: click the objects, then Enter (D: keep the originals)"
+    bl_description = "Joins several solids into one: click the objects, then Enter (D: keep the originals, H: History, editable Boolean modifiers)"
     TITLE = "Boolean Union"
     KIND = 'UNION'
     STEP_TEXT = ("select the objects to join",)
@@ -410,7 +449,7 @@ class DESSIN_OT_bool_difference(DessinBoolean):
     bl_idname = "dessin.bool_difference"
     bl_label = "Boolean Difference"
     bl_description = ("Subtracts solids from others: click the objects to cut into, Enter, then the objects to "
-                      "subtract, Enter (D: keep the originals)")
+                      "subtract, Enter (D: keep the originals, H: History, editable Boolean modifiers)")
     TITLE = "Boolean Difference"
     KIND = 'DIFFERENCE'
     TWO_SETS = True
@@ -421,7 +460,7 @@ class DESSIN_OT_bool_intersection(DessinBoolean):
     bl_idname = "dessin.bool_intersection"
     bl_label = "Boolean Intersection"
     bl_description = ("Keeps only the volume shared by two sets of solids: click the first set, Enter, then the "
-                      "second set, Enter (D: keep the originals)")
+                      "second set, Enter (D: keep the originals, H: History, editable Boolean modifiers)")
     TITLE = "Boolean Intersection"
     KIND = 'INTERSECT'
     TWO_SETS = True
@@ -435,6 +474,7 @@ class DESSIN_OT_bool_split(DessinBoolean):
                       "to split, Enter, then the cutting objects, Enter (the cutting objects are kept)")
     TITLE = "Boolean Split"
     KIND = 'SPLIT'
+    HISTORY_OK = False
     TWO_SETS = True
     STEP_TEXT = ("select the objects to split", "select the cutting objects")
 

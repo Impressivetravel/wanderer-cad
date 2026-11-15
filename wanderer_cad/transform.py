@@ -8,7 +8,7 @@ import time
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from mathutils import Matrix, Vector
 
-from .core import TAU, arc_samples, grid_snap_len, grid_snap_step, idle_tool, plane_axes, pref
+from .core import AXES3, TAU, arc_samples, grid_snap_len, grid_snap_step, idle_tool, plane_axes, plane_origin, pref
 from .snapping import (
     collect_snap_points, curve_edit_apply, curve_edit_selection, edit_selection, exclude_snap, merge_snap_data,
 )
@@ -632,6 +632,43 @@ class DessinTransform(DessinBase):
                 pass
 
 
+def axis_plane_key(op, context, event):
+    """Rotate, Array Polar : X / Y / Z après le centre choisit l'axe de rotation (le plan de travail passe par le centre,
+    perpendiculaire à cet axe du monde) ; la même touche une seconde fois revient au plan de construction. Sans cela, en vue
+    perspective, on ne pouvait tourner qu'autour de la normale du plan de construction. Vrai si la touche a été prise."""
+    if (event.value != 'PRESS' or event.type not in {'X', 'Y', 'Z'} or event.ctrl or event.alt or event.oskey or event.shift
+            or getattr(op, "selecting", False) or len(op.points) != 1):
+        return False
+    if find_window_region(op.area, event.mouse_x, event.mouse_y) is None or op.mouse_over_ui(event):
+        return False
+    k = "XYZ".index(event.type)
+    if getattr(op, "_axis_for", None) is not op.points[0]:
+        op._axis_for = op.points[0]             # plan de construction au moment où le centre a été posé
+        op._axis0 = op.axis
+    op.axis = op._axis0 if (op.axis == k and op._axis0 != k) else k
+    op.update_cursor(context, event)
+    return True
+
+
+def axis_plane_name(op):
+    """« X », « Y » ou « Z » quand l'axe a été choisi au clavier (et n'est pas celui du plan de construction), sinon ''."""
+    if not op.points or getattr(op, "_axis_for", None) is not op.points[0] or op.axis == getattr(op, "_axis0", op.axis):
+        return ""
+    return "XYZ"[op.axis] if op.axis in (0, 1, 2) else ""
+
+
+def axis_plane_show(op, result):
+    """Ajoute au résultat de compute() le trait de l'axe choisi et son nom."""
+    prev, guides, info, spec = result
+    k = axis_plane_name(op)
+    if not k or op.cur is None:
+        return result
+    c = op.points[0]
+    n = plane_axes(op.axis)[2]
+    r = max((op.cur - c).length, 1e-6)
+    return prev, list(guides) + [[c - n * r, c + n * r]], (info + "   " if info else "") + f"around {k}", spec
+
+
 class MoveLogic:
     """Logique commune de Déplacer et Copier (classe simple, non enregistrée dans Blender)."""
 
@@ -753,7 +790,7 @@ class DESSIN_OT_rotation(DessinTransform):
     LIGHT_OK = True
     bl_idname = "dessin.rotation"
     bl_label = "Rotate"
-    bl_description = ("Rotates the selection: center, reference point then target point, or typed angle (R: Reference = reference angle by two points then new angle; Shift: 15° steps, C: copy)")
+    bl_description = ("Rotates the selection: center, reference point then target point, or typed angle (X / Y / Z after the center: rotation axis; R: Reference = reference angle by two points then new angle; Shift: 15° steps, C: copy)")
 
     TITLE = "Rotate"
     NEEDED = 3
@@ -788,6 +825,8 @@ class DESSIN_OT_rotation(DessinTransform):
         DessinTransform.click(self, context)
 
     def modal(self, context, event):
+        if axis_plane_key(self, context, event):        # X / Y / Z après le centre : axe de rotation
+            return {'RUNNING_MODAL'}
         # R : Référence (comme AutoCAD) : l'angle de référence est donné par deux points quelconques
         if (event.type == 'R' and event.value == 'PRESS'
                 and not (event.ctrl or event.alt or event.oskey or event.shift)
@@ -808,15 +847,18 @@ class DESSIN_OT_rotation(DessinTransform):
             return "center of rotation" + suffix + "   [C: copy, R: reference " + ("ON" if ref else "off") + "]"
         if ref:
             if n == 1:
-                return "reference angle: first point   [R: back to normal]"
+                return "reference angle: first point   [R: back to normal, X / Y / Z: rotation axis]"
             if n == 2:
                 return "reference angle: second point"
             return "new angle: point, or type the angle then Enter   (Shift: 15° steps)"
         if n == 1:
-            return "angle (type then Enter) or first reference point   [R: reference by two points]"
+            return "angle (type then Enter) or first reference point   [R: reference by two points, X / Y / Z: rotation axis]"
         return "second point   (Shift: 15° steps, or type the angle then Enter)"
 
     def compute(self):
+        return axis_plane_show(self, self.compute_rotation())
+
+    def compute_rotation(self):
         n = len(self.points)
         if n == 0 or self.cur is None:
             return [], [], "", None
@@ -1038,7 +1080,9 @@ class ScaleBase(DessinTransform):
             guides = [[c, r1pt], [dest, self.cur]]
             extra = f"   Reference {self.fmt(r0)} -> {self.fmt(r1)}"
         else:
-            typed = self.typed_raw(0)
+            # juste après le point de base, la valeur tapée est un facteur (sans unité) ; après le point de
+            # référence c'est une longueur, donc écrite dans l'unité affichée de la scène (1 en cm = 1 cm)
+            typed = self.typed_raw(0) if n == 1 else self.typed_value(0)
             extra = ""
             if n == 1:
                 if typed is None:
@@ -1243,14 +1287,17 @@ def bake_negative_scale(obj):
 class DESSIN_OT_miroir(DessinTransform):
     bl_idname = "dessin.mirror"
     bl_label = "Mirror"
-    bl_description = ("Mirrors the selection about a plane: two points define the mirror line in the construction plane "
-                      "(Shift: orthogonal, C: keep / replace the original)")
+    bl_description = ("Mirrors the selection about a plane: two points define the mirror line in the construction plane, or "
+                      "X / Y / Z mirrors across that axis, as XAxis / YAxis / ZAxis in Rhino: before the first point through the "
+                      "origin of the construction plane, after it through that point (Shift: orthogonal, C: keep / replace the original)")
 
     TITLE = "Mirror"
     NEEDED = 2
     NUMFIELDS = 0
     MIRRORS = True
     NO_SELECTION = "Select the objects to mirror first"
+    flat = False        # miroir par rapport au plan parallèle au plan de construction (touche de l'axe qui sort du plan)
+    quick = None        # axe demandé avant le premier point (XAxis / YAxis / ZAxis de Rhino)
 
     def invoke(self, context, event):
         result = super().invoke(context, event)
@@ -1264,14 +1311,79 @@ class DESSIN_OT_miroir(DessinTransform):
             return ""
         mode = "copy" if self.center else "replace"
         if not self.points:
-            return f"start of the mirror line ({mode})   [C: copy / replace]"
-        return f"end of the mirror line ({mode})   (Shift: orthogonal)   [C: copy / replace]"
+            return f"start of the mirror line ({mode})   [X / Y / Z: mirror across that axis at the origin, C: copy / replace]"
+        if getattr(self, "flat", False):
+            return f"mirror across the plane through this point ({mode})   (click or Enter: confirm)   [{self.flat_key()}: back, C: copy / replace]"
+        return f"end of the mirror line ({mode})   (Shift: orthogonal, {self.flat_key()}: flip across the plane)   [C: copy / replace]"
+
+    def flat_key(self):
+        """Lettre de l'axe du monde qui sort du plan de construction (Z en vue de dessus ou en perspective)."""
+        n = plane_axes(self.axis)[2]
+        return "XYZ"[max(range(3), key=lambda i: abs(AXES3[i].dot(n)))]
+
+    def reset_state(self):
+        self.flat = False
+        self.quick = None
+        super().reset_state()
+
+    def modal(self, context, event):
+        if getattr(self, "selecting", False) or self.area is None or context.area is None:
+            return super().modal(context, event)
+        plain = event.value == 'PRESS' and not (event.ctrl or event.alt or event.oskey or event.shift)
+        in_view = find_window_region(self.area, event.mouse_x, event.mouse_y) is not None and not self.mouse_over_ui(event)
+        if plain and in_view and event.type in {'X', 'Y', 'Z'}:
+            k = "XYZ".index(event.type)
+            if not self.points:
+                # comme XAxis / YAxis / ZAxis de Rhino : miroir immédiat, par l'origine du plan de construction
+                self.update_cursor(context, event)
+                self.quick = k
+                self.finish_shape(context)
+                self.quick = None
+                if self.finished:
+                    return self.exit(context)
+                return {'RUNNING_MODAL'}
+            if abs(AXES3[k].dot(plane_axes(self.axis)[2])) >= 0.5:
+                # l'axe qui sort du plan (Z) : miroir par rapport au plan parallèle au plan de construction, par le point
+                self.flat = not getattr(self, "flat", False)
+                self.lock = None
+                self.refresh(context)
+                return {'RUNNING_MODAL'}
+            self.flat = False                   # X / Y dans le plan : verrou de direction habituel
+        if (getattr(self, "flat", False) and self.points and event.value == 'PRESS' and in_view
+                and event.type in {'RET', 'NUMPAD_ENTER', 'SPACE'}):
+            self.finish_shape(context)
+            if self.finished:
+                return self.exit(context)
+            return {'RUNNING_MODAL'}
+        return super().modal(context, event)
+
+    @staticmethod
+    def mirror_matrix(a, m):
+        R3 = Matrix(((1 - 2 * m.x * m.x, -2 * m.x * m.y, -2 * m.x * m.z),
+                     (-2 * m.y * m.x, 1 - 2 * m.y * m.y, -2 * m.y * m.z),
+                     (-2 * m.z * m.x, -2 * m.z * m.y, 1 - 2 * m.z * m.z)))
+        return Matrix.Translation(m * (2.0 * a.dot(m))) @ R3.to_4x4()
 
     def compute(self):
+        u, v, nrm = plane_axes(self.axis)
+        mode = 'copy' if self.center else 'replace'
+        quick = getattr(self, "quick", None)
+        if quick is not None and not self.points:
+            a = plane_origin(self.axis)
+            ax = AXES3[quick]
+            if abs(ax.dot(nrm)) >= 0.5:
+                return [], [], f"Mirror across the construction plane   ({mode})", ("xform", self.mirror_matrix(a, nrm.copy()))
+            e = ax - nrm * ax.dot(nrm)
+            m = nrm.cross(e.normalized())
+            m.normalize()
+            return [], [], f"Mirror across the {'XYZ'[quick]} axis   ({mode})", ("xform", self.mirror_matrix(a, m))
         if not self.points or self.cur is None:
             return [], [], "", None
         a = self.points[0]
-        u, v, nrm = plane_axes(self.axis)
+        if getattr(self, "flat", False):
+            r = max((self.cur - a).length, 1e-3)
+            sq = [a + u * r + v * r, a - u * r + v * r, a - u * r - v * r, a + u * r - v * r]
+            return [], [sq + sq[:1]], f"Mirror across the plane through the point   ({mode})", ("xform", self.mirror_matrix(a, nrm.copy()))
         d = self.cur - a
         du, dv = d.dot(u), d.dot(v)
         if self.ortho:
@@ -1285,10 +1397,7 @@ class DESSIN_OT_miroir(DessinTransform):
         e = (u * du + v * dv) / L
         m = nrm.cross(e)
         m.normalize()
-        R3 = Matrix(((1 - 2 * m.x * m.x, -2 * m.x * m.y, -2 * m.x * m.z),
-                     (-2 * m.y * m.x, 1 - 2 * m.y * m.y, -2 * m.y * m.z),
-                     (-2 * m.z * m.x, -2 * m.z * m.y, 1 - 2 * m.z * m.z)))
-        xform = Matrix.Translation(m * (2.0 * a.dot(m))) @ R3.to_4x4()
+        xform = self.mirror_matrix(a, m)
         ext = max(L, 1e-3) * 6.0
         info = f"Mirror line {self.fmt(L)}   ({'copy' if self.center else 'replace'})"
         return [], [[a - e * ext, a + e * ext]], info, ("xform", xform)
@@ -1662,7 +1771,7 @@ class DESSIN_OT_array_polar(DessinArray):
     bl_idname = "dessin.array_polar"
     bl_label = "Array: Polar"
     bl_description = ("Polar array around an axis perpendicular to the construction plane: click the center, "
-                      "type the count and the angle (D: rotate items or not, F: other direction)")
+                      "type the count and the angle (X / Y / Z: axis of the array, D: rotate items or not, F: other direction)")
 
     TITLE = "Array (polar)"
     NEEDED = 2
@@ -1682,9 +1791,17 @@ class DESSIN_OT_array_polar(DessinArray):
         if not self.points:
             return f"center of the polar array ({n} items, {ARRAY_STATE['ang']:g}°)"
         return ("click to confirm   (type count, Tab, angle, Enter)   "
-                f"[D: {self.MODES[self.mode]}, F: other direction]")
+                f"[X / Y / Z: axis, D: {self.MODES[self.mode]}, F: other direction]")
+
+    def modal(self, context, event):
+        if axis_plane_key(self, context, event):        # X / Y / Z après le centre : axe du réseau
+            return {'RUNNING_MODAL'}
+        return super().modal(context, event)
 
     def compute(self):
+        return axis_plane_show(self, self.compute_array())
+
+    def compute_array(self):
         if not self.points or self.cur is None:
             return [], [], "", None
         c = self.points[0]

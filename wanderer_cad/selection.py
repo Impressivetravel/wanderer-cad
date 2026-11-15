@@ -644,29 +644,129 @@ def pick_object_at(context, area, region, mx, my):
     return None
 
 
-def edge_loop(edge):
-    """Arêtes de la « boucle » qui passe par `edge` : on traverse les sommets de valence 4 (face opposée), les
-    sommets de valence 2 (fil, contour dessiné) et on suit le bord des maillages ouverts."""
-    loop = {edge}
-    for start in edge.verts:
+def _loop_step(cur_e, v):
+    """Arête suivante de la boucle après `cur_e`, en passant par le sommet v (None : la boucle s'arrête là)."""
+    others = [x for x in v.link_edges if x is not cur_e]
+    if len(v.link_edges) == 2:
+        return others[0]
+    if len(cur_e.link_faces) == 1:                 # bord : l'autre arête de bord du sommet
+        bd = [x for x in others if len(x.link_faces) == 1]
+        return bd[0] if len(bd) == 1 else None
+    if len(v.link_edges) == 4 and len(cur_e.link_faces) == 2:
+        faces = set(cur_e.link_faces)
+        opp = [x for x in others if not (set(x.link_faces) & faces)]
+        return opp[0] if len(opp) == 1 else None
+    return None
+
+
+def _walk_path(first, step_fwd, step_back):
+    """Chemin ordonné passant par `first` : on avance avec step_fwd, puis on recule avec step_back. (éléments, fermé)."""
+    seq, seen, closed = [first], {first}, False
+    for nxt in step_fwd():
+        if nxt is first:
+            closed = True
+            break
+        if nxt in seen:
+            break
+        seen.add(nxt)
+        seq.append(nxt)
+    if not closed:
+        back = []
+        for nxt in step_back():
+            if nxt in seen:
+                break
+            seen.add(nxt)
+            back.append(nxt)
+        seq = back[::-1] + seq
+    return seq, closed
+
+
+def edge_loop_path(edge):
+    """Boucle d'arêtes qui passe par `edge`, dans l'ordre : on traverse les sommets de valence 4 (arête opposée), les
+    sommets de valence 2 (fil, contour dessiné) et on suit le bord des maillages ouverts. Retourne (arêtes, fermée)."""
+    def walk(start):
         cur_e, v = edge, start
         while True:
-            others = [x for x in v.link_edges if x is not cur_e]
-            nxt = None
-            if len(v.link_edges) == 2:
-                nxt = others[0]
-            elif len(cur_e.link_faces) == 1:                 # bord : l'autre arête de bord du sommet
-                bd = [x for x in others if len(x.link_faces) == 1]
-                nxt = bd[0] if len(bd) == 1 else None
-            elif len(v.link_edges) == 4 and len(cur_e.link_faces) == 2:
-                faces = set(cur_e.link_faces)
-                opp = [x for x in others if not (set(x.link_faces) & faces)]
-                nxt = opp[0] if len(opp) == 1 else None
-            if nxt is None or nxt in loop:
-                break
-            loop.add(nxt)
+            nxt = _loop_step(cur_e, v)
+            if nxt is None:
+                return
+            yield nxt
             cur_e, v = nxt, nxt.other_vert(v)
-    return loop
+    return _walk_path(edge, lambda: walk(edge.verts[1]), lambda: walk(edge.verts[0]))
+
+
+def edge_loop(edge):
+    """Ensemble des arêtes de la boucle qui passe par `edge`."""
+    return set(edge_loop_path(edge)[0])
+
+
+def _opposite_edge(face, edge):
+    """Arête d'un quadrilatère en face de `edge` (None si la face n'a pas quatre côtés)."""
+    if len(face.edges) != 4:
+        return None
+    for e in face.edges:
+        if e is not edge and not (set(e.verts) & set(edge.verts)):
+            return e
+    return None
+
+
+def edge_ring_path(edge):
+    """Anneau d'arêtes (les « barreaux » d'une rangée de quadrilatères) qui passe par `edge`. Retourne (arêtes, fermé)."""
+    def walk(face):
+        cur_e, f = edge, face
+        while f is not None:
+            opp = _opposite_edge(f, cur_e)
+            if opp is None:
+                return
+            yield opp
+            nf = [x for x in opp.link_faces if x is not f]
+            cur_e, f = opp, (nf[0] if len(nf) == 1 else None)
+    fs = list(edge.link_faces)
+    return _walk_path(edge, lambda: walk(fs[0] if fs else None), lambda: walk(fs[1] if len(fs) > 1 else None))
+
+
+def face_loop_path(face, edge):
+    """Rangée de faces qui passe par `face` en traversant son arête `edge` (et l'arête d'en face). Retourne (faces, fermée)."""
+    def walk(e):
+        f, cur_e = face, e
+        while cur_e is not None:
+            nf = [x for x in cur_e.link_faces if x is not f]
+            if len(nf) != 1 or len(nf[0].edges) != 4:
+                if len(nf) == 1:
+                    yield nf[0]                 # la rangée se termine sur une face qui n'est pas un quadrilatère : on la prend
+                return
+            f = nf[0]
+            yield f
+            cur_e = _opposite_edge(f, cur_e)
+    return _walk_path(face, lambda: walk(edge), lambda: walk(_opposite_edge(face, edge)))
+
+
+def loop_range(path, closed, i, selected):
+    """Partie de `path` comprise entre les deux éléments déjà sélectionnés qui encadrent path[i] (comme Rhino : clic,
+    Maj+clic plus loin, Maj+double-clic entre les deux). None s'il n'est pas encadré des deux côtés : boucle entière."""
+    n = len(path)
+
+    def scan(step):
+        k = i
+        for _ in range(n - 1):
+            k += step
+            if closed:
+                k %= n
+            elif k < 0 or k >= n:
+                return None
+            if selected(path[k]):
+                return k
+        return None
+
+    a, b = scan(-1), scan(1)
+    if a is None or b is None or a == b:
+        return None
+    out, k = [], a
+    while True:
+        out.append(path[k])
+        if k == b:
+            return out
+        k = (k + 1) % n
 
 
 def pick_edit_edge(context, area, region, mx, my):
@@ -714,10 +814,169 @@ def pick_edit_edge(context, area, region, mx, my):
     return best[1], best[2]      # (objet, indice de l'arête)
 
 
+def _edit_screen(context, area, region, obj):
+    """(bmesh, x écran, y écran, visible, profondeur) des sommets d'un objet en édition."""
+    rv3d = region_rv3d(region, area)
+    persp = np.array(rv3d.perspective_matrix, dtype=np.float64)
+    bm = bmesh.from_edit_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.edges.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+    mw = np.array(obj.matrix_world, dtype=np.float64)
+    co = np.array([tuple(v.co) for v in bm.verts], dtype=np.float64).reshape(-1, 3)
+    w = co @ mw[:3, :3].T + mw[:3, 3]
+    sx, sy, ok = _project_region(w, persp, region)
+    clip = np.hstack((w, np.ones((len(w), 1)))) @ persp.T
+    zn = clip[:, 2] / np.where(np.abs(clip[:, 3]) > 1e-9, clip[:, 3], 1.0)
+    return bm, sx, sy, ok, zn
+
+
+def pick_edit_vertex(context, area, region, mx, my):
+    """(objet, indice du sommet) le plus proche de la souris (12 px), le plus proche de la caméra à distance égale."""
+    limit = 12.0 * px_scale()
+    best = None
+    for obj in context.objects_in_mode_unique_data:
+        if obj.type != 'MESH':
+            continue
+        try:
+            bm, sx, sy, ok, zn = _edit_screen(context, area, region, obj)
+        except (ValueError, AttributeError):
+            continue
+        if not len(bm.verts) or len(bm.verts) > 300000:
+            continue
+        hid = np.array([v.hide for v in bm.verts], dtype=bool)
+        d = np.where(ok & ~hid, np.hypot(sx - mx, sy - my), np.inf)
+        for i in np.nonzero(d <= limit)[0]:
+            key = (round(float(d[i]) / 4.0), float(zn[i]))
+            if best is None or key < best[0]:
+                best = (key, obj, int(i))
+    return (best[1], best[2]) if best is not None else None
+
+
+def pick_edit_face(context, area, region, mx, my):
+    """(objet, indice de la face, indice de son arête la plus proche de la souris) pour la face visible sous la souris."""
+    from mathutils.bvhtree import BVHTree
+    rv3d = region_rv3d(region, area)
+    if rv3d is None:
+        return None
+    coord = Vector((mx, my))
+    ro = region_2d_to_origin_3d(region, rv3d, coord)
+    rv = region_2d_to_vector_3d(region, rv3d, coord)
+    best = None
+    for obj in context.objects_in_mode_unique_data:
+        if obj.type != 'MESH':
+            continue
+        try:
+            bm = bmesh.from_edit_mesh(obj.data)
+        except ValueError:
+            continue
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+        vis = [f for f in bm.faces if not f.hide]
+        if not vis or len(bm.faces) > 300000:
+            continue
+        try:
+            inv = obj.matrix_world.inverted()
+        except ValueError:
+            continue
+        tree = BVHTree.FromPolygons([v.co.copy() for v in bm.verts], [tuple(v.index for v in f.verts) for f in vis])
+        lo, ld = inv @ ro, (inv.to_3x3() @ rv)
+        if ld.length < 1e-12:
+            continue
+        loc, _n, idx, _d = tree.ray_cast(lo, ld.normalized())
+        if idx is None:
+            continue
+        depth = (obj.matrix_world @ loc - ro).dot(rv)
+        if best is None or depth < best[0]:
+            best = (depth, obj, vis[idx].index)
+    if best is None:
+        return None
+    obj, fi = best[1], best[2]
+    bm, sx, sy, ok, _zn = _edit_screen(context, area, region, obj)
+    near = None
+    for e in bm.faces[fi].edges:                    # arête de la face la plus proche du curseur : sens de la rangée par défaut
+        a, b = e.verts[0].index, e.verts[1].index
+        if not (ok[a] and ok[b]):
+            continue
+        dx, dy = sx[b] - sx[a], sy[b] - sy[a]
+        L2 = dx * dx + dy * dy
+        t = min(1.0, max(0.0, ((mx - sx[a]) * dx + (my - sy[a]) * dy) / L2)) if L2 > 1e-9 else 0.0
+        d = math.hypot(sx[a] + dx * t - mx, sy[a] + dy * t - my)
+        if near is None or d < near[0]:
+            near = (d, e.index)
+    return obj, fi, (near[1] if near is not None else bm.faces[fi].edges[0].index)
+
+
+def _latest_selected(bm, cands, kind):
+    """Parmi `cands` (sélectionnés), le dernier désigné d'après l'historique de sélection, sinon le premier."""
+    cands = [c for c in cands if c.select]
+    if not cands:
+        return None
+    try:
+        hist = [h for h in bm.select_history if isinstance(h, kind)]
+    except (TypeError, ReferenceError):
+        hist = []
+    for h in reversed(hist):
+        if h in cands:
+            return h
+    return cands[0]
+
+
+def loop_target(context, area, region, mx, my, ring=False):
+    """Double-clic en édition : (objet, bmesh, éléments de la boucle dans l'ordre, fermée, indice de l'élément visé, genre).
+    Selon le mode de sélection, comme les filtres de sous-objets de Rhino :
+    - faces : la rangée de faces qui passe par la face visée ; son sens est donné par la face voisine déjà sélectionnée
+      (clic sur une face, puis double-clic sur la suivante), sinon par l'arête de la face la plus proche du curseur ;
+    - sommets : la chaîne qui passe par le sommet visé et le sommet voisin déjà sélectionné, sinon l'arête la plus proche ;
+    - arêtes : la boucle de l'arête visée, ou son anneau (ring=True)."""
+    vmode, emode, fmode = context.tool_settings.mesh_select_mode
+    if fmode and not (vmode or emode):
+        hit = pick_edit_face(context, area, region, mx, my)
+        if hit is None:
+            return None
+        obj, fi, ei = hit
+        bm = bmesh.from_edit_mesh(obj.data)
+        bm.faces.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        face = bm.faces[fi]
+        nb = {}
+        for e in face.edges:
+            for f in e.link_faces:
+                if f is not face and not f.hide:
+                    nb.setdefault(f, e)
+        prev = _latest_selected(bm, list(nb), bmesh.types.BMFace)
+        edge = nb[prev] if prev is not None else bm.edges[ei]
+        path, closed = face_loop_path(face, edge)
+        return obj, bm, path, closed, path.index(face), 'FACE'
+    edge = None
+    if vmode and not (emode or fmode):
+        hit = pick_edit_vertex(context, area, region, mx, my)
+        if hit is not None:
+            obj, vi = hit
+            bm = bmesh.from_edit_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            v = bm.verts[vi]
+            prev = _latest_selected(bm, [e.other_vert(v) for e in v.link_edges if not e.hide], bmesh.types.BMVert)
+            if prev is not None:
+                edge = next(e for e in v.link_edges if e.other_vert(v) is prev)
+    if edge is None:
+        hit = pick_edit_edge(context, area, region, mx, my)
+        if hit is None:
+            return None
+        obj, index = hit
+        bm = bmesh.from_edit_mesh(obj.data)      # on garde cette référence : sinon les arêtes deviennent invalides
+        bm.edges.ensure_lookup_table()
+        edge = bm.edges[index]
+    path, closed = edge_ring_path(edge) if ring else edge_loop_path(edge)
+    return obj, bm, path, closed, path.index(edge), 'EDGE'
+
+
 class DESSIN_OT_select_loop(bpy.types.Operator):
     bl_idname = "dessin.select_loop"
     bl_label = "Select Loop"
-    bl_description = "Double-click an edge to select its whole loop (Shift: add, Ctrl/Cmd: remove)"
+    bl_description = ("Double-click an edge to select its whole loop (Alt: its ring). In face mode: click a face, then double-click "
+                      "the next one to select the row of faces; in vertex mode: the chain of vertices. Shift: add (between two "
+                      "selected elements: only the part between them), Ctrl/Cmd: remove")
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -726,22 +985,29 @@ class DESSIN_OT_select_loop(bpy.types.Operator):
 
     def invoke(self, context, event):
         region = find_window_region(context.area, event.mouse_x, event.mouse_y)
-        if region is None or event.alt or event.oskey:
+        if region is None or event.oskey or (event.alt and pref("view_button") == 'ALT_LEFT'):
             return {'CANCELLED', 'PASS_THROUGH'}
         for r in context.area.regions:
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
                     and r.y <= event.mouse_y < r.y + r.height):
                 return {'CANCELLED', 'PASS_THROUGH'}
-        hit = pick_edit_edge(context, context.area, region, event.mouse_x - region.x, event.mouse_y - region.y)
+        try:
+            hit = loop_target(context, context.area, region, event.mouse_x - region.x, event.mouse_y - region.y, ring=bool(event.alt))
+        except (RuntimeError, ReferenceError, ValueError, StopIteration):
+            hit = None
         if hit is None:
             return {'CANCELLED', 'PASS_THROUGH'}
-        obj, index = hit
-        return self.select(context, obj, index, event.shift, event.ctrl)
+        return self.select(context, hit, event.shift, event.ctrl)
 
-    def select(self, context, obj, index, shift, ctrl):
-        bm = bmesh.from_edit_mesh(obj.data)      # on garde cette référence : sinon les arêtes deviennent invalides
-        bm.edges.ensure_lookup_table()
-        loop = edge_loop(bm.edges[index])
+    def select(self, context, hit, shift, ctrl):
+        obj, bm, path, closed, index, kind = hit
+        remove = bool(ctrl and not shift)        # Ctrl+Maj (sous-objet à la Rhino depuis le mode Objet) : on ajoute
+        items = path
+        if shift and not ctrl:
+            # plage : l'élément visé est encadré par deux éléments déjà sélectionnés de la même boucle
+            part = loop_range(path, closed, index, lambda x: x.select)
+            if part is not None:
+                items = part
         if not (shift or ctrl):
             for o in context.objects_in_mode_unique_data:
                 if o.type == 'MESH':
@@ -754,9 +1020,13 @@ class DESSIN_OT_select_loop(bpy.types.Operator):
                         f.select_set(False)
                     if b is not bm:
                         bmesh.update_edit_mesh(o.data, loop_triangles=False, destructive=False)
-        for e in loop:
-            e.select_set(not ctrl)
-        bm.select_flush_mode()
+        for x in items:
+            if not x.hide:
+                x.select_set(not remove)
+        if remove:
+            bm.select_flush(False)
+        else:
+            bm.select_flush_mode()
         bmesh.update_edit_mesh(obj.data, loop_triangles=False, destructive=False)
         return {'FINISHED'}
 
@@ -1375,6 +1645,7 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
         return {'RUNNING_MODAL'}
 
     def cleanup(self):
+        gumball_unfreeze(bpy.context)
         ghost_hide()
         if getattr(self, "_h", None) is not None:
             bpy.types.SpaceView3D.draw_handler_remove(self._h, 'WINDOW')
@@ -1414,6 +1685,7 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
             return False
         self.p0 = p0
         self.moving = True
+        gumball_freeze(context, pivot, "DESSIN_OT_selection")      # le Gumball reste à sa place pendant le glisser (Rhino)
         return True
 
     def begin_move_edit(self, context):
@@ -1439,6 +1711,10 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
             return False
         self.p0 = p0
         self.moving = True
+        try:
+            gumball_freeze(context, gumball_selection(context)[0], "DESSIN_OT_selection")
+        except (TypeError, AttributeError, ReferenceError, RuntimeError):
+            pass
         return True
 
     def edit_translate(self, d):
@@ -1890,9 +2166,9 @@ class DESSIN_OT_selection_cercle(bpy.types.Operator):
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global _CMD, _SF, back_to_idle, boundary_loops, cmd_click_idle, extrude_ball_hit, gumball_handle_at
-    global gumball_selection, sel_filter_restore, set_prompt
+    global gumball_freeze, gumball_selection, gumball_unfreeze, sel_filter_restore, set_prompt
     from .display import _SF, sel_filter_restore
-    from .gumball import gumball_selection
+    from .gumball import gumball_freeze, gumball_selection, gumball_unfreeze
     from .offset_extrude import back_to_idle
     from .blocks import boundary_loops
     from .gumball_handles import extrude_ball_hit, gumball_handle_at

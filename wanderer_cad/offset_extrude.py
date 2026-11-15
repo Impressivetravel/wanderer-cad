@@ -10,7 +10,7 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
 from .core import IDLE_FALLBACK, IDLE_TOOL, fmt_typed, last_typed, pref, unit_info
-from .drawing import area_over_ui, find_window_region, get_shader, project_px, px_scale
+from .drawing import area_over_ui, find_window_region, get_shader, line_px, project_px, px_scale
 from .base import DessinBase
 from .selection import ray_cast_opaque
 from .gumball import DESSIN_OT_gumball_extrude, GumballBase
@@ -176,7 +176,7 @@ def draw_offset_cb(op):
             continue
         hot = (i == op.hover)
         col = (1.0, 1.0, 0.4, 1.0) if hot else (1.0, 0.55, 0.1, 1.0)
-        gpu.state.line_width_set((4.0 if hot else 2.5) * sc)
+        gpu.state.line_width_set(line_px(4.0 if hot else 2.5))
         shader.bind()
         shader.uniform_float("color", col)
         batch_for_shader(shader, 'LINES', {"pos": [tuple(a), tuple(b)]}).draw(shader)

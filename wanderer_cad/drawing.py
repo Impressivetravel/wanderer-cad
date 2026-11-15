@@ -124,7 +124,7 @@ def draw_view_cb(op):
     hil = getattr(op, "hilite", None)
     if hil:
         pts = [tuple(q) for seg in hil for q in seg]
-        gpu.state.line_width_set(4.0 * px_scale())
+        gpu.state.line_width_set(line_px(4.0))
         batch = batch_for_shader(shader, 'LINES', {"pos": pts})
         shader.uniform_float("color", (0.15, 1.0, 0.45, 1.0))
         batch.draw(shader)
@@ -132,7 +132,7 @@ def draw_view_cb(op):
         shader.bind()
 
     line_col, point_col = preview_colors()
-    gpu.state.line_width_set(2.0 * px_scale())
+    gpu.state.line_width_set(line_px(2.0))
     for strip in getattr(op, "preview_extra", ()):
         if len(strip) >= 2:
             batch = batch_for_shader(shader, 'LINE_STRIP', {"pos": [tuple(p) for p in strip]})
@@ -187,6 +187,23 @@ def draw_px_points(pts, size, color):
         pass
 
 
+def ui_density():
+    """Densité de l'interface : 1 sur un écran ordinaire, 2 sur un écran Retina ou Windows à 200 %, multipliée par
+    le réglage « Resolution Scale » de Blender. C'est preferences.system.ui_scale, qui vaut déjà dpi / 72."""
+    try:
+        return max(1.0, float(bpy.context.preferences.system.ui_scale or 1.0))
+    except (AttributeError, ReferenceError, TypeError, ValueError):
+        return 1.0
+
+
+def line_px(width):
+    """Épaisseur d'un trait en pixels d'écran pour `width` pixels sur un écran ordinaire. Proportionnelle à la densité,
+    et jamais à px_scale() : celui-ci multiplie ui_scale par dpi / 72, deux fois la même chose, donc le carré de la
+    densité. Sur Windows à 150 ou 200 %, où l'épaisseur demandée est vraiment tracée (Metal sur Mac l'ignore), un
+    trait de 2 px devenait un trait de 4,5 à 14 px."""
+    return max(1.0, float(width) * ui_density())
+
+
 def px_scale(k=1.0):
     """Facteur d'échelle de l'interface (écran Retina / haute densité, échelle de résolution) pour les dessins en pixels."""
     try:
@@ -221,7 +238,7 @@ def draw_snap_marker(x, y, kind):
         pts = [(x - s, y), (x, y - s), (x + s, y), (x, y + s)]
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')
-    gpu.state.line_width_set(2.0 * sc)
+    gpu.state.line_width_set(line_px(2.0))
     batch = batch_for_shader(shader, mode, {"pos": pts})
     shader.bind()
     shader.uniform_float("color", SNAP_COLORS.get(kind, (1, 1, 1, 1)))
@@ -253,7 +270,7 @@ def draw_rhino_cursor(x, y):
             span = 1000.0
         half = max(r * 2.0, span * pref("cursor_size") / 100.0 * (0.5 if pref("cursor_size") < 100 else 1.0))
         lines += [(x - half, y), (x - r, y), (x + r, y), (x + half, y), (x, y - half), (x, y - r), (x, y + r), (x, y + half)]
-        gpu.state.line_width_set(max(1.0, 1.0 * sc))
+        gpu.state.line_width_set(line_px(1.0))
         shader.uniform_float("color", col)
         batch_for_shader(shader, 'LINES', {"pos": lines}).draw(shader)
     else:
@@ -270,7 +287,7 @@ def draw_rhino_cursor(x, y):
         for pts, c in ((tris_b, (0.0, 0.0, 0.0, 1.0)), (tris_w, col)):
             shader.uniform_float("color", c)
             batch_for_shader(shader, 'TRIS', {"pos": pts}).draw(shader)
-        gpu.state.line_width_set(max(1.0, 1.0 * sc))
+        gpu.state.line_width_set(line_px(1.0))
         shader.uniform_float("color", (0.0, 0.0, 0.0, 1.0))
         batch_for_shader(shader, 'LINES', {"pos": lines}).draw(shader)
     gpu.state.line_width_set(1.0)
@@ -302,7 +319,7 @@ def draw_pixel_cb(op):
         s = 6.0 * sc
         shader = get_shader('2D')
         gpu.state.blend_set('ALPHA')
-        gpu.state.line_width_set(2.0 * sc)
+        gpu.state.line_width_set(line_px(2.0))
         batch = batch_for_shader(shader, 'LINES', {"pos": [(x - s, y - s), (x + s, y + s), (x - s, y + s), (x + s, y - s)]})
         shader.bind()
         shader.uniform_float("color", (0.2, 0.9, 0.9, 1.0))

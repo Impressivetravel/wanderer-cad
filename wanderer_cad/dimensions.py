@@ -6,7 +6,7 @@ import math
 import numpy as np
 from mathutils import Matrix, Vector
 
-from .core import TAU, UNIT_LABEL, UNIT_TO_M, plane_axes, plane_origin
+from .core import AXES3, TAU, UNIT_LABEL, UNIT_TO_M, plane_axes, plane_origin
 from .drawing import _HOVER, find_window_region, project_px, px_scale, region_rv3d
 from .base import DessinBase
 from .selection import _project_region
@@ -26,9 +26,59 @@ class DESSIN_OT_cotation(DessinBase):
     HAS_MODE = True
     MODES = ("Aligned", "Horizontal", "Vertical")
     mode = 0
+    LOCK_3D = True      # Z : la mesure peut quitter le plan de construction (coter une hauteur en perspective)
+    uvn = None          # plan de la cote s'il n'est pas le plan de construction (hauteur, ou cote reconstruite)
+    _upright = False
 
     def lock_allowed(self):
         return len(self.points) == 1  # on verrouille la direction de la mesure, pas le placement de la ligne
+
+    # ---- cote d'une hauteur : les deux points sont l'un au-dessus de l'autre ----
+    def upright(self, d):
+        """Vrai si d est perpendiculaire au plan de construction (à la précision près)."""
+        n = plane_axes(self.axis)[2]
+        h = d.dot(n)
+        return abs(h) > 1e-9 and (d - n * h).length <= 1e-6 * max(1.0, abs(h))
+
+    def update_cursor(self, context, event):
+        if len(self.points) < 2 and getattr(self, "_upright", False):
+            self.end_upright()                  # (point retiré : on retrouve le plan de construction)
+        super().update_cursor(context, event)
+        if len(self.points) == 1 and self.lock is None and self.cur is not None:
+            sp = getattr(self, "_snap_pt", None)
+            if sp is not None and self.snap_screen is not None and self.upright(sp - self.points[0]):
+                # point accroché à l'aplomb du premier (bas et haut d'une arête verticale) : il garde sa hauteur, au lieu
+                # d'être rabattu sur le premier point (longueur nulle)
+                self.cur = sp.copy()
+                self.refresh(context)
+
+    def click(self, context):
+        n0 = len(self.points)
+        super().click(context)
+        if n0 == 1 and len(self.points) == 2 and getattr(self, "uvn", None) is None and self.upright(self.points[1] - self.points[0]):
+            # mesure perpendiculaire au plan de construction : la cote se pose dans le plan vertical qui fait le plus face
+            # à la vue ; la ligne de cote se place en déplaçant la souris de côté
+            u, v, n = plane_axes(self.axis)
+            try:
+                view = region_rv3d(self.region, self.area).view_rotation @ Vector((0.0, 0.0, -1.0))
+            except (AttributeError, ReferenceError, TypeError):
+                view = v.copy()
+            h, w = (u, v) if abs(view.dot(v)) >= abs(view.dot(u)) else (v, u)
+            self.uvn = (h.copy(), n.copy(), w.copy())
+            self._upright = True
+            self._mode0 = self.mode             # la mesure suit les deux points (une cote « horizontale » serait nulle)
+            self.mode = 0
+            self.refresh(context)
+
+    def end_upright(self):
+        self.uvn = None
+        self._upright = False
+        self.mode = getattr(self, "_mode0", self.mode)
+
+    def reset_state(self):
+        if getattr(self, "_upright", False):
+            self.end_upright()
+        super().reset_state()
 
     def prompt(self):
         n = len(self.points)

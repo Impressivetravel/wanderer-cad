@@ -482,7 +482,7 @@ CMD_KEY_ITEMS = (('SPACE', "Space", "Space opens the command line (Space again o
 CMD_ALIASES = {
     "layout_detail_tool": "viewport mview mv vports detail",
     "deplacer_tool": "m move", "copier_tool": "co cp copy", "selection_boite_tool": "select sel", "selection_lasso_tool": "lasso", "selection_rect_tool": "selbox", "selection_cercle_tool": "selcircle",
-    "polyligne_tool": "pl line polyline", "plan_tool": "plane srf", "rotation_tool": "ro rot rotate", "echelle_tool": "sc scale",
+    "polyligne_tool": "pl l line polyline", "plan_tool": "plane srf", "rotation_tool": "ro rot rotate", "echelle_tool": "sc scale",
     "echelle_2d_tool": "s2 scale2d", "echelle_1d_tool": "s1 scale1d", "echelle_taille_tool": "ss scalesize scaletosize", "rectangle_tool": "rec rect", "mirror_tool": "mi mirror",
     "array_rect_tool": "ar arrayrect", "array_linear_tool": "arl arraylinear", "array_polar_tool": "arp arraypolar", "cut_tool": "split cut",
     "fillet_edge_tool": "f fillet", "chamfer_edge_tool": "cha chamfer", "offset_edge_tool": "o offset",
@@ -498,7 +498,7 @@ CMD_ALIASES = {
     "camera_tool": "cam camera", "camera_target_tool": "camt", "offset_surface_tool": "offsrf", "extrude_tool": "ext extrude", "extrude_crv_tool": "extrudecrv extc ec", "extrude_srf_tool": "extrudesrf exts es", "planar_srf_tool": "ps planarsrf", "edge_srf_tool": "edgesrf esrf", "thicken_tool": "thicken th", "cap_tool": "cap", "split_face_tool": "splitface sf", "project_curve_tool": "project proj", "patch_tool": "patch", "xline_tool": "xl xline", "stretch_tool": "st stretch", "divide_tool": "div divide", "overkill_tool": "overkill ok", "clip_plane_tool": "clip clippingplane clp", "fillet_curve_tool": "fc filletcurve fillet2d", "chamfer_curve_tool": "cc chamfercurve chamfer2d", "blend_srf_tool": "blendsrf bs", "match_srf_tool": "matchsrf ms", "rail_revolve_tool": "railrev rr", "shell_tool": "shell sh",
     # commandes Rhino de la 2.96.124 (une seule entrée dans la ligne de commande : l'outil de la barre)
     "pipe_tool": "pipe", "intersect_tool": "int intersect", "section_tool": "sec section", "contour_tool": "contour",
-    "extract_srf_tool": "extractsrf", "dup_border_tool": "dupborder", "dup_edge_tool": "dupedge",
+    "extract_srf_tool": "extractsrf", "dup_border_tool": "dupborder", "dup_edge_tool": "dupedge", "dup_face_border_tool": "dupfaceborder", "extend_crv_tool": "extend ex extendcrv extendcurve lengthen",
     "merge_faces_tool": "mergeallfaces mergeallcoplanarfaces", "unroll_tool": "unroll unrollsrf",
     "rebuild_srf_tool": "rebuildsrf", "orient_tool": "orient orient2pt",
 }

@@ -107,6 +107,7 @@ class DessinEdgeRound(DessinBase):
     def cleanup(self, context):
         if not self.committed:
             self.restore_all()
+        self.free_groups()
         super().cleanup(context)
         if self.reenter_edit:
             try:
@@ -124,6 +125,44 @@ class DessinEdgeRound(DessinBase):
     # ---- sélection des arêtes ----
     def total_selected(self):
         return sum(len(v) for v in self.sel.values())
+
+    def free_groups(self):
+        for bm in (getattr(self, "_grp_bm", None) or {}).values():
+            try:
+                bm.free()
+            except (ReferenceError, RuntimeError):
+                pass
+        self._grp_bm = {}
+        self._grp = {}
+
+    def edge_group(self, obj, i):
+        """Arêtes prises par un clic sur l'arête i : toute l'arête au sens de Rhino (le cercle du haut d'un cylindre, le bord
+        d'une surface courbe : des dizaines de petits segments de maillage), pas un seul segment à la fois."""
+        if obj.type != 'MESH':
+            return (i,)
+        grp = getattr(self, "_grp", None)
+        if grp is None:
+            grp = self._grp = {}
+            self._grp_bm = {}
+        per = grp.setdefault(obj.name, {})
+        g = per.get(i)
+        if g is None:
+            g = (i,)
+            try:
+                _late_imports()
+                bm = self._grp_bm.get(obj.name)
+                if bm is None:
+                    bm = self._grp_bm[obj.name] = bmesh.new()
+                    bm.from_mesh(obj.data)
+                    bm.edges.ensure_lookup_table()
+                    bm.normal_update()
+                if i < len(bm.edges):
+                    g = tuple(feature_chain_edges(bm, bm.edges[i]))
+            except (RuntimeError, ReferenceError, ValueError, IndexError, TypeError):
+                g = (i,)
+            for k in g:
+                per[k] = g
+        return g
 
     def candidates(self, context):
         objs = [o for o in context.view_layer.objects if o.type == 'MESH' and o.visible_get()]
@@ -344,7 +383,8 @@ class DessinEdgeRound(DessinBase):
     def prompt(self):
         if self.phase == 'pick':
             return (f"click or drag a box to select the edges ({self.total_selected()} selected), then Enter   "
-                    "[box to the right: inside, to the left: touching, Ctrl/Cmd: deselect, click a selected edge: remove it]")
+                    "[click: the whole edge, Ctrl+click: one segment, click a selected edge: remove it  |  "
+                    "box to the right: inside, to the left: touching, Ctrl/Cmd: deselect]")
         if self.CHAMFER:
             return f"type the distance <{self.fmt(self.STATE['radius'])}>, Enter to confirm"
         return (f"type the radius <{self.fmt(self.STATE['radius'])}>, Tab, segments, Enter to confirm   "
@@ -360,12 +400,18 @@ class DessinEdgeRound(DessinBase):
             except (ReferenceError, RuntimeError):
                 pass
             prev = []
+            self.preview_extra = []
             if hit is not None:
-                prev = self.edge_lines([(hit[0].name, [hit[1]])])
-                prev = prev[0] if prev else []
+                grp = self.hover_group(hit[0], hit[1])
+                lines = self.edge_lines([(hit[0].name, grp)])
+                if len(grp) > 1:
+                    self.preview_extra = lines[:3000]       # toute l'arête qui sera prise au clic
+                else:
+                    prev = lines[0] if lines else []
             self.hilite = sel[:3000]
             return prev, [], f"{self.total_selected()} edge(s) selected", None
         self.hilite = []
+        self.preview_extra = []
         r, n = self.radius_now(), self.segments_now()
         guides = self.edge_lines((nm, s) for nm, s in self.sel.items())[:3000]
         if self.CHAMFER:
@@ -390,7 +436,11 @@ class DessinEdgeRound(DessinBase):
                 obj.data = self.work[name]
             fillet_mesh(self.orig[name], self.work[name], idx, r, n, self.CHAMFER)
 
+    def hover_group(self, obj, i):
+        return self.edge_group(obj, i)
+
     def restore_all(self):
+        self.free_groups()
         for name, orig in list(self.orig.items()):
             obj = bpy.data.objects.get(name)
             work = self.work.get(name)
@@ -432,10 +482,12 @@ class DessinEdgeRound(DessinBase):
             return
         obj, i = hit
         s = self.sel.setdefault(obj.name, set())
+        # un clic prend toute l'arête (au sens de Rhino) ; Ctrl/Cmd+clic : un seul segment du maillage
+        grp = (i,) if getattr(self, "_press_ctrl", False) else self.edge_group(obj, i)
         if i in s:
-            s.discard(i)
+            s.difference_update(grp)
         else:
-            s.add(i)
+            s.update(grp)
         self.refresh(context)
 
     def modal(self, context, event):
@@ -827,6 +879,24 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
     STATE = OFFSET_STATE
     CHAMFER = True      # pas de segments / flèches ↑ ↓
 
+    def invoke(self, context, event):
+        # objets déjà sélectionnés avant la commande : ils sont pris d'office, comme dans Rhino (on ne les désigne pas
+        # une seconde fois). Courbes et contours seulement : sur une surface ou un solide, il faut dire quelle arête.
+        pre = []
+        if context.mode == 'OBJECT':
+            pre = [o for o in context.selected_objects if o.visible_get() and "dessin_cotation" not in o.keys()
+                   and "dessin_cotation_texte" not in o.keys()
+                   and (o.type == 'CURVE' or (o.type == 'MESH' and not len(o.data.polygons) and len(o.data.edges)))]
+        result = super().invoke(context, event)
+        if 'RUNNING_MODAL' in result and pre and not self.total_selected():
+            for o in pre:
+                idx = set(self.all_edges(o))
+                if idx:
+                    self.sel[o.name] = idx
+            if self.total_selected():
+                self.begin_radius(context)
+        return result
+
     # ---- sélection : meshes et courbes (une courbe entière à la fois) ----
     def candidates(self, context):
         # tous les objets visibles (pas seulement ceux déjà sélectionnés) : on peut piocher plusieurs formes à la zone
@@ -843,6 +913,11 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
         g = self.geometry(obj)
         return range(len(g[1])) if g is not None else range(0)
 
+    def hover_group(self, obj, i):
+        if obj.type == 'CURVE':
+            return tuple(self.all_edges(obj))       # une courbe se prend en entier
+        return self.edge_group(obj, i)
+
     def click(self, context):
         if self.phase == 'radius':
             self.finish_shape(context)
@@ -857,10 +932,13 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
                 s.clear()
             else:
                 s.update(self.all_edges(obj))
-        elif i in s:
-            s.discard(i)
         else:
-            s.add(i)
+            # un clic prend toute l'arête (au sens de Rhino) ; Ctrl/Cmd+clic : un seul segment du maillage
+            grp = (i,) if getattr(self, "_press_ctrl", False) else self.edge_group(obj, i)
+            if i in s:
+                s.difference_update(grp)
+            else:
+                s.update(grp)
         self.refresh(context)
 
     def box_select(self, context, remove):
@@ -890,7 +968,8 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
     def prompt(self):
         if self.phase == 'pick':
             return (f"click the edges / a curve or drag a box ({self.total_selected()} selected), then Enter   "
-                    "[box to the right: inside, to the left: touching, Ctrl/Cmd: deselect]")
+                    "[click: the whole edge, Ctrl+click: one segment  |  "
+                    "box to the right: inside, to the left: touching, Ctrl/Cmd: deselect]")
         return "move the mouse to choose the side and the distance, or type the distance   (click / Enter: confirm)"
 
     def source_chains(self):
@@ -1055,6 +1134,8 @@ def build_edge_object(context, name, chains):
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global _line_meet, _segments_hit_rect, fit_circle_points, imprint_offset, objects_screen_bounds, ray_cast_opaque
+    global feature_chain_edges
+    from .rhino_commands import feature_chain_edges
     from .selection import _segments_hit_rect, objects_screen_bounds, ray_cast_opaque
     from .dimensions import fit_circle_points
     from .curve_edit import _line_meet

@@ -7,8 +7,9 @@ import numpy as np
 from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_3d
 from mathutils import Vector, geometry
 
-from .core import _link_object, grid_snap_len, grid_snap_step, plane_axes
-from .drawing import region_rv3d
+from .history import history_extrude, history_label, history_on, history_revolve, history_set
+from .core import AXES3, _link_object, grid_snap_len, grid_snap_step, plane_axes
+from .drawing import find_window_region, region_rv3d
 from .base import view_height
 from .transform import DessinTransform
 from .booleans import _drop_temp, _link_like
@@ -597,7 +598,8 @@ class _RevolveBody(DessinTransform):
     bl_idname = "dessin.revolve"
     bl_label = "Revolve"
     bl_description = ("Revolves curves around an axis defined by two points: select the curves, Enter, "
-                      "axis start, axis end, then Enter for a full circle or type the angle (C: cap ends, D: delete input)")
+                      "axis start, axis end, then Enter for a full circle or type the angle (C: cap ends, D: delete input, "
+                      "H: History, keeps an editable Screw modifier)")
 
     TITLE = "Revolve"
     NEEDED = 3
@@ -607,12 +609,16 @@ class _RevolveBody(DessinTransform):
     EDIT_OK = False
     MODES = ("keep the input curves", "delete the input curves")
     NO_SELECTION = "Select the curves to revolve first"
+    HISTORY_OK = True   # H : History = Yes / No (modificateur Screw) ; pas pour SubD Revolve
+    PLANAR = False      # l'axe peut quitter le plan de construction (axe Z en perspective) : les points accrochés gardent
+    #                     leur hauteur et X / Y / Z verrouillent les trois axes
 
     def invoke(self, context, event):
         self.mode = 0
         self._paths = None
         result = super().invoke(context, event)
         self.center = True          # cap activé par défaut (profil fermé, angle < 360°)
+        self.history = self.HISTORY_OK and history_on("revolve")
         if 'RUNNING_MODAL' in result:
             self.refresh(context)
         return result
@@ -622,10 +628,11 @@ class _RevolveBody(DessinTransform):
         if n == 0:
             return "start of the revolve axis"
         if n == 1:
-            return "end of the revolve axis   (Shift: orthogonal)"
+            return "end of the revolve axis   (Shift: orthogonal, or type its length then Enter)   [Enter: axis perpendicular to the plane]"
         cap = "cap ON" if self.center else "cap OFF"
         mode = self.MODES[self.mode]
-        return f"angle: type degrees then Enter, or Enter / click for 360°   [C: cap ends ({cap}), D: {mode}]"
+        hist = f"   [{history_label(getattr(self, 'history', False))}]" if self.HISTORY_OK else ""
+        return f"angle: type degrees then Enter, or Enter / click for 360°   [C: cap ends ({cap}), D: {mode}]{hist}"
 
     def capture_ghost(self, max_edges=0):
         self.ghost_pts = None
@@ -638,7 +645,8 @@ class _RevolveBody(DessinTransform):
         pass
 
     def handle_typing(self, event):
-        return len(self.points) >= 2 and super().handle_typing(event)
+        # 1 point : longueur de l'axe (utile quand la souris ne peut pas désigner de hauteur, vue de dessus) ; 2 points : angle
+        return len(self.points) >= 1 and super().handle_typing(event)
 
     def profile_paths(self, context):
         if self._paths is None:
@@ -662,6 +670,28 @@ class _RevolveBody(DessinTransform):
         super().reset_state()
 
     def modal(self, context, event):
+        if (self.HISTORY_OK and not self.selecting and event.value == 'PRESS' and event.type == 'H'
+                and not (event.ctrl or event.alt or event.oskey or event.shift)):
+            self.history = not getattr(self, "history", False)      # H : History = Yes / No (modificateur Screw modifiable)
+            history_set("revolve", self.history)
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+        if (not self.selecting and len(self.points) == 1 and event.value == 'PRESS'
+                and event.type in {'RET', 'NUMPAD_ENTER', 'SPACE'} and self.area is not None and context.area is not None
+                and find_window_region(self.area, event.mouse_x, event.mouse_y) is not None and not self.mouse_over_ui(event)):
+            a, d = self.axis_end()
+            if not any(self.typed):
+                # comme Rhino : Entrée après le premier point = axe par ce point, perpendiculaire au plan de construction
+                d = plane_axes(self.axis)[2] * max(d.length, 1.0)
+            elif self.typed_value(0) is None:
+                d = Vector()                            # longueur tapée : fin de l'axe le long de la direction en cours
+            if d.length > 1e-9:
+                self.points.append(a + d)
+                self.typed = ['', '', '']
+                self.field = 0
+                self.lock = None
+                self.refresh(context)
+            return {'RUNNING_MODAL'}
         if (not self.selecting and len(self.points) == 2 and event.value == 'PRESS'
                 and event.type in {'RET', 'NUMPAD_ENTER', 'SPACE'} and not any(self.typed)):
             self.finish_shape(context)
@@ -674,11 +704,28 @@ class _RevolveBody(DessinTransform):
         a = self.points[0]
         b = self.points[1] if len(self.points) > 1 else self.cur
         d = b - a
-        if len(self.points) == 1 and self.ortho:
+        if len(self.points) != 1:
+            return a, d
+        if self.lock is not None:
+            ax = AXES3[self.lock]                       # axe verrouillé : la souris ne donne que le sens et la longueur
+            d = ax * d.dot(ax)
+            if d.length < 1e-9 and self.typed_value(0) is not None:
+                d = ax.copy()                           # vue de dessus + Z : pas de hauteur à la souris, la longueur est tapée
+        elif self.ortho or (self.snap_screen is None and self.scene_ortho()):
             u, v, _ = plane_axes(self.axis)
             du, dv = d.dot(u), d.dot(v)
             d = u * du if abs(du) >= abs(dv) else v * dv
+        L = self.typed_value(0)
+        if L is not None and d.length > 1e-9:
+            d = d.normalized() * L
         return a, d
+
+    @staticmethod
+    def scene_ortho():
+        try:
+            return bool(bpy.context.scene.dessin.ortho)
+        except (AttributeError, ReferenceError):
+            return False
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -713,12 +760,19 @@ class _RevolveBody(DessinTransform):
             paths = object_paths(obj, dg)
             if not paths:
                 continue
+            if getattr(self, "history", False):
+                ob = history_revolve(context, paths, o, d, angle)
+                if ob is not None:
+                    made.append(ob)
+                    continue
             V, F = revolve_surface(paths, o, d, angle, cap)
             made.append(mesh_object_from_arrays(context, "Revolve", V, F, o, True))
         if not made:
             self.report({'WARNING'}, "Revolve works on curves (or outlines without faces)")
             self.committed = True
             return None
+        if any(ob.modifiers for ob in made):
+            cmd_notice("Revolve: History = Yes. Change the angle in the Modifiers tab (Revolve > Angle)")
         if delete:
             delete_objects(objs)
             self.items = []
@@ -957,20 +1011,29 @@ def nest_groups(groups):
             info.append((gi, P, c, nrm, float(pl[3])))
     for a_ in range(len(info)):
         ga, Pa, ca, na, aa = info[a_]
-        u = Pa[1] - Pa[0]
+        d = Pa - np.roll(Pa, 1, axis=0)                 # axe u : le plus long côté (deux points confondus ne le faussent pas)
+        u = d[int(np.argmax(np.einsum('ij,ij->i', d, d)))]
         u = u - na * float(u.dot(na))
-        u = u / (np.linalg.norm(u) or 1.0)
+        nu = float(np.linalg.norm(u))
+        if nu < 1e-12:
+            continue
+        u = u / nu
         v = np.cross(na, u)
         scale = float(np.ptp(Pa, axis=0).max())
         flat_a = np.stack([(Pa - ca) @ u, (Pa - ca) @ v], axis=1)
+        lo_a, hi_a = flat_a.min(axis=0), flat_a.max(axis=0)
         for b_ in range(len(info)):
             gb, Pb, _cb, nb, ab = info[b_]
             if gb == ga or ab >= aa or abs(float(na.dot(nb))) < 0.9999:
                 continue
             if float(np.abs((Pb - ca) @ na).max()) > max(1e-3 * scale, 1e-7):
                 continue
-            q = Pb[0] - ca
-            if _point_in_poly(np.array([q @ u, q @ v]), flat_a):
+            Q = Pb - ca
+            flat_b = np.stack([Q @ u, Q @ v], axis=1)
+            if (flat_b.min(axis=0) < lo_a).any() or (flat_b.max(axis=0) > hi_a).any():
+                continue                                # déborde du contour A : ce n'est pas un trou
+            step = max(1, len(flat_b) // 48)            # un trou est ENTIÈREMENT dedans : on teste tout le contour
+            if all(_point_in_poly(p, flat_a) for p in flat_b[::step]):
                 parent[find(gb)] = find(ga)
     out = {}
     for gi in range(n):
@@ -982,7 +1045,7 @@ class ExtrudeCrvLogic(DessinTransform):
     bl_idname = "dessin.extrude_crv"
     bl_label = "Extrude Curve"
     bl_description = ("Extrudes curves, outlines or flat surfaces into a volume: select them, Enter, base point, then the height "
-                      "(mouse or typed value, Enter). C: cap the ends, D: delete the input")
+                      "(mouse or typed value, Enter). C: Solid Yes / No (No: the surface only, without caps), D: delete the input")
 
     TITLE = "Extrude"
     NEEDED = 2
@@ -1004,6 +1067,7 @@ class ExtrudeCrvLogic(DessinTransform):
         self.taper = mem.get("taper", False) if self.EXTRA_OPTS else False
         self.topoint = mem.get("topoint", False) if self.EXTRA_OPTS else False
         self.draft = mem.get("draft", 5.0)
+        self.history = history_on(self.bl_idname)
         self.NUMFIELDS = 2 if self.taper and not self.topoint else 1
         if 'RUNNING_MODAL' in result:
             self.refresh(context)
@@ -1012,9 +1076,11 @@ class ExtrudeCrvLogic(DessinTransform):
     EXTRA_OPTS = False      # BothSides / Tapered / ToPoint (Extrude Curve seulement)
 
     def prompt(self):
+        # Solid = Yes / No, comme dans Rhino : No donne la surface seule (sans les bouchons), à épaissir ensuite
+        solid = f"C: Solid = {'Yes' if self.center else 'No (surface only)'}"
+        hist = f"[{history_label(getattr(self, 'history', False))}]"         # sa propre puce, toujours à la même place
         if not self.points:
-            return "apex position on the plane (then its height)" if getattr(self, "topoint", False) else "base point"
-        cap = "cap ON" if self.center else "cap OFF"
+            return ("apex position on the plane (then its height)" if getattr(self, "topoint", False) else "base point") + f"   [{solid}]   {hist}"
         extra = ""
         if self.EXTRA_OPTS:
             ang = self.draft_deg()
@@ -1022,13 +1088,19 @@ class ExtrudeCrvLogic(DessinTransform):
                      f"({f'{ang:g}°, Tab: angle' if self.taper else 'OFF'}), P: to point ({'ON' if self.topoint else 'OFF'})")
         what = "apex height" if getattr(self, "topoint", False) else "height"
         return (f"{what}: move the mouse or type the value then Enter   "
-                f"[C: cap the ends ({cap}), D: {self.MODES[self.mode]}{extra}, Shift: orthogonal]")
+                f"[{solid}, D: {self.MODES[self.mode]}{extra}, Shift: orthogonal]   {hist}")
 
     def draft_deg(self):
         t = self.typed_raw(1) if self.taper else None
         return t if t is not None else self.draft
 
     def modal(self, context, event):
+        if (not getattr(self, "selecting", False) and event.value == 'PRESS' and event.type == 'H'
+                and not (event.ctrl or event.alt or event.oskey or event.shift)):
+            self.history = not getattr(self, "history", False)      # H : History = Yes / No (modificateur modifiable)
+            history_set(self.bl_idname, self.history)
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
         if (self.EXTRA_OPTS and not getattr(self, "selecting", False) and event.value == 'PRESS'
                 and event.type in {'B', 'T', 'P'} and not (event.ctrl or event.alt or event.oskey)):
             if event.type == 'B':
@@ -1241,9 +1313,18 @@ class ExtrudeCrvLogic(DessinTransform):
                 if left == 0:
                     groups = [[pc] for pc in chained]
             groups = nest_groups(groups)      # contours imbriqués (même venant d'objets différents) : un seul solide avec trou, comme Rhino
+        history = getattr(self, "history", False)
+        if history and opts:
+            cmd_notice("Extrude: History is not available with BothSides, Tapered or ToPoint: a plain mesh was created")
+            history = False
         for paths in groups:
             if not paths:
                 continue
+            if history:
+                ob = history_extrude(context, paths, vec, cap)
+                if ob is not None:
+                    made.append(ob)
+                    continue
             if opts:
                 V, F = extrude_general(paths, vec, cap, opts["both"], opts["taper"], opts["apex"])
                 if not len(F):
@@ -1255,6 +1336,10 @@ class ExtrudeCrvLogic(DessinTransform):
             self.report({'WARNING'}, "Extrude works on curves, outlines and flat surfaces")
             self.committed = True
             return None
+        if any(ob.modifiers for ob in made):
+            solid_md = any(md.type == 'SOLIDIFY' for ob in made for md in ob.modifiers)
+            cmd_notice("Extrude: History = Yes. Change the height in the Modifiers tab (Extrude > "
+                       + ("Thickness)" if solid_md else "Screw)"))
         if delete:
             delete_objects(objs)
             self.items = []
@@ -1271,8 +1356,8 @@ class DESSIN_OT_extrude_crv(ExtrudeCrvLogic):
     bl_idname = "dessin.extrude_crv"
     bl_label = "Extrude Curve"
     bl_description = ("Like ExtrudeCrv: extrudes curves, outlines or flat surfaces into a volume: select them, Enter, base point, "
-                      "then the height (mouse or typed value, Enter). C: cap (Solid), D: delete the input, B: both sides, "
-                      "T: tapered (draft angle, Tab to type it), P: to point")
+                      "then the height (mouse or typed value, Enter). C: Solid Yes / No (No: the surface only, without caps), D: delete the input, B: both sides, "
+                      "T: tapered (draft angle, Tab to type it), P: to point, H: History (keeps an editable modifier)")
     EXTRA_OPTS = True
 
 
@@ -1360,7 +1445,8 @@ class DESSIN_OT_extrude_srf(ExtrudeCrvLogic):
     bl_label = "Extrude Surface"
     bl_description = ("Extrudes surfaces (faces) into a solid along their normal: select them, or click a face of a solid or "
                       "a polysurface (like a sub-object face in Rhino), Enter, base point, then the height "
-                      "(mouse or typed value, Enter). C: cap the ends, D: delete the input")
+                      "(mouse or typed value, Enter). C: Solid Yes / No (No: the surface only, without caps), D: delete the input, "
+                      "H: History (keeps an editable modifier)")
     NO_SELECTION = "Select the surfaces to extrude first"
 
     # ---- faces de solides / polysurfaces : un clic choisit la face, comme Ctrl+Maj+clic dans Rhino ----
@@ -1922,7 +2008,7 @@ class DESSIN_OT_planar_srf(_ProfileOp, bpy.types.Operator):
 
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
-    global IMPRINT_LAYER, _pip_np, cmd_log, set_prompt
+    global IMPRINT_LAYER, _pip_np, cmd_log, cmd_notice, set_prompt
     from .hatch import _pip_np
-    from .cplane import cmd_log, set_prompt
+    from .cplane import cmd_log, cmd_notice, set_prompt
     from .pushpull import IMPRINT_LAYER

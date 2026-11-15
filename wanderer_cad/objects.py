@@ -177,6 +177,43 @@ class DESSIN_MT_ctx_material(bpy.types.Menu):
         layout.operator(DESSIN_OT_material_remove_all.bl_idname, text="Remove All Materials", icon='TRASH')
 
 
+DISPLAY_AS_ITEMS = (('BOUNDS', "Bounds", "Show only the bounding box"), ('WIRE', "Wire", "Show the object as a wireframe"),
+                    ('SOLID', "Solid", "Show the object as a solid, without its textures"),
+                    ('TEXTURED', "Textured", "Show the object with its textures (Blender default)"))
+
+
+class DESSIN_OT_display_as(bpy.types.Operator):
+    bl_idname = "dessin.display_as"
+    bl_label = "Display As"
+    bl_description = "How the selected objects are shown in the viewport (Object properties > Viewport Display > Display As)"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    type: bpy.props.EnumProperty(name="Display As", items=DISPLAY_AS_ITEMS, default='TEXTURED')
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and bool(context.selected_objects)
+
+    def execute(self, context):
+        for o in context.selected_objects:
+            o.display_type = self.type
+        return {'FINISHED'}
+
+
+class DESSIN_MT_ctx_display(bpy.types.Menu):
+    bl_idname = "DESSIN_MT_ctx_display"
+    bl_label = "Display As"
+
+    def draw(self, context):
+        layout = self.layout
+        sel = context.selected_objects
+        ref = context.active_object if context.active_object in sel else (sel[0] if sel else None)
+        current = ref.display_type if ref is not None else None
+        for ident, name, _desc in DISPLAY_AS_ITEMS:       # un point devant l'affichage en cours de l'objet actif
+            layout.operator(DESSIN_OT_display_as.bl_idname, text=name,
+                            icon='LAYER_ACTIVE' if ident == current else 'BLANK1').type = ident
+
+
 class DESSIN_MT_ctx_select(bpy.types.Menu):
     bl_idname = "DESSIN_MT_ctx_select"
     bl_label = "Select"
@@ -282,151 +319,6 @@ def _rebuild_spline(cu, kind, pts, closed):
     sp.resolution_u = 12
 
 
-class DESSIN_OT_extend_crv(bpy.types.Operator):
-    bl_idname = "dessin.extend_crv"
-    bl_label = "Extend Curve"
-    bl_description = ("Extends the selected curves at one or both ends: by a length, or up to the nearest other curve / outline "
-                      "(the extension follows the end of the curve). Command line: ExtendCrv")
-    bl_options = {'REGISTER', 'UNDO'}
-
-    mode: bpy.props.EnumProperty(
-        name="Extend", items=(('LENGTH', "By length", "Extends the end by the given length"),
-                              ('BOUNDARY', "To boundary", "Extends up to the nearest other curve or outline")), default='LENGTH')
-    end: bpy.props.EnumProperty(
-        name="End", items=(('END', "End", "Last point of the curve"), ('START', "Start", "First point of the curve"),
-                           ('BOTH', "Both", "Both ends")), default='END')
-    length: bpy.props.FloatProperty(name="Length", default=1.0, min=0.0, unit='LENGTH')
-
-    @classmethod
-    def poll(cls, context):
-        return context.mode == 'OBJECT' and any(o.type == 'CURVE' for o in context.selected_objects)
-
-    def invoke(self, context, event):
-        return context.window_manager.invoke_props_dialog(self)
-
-    def draw(self, context):
-        lay = self.layout
-        lay.prop(self, "mode")
-        lay.prop(self, "end")
-        if self.mode == 'LENGTH':
-            lay.prop(self, "length")
-
-    @staticmethod
-    def _boundaries(context, exclude):
-        dg = context.evaluated_depsgraph_get()
-        segs = []
-        for obj in context.visible_objects:
-            if obj in exclude:
-                continue
-            g = wire_graph(obj, dg)
-            if g is None:
-                continue
-            verts, edges = g
-            segs += [(verts[i], verts[j]) for i, j in edges]
-            if len(segs) > 30000:
-                break
-        return segs
-
-    @staticmethod
-    def _hit(p, d, segs, tol=1e-3):
-        best = None
-        for a, b in segs:
-            r = geometry.intersect_line_line(p, p + d, a, b)
-            if r is None:
-                continue
-            c1, c2 = r
-            if (c1 - c2).length > tol:
-                continue
-            t = (c1 - p).dot(d)
-            ab = b - a
-            l2 = ab.dot(ab)
-            if t <= 1e-6 or l2 < 1e-18:
-                continue
-            u = (c2 - a).dot(ab) / l2
-            if -1e-6 <= u <= 1.0 + 1e-6 and (best is None or t < best):
-                best = t
-        return best
-
-    def _extent(self, p, d, segs):
-        """Longueur d'extension au point monde p dans la direction d (None : aucune limite trouvée)."""
-        if self.mode == 'LENGTH':
-            return self.length
-        return self._hit(p, d, segs)
-
-    def execute(self, context):
-        sel = [o for o in context.selected_objects if o.type == 'CURVE']
-        segs = self._boundaries(context, set(sel)) if self.mode == 'BOUNDARY' else []
-        ends = {'END': (False,), 'START': (True,), 'BOTH': (False, True)}[self.end]
-        done = missed = 0
-        for obj in sel:
-            mw = obj.matrix_world
-            inv = mw.inverted()
-            m3 = mw.to_3x3()
-            for sp in obj.data.splines:
-                if sp.use_cyclic_u:
-                    continue
-                for at_start in ends:
-                    if sp.type == 'BEZIER':
-                        bps = sp.bezier_points
-                        if len(bps) < 2:
-                            continue
-                        data = [(bp.co.copy(), bp.handle_left.copy(), bp.handle_right.copy(), bp.handle_left_type, bp.handle_right_type)
-                                for bp in bps]
-                        if at_start:
-                            co, hl, hr = data[0][0], data[0][1], data[0][2]
-                            d = m3 @ (co - hr if (co - hr).length > 1e-9 else co - data[1][0])
-                        else:
-                            co, hl, hr = data[-1][0], data[-1][1], data[-1][2]
-                            d = m3 @ (co - hl if (co - hl).length > 1e-9 else co - data[-2][0])
-                        if d.length < 1e-12:
-                            continue
-                        d.normalize()
-                        pw = mw @ co
-                        ln = self._extent(pw, d, segs)
-                        if ln is None:
-                            missed += 1
-                            continue
-                        qw = pw + d * ln
-                        q = inv @ qw
-                        dl = (inv.to_3x3() @ d) * (ln / 3.0)
-                        new = (q, q - dl, q + dl, 'FREE', 'FREE')
-                        if at_start:
-                            new = (q, q + dl, q - dl, 'FREE', 'FREE')       # le point de départ « regarde » vers l'extérieur
-                            data.insert(0, new)
-                        else:
-                            data.append(new)
-                        bps.add(1)
-                        for bp, (c, l, r, tl, tr) in zip(bps, data):
-                            bp.handle_left_type = bp.handle_right_type = 'FREE'
-                            bp.co = c
-                            bp.handle_left, bp.handle_right = l, r
-                            bp.handle_left_type, bp.handle_right_type = tl, tr
-                    else:
-                        pts = [Vector(pt.co[:3]) for pt in sp.points]
-                        if len(pts) < 2:
-                            continue
-                        a, b = (pts[0], pts[1]) if at_start else (pts[-1], pts[-2])
-                        d = m3 @ (a - b)
-                        if d.length < 1e-12:
-                            continue
-                        d.normalize()
-                        pw = mw @ a
-                        ln = self._extent(pw, d, segs)
-                        if ln is None:
-                            missed += 1
-                            continue
-                        q = inv @ (pw + d * ln)
-                        pts = [q] + pts if at_start else pts + [q]
-                        kind, closed, order = sp.type, sp.use_cyclic_u, sp.order_u
-                        sp.points.add(1)
-                        for pt, c in zip(sp.points, pts):
-                            pt.co = (c.x, c.y, c.z, 1.0)
-                    done += 1
-        if missed:
-            self.report({'WARNING'}, f"{missed} end(s) have no boundary in their direction")
-        return {'FINISHED'} if done else {'CANCELLED'}
-
-
 def _act_invoke(op):
     def run(context):
         mod, name = op.split(".")
@@ -521,6 +413,8 @@ def ctx_extra_items(layout, context):
         layout.operator(DESSIN_OT_track_to.bl_idname, text="Track To (aim at active object)", icon='TRACKER')
         layout.operator(DESSIN_OT_track_to.bl_idname, text="Clear Track To", icon='X').clear = True
     if context.mode == 'OBJECT':
+        if context.selected_objects:
+            layout.menu(DESSIN_MT_ctx_display.bl_idname, icon='SHADING_WIRE')      # Display As : Bounds / Wire / Solid / Textured
         layout.menu(DESSIN_MT_ctx_material.bl_idname, icon='MATERIAL')
     layout.menu(DESSIN_MT_ctx_select.bl_idname, icon='RESTRICT_SELECT_OFF')
 

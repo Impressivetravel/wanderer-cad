@@ -76,8 +76,10 @@ try:
                       ("extrairesrf", "dessin.extract_srf_tool"), ("dupliquerarete", "dessin.dup_edge_tool"), ("contours", "dessin.contour_tool")):
         sg = m.cmd_suggest(word)
         chk(f"français : alias « {word} »", bool(sg) and sg[0]["key"] == "tool:" + tid, [(e["label"], e["key"]) for e in sg[:2]])
-    fr = m.tr_text("Duplicate Border: a closed solid has no free border  ·  use Duplicate Edge (DupEdge) to copy one of its edges")
-    chk("français : le message du solide fermé est traduit", "solide fermé" in fr and "DupEdge" in fr and "closed" not in fr, fr)
+    fr = m.tr_text("Duplicate Border: a closed solid has no free border  ·  Ctrl+Shift+click a face, or use DupFaceBorder")
+    chk("français : le message du solide fermé est traduit", "solide fermé" in fr and "DupFaceBorder" in fr and "Ctrl+Maj+clic" in fr and "closed" not in fr and "click" not in fr, fr)
+    sg = m.cmd_suggest("dupliquerbordface")
+    chk("français : alias « dupliquerbordface »", bool(sg) and sg[0]["key"] == "tool:dessin.dup_face_border_tool", [(e["label"], e["key"]) for e in sg[:2]])
     fr = m.tr_text("click the surfaces first, then Enter")
     chk("français : « cliquer d'abord les surfaces, puis Entrée »", fr == "cliquer d'abord les surfaces, puis Entrée", fr)
 finally:
@@ -117,7 +119,7 @@ Cb = cube(2.0); sel(Cb)
 e, err = typed("dupborder")
 chk("solide fermé sélectionné : aucune courbe (un solide n'a pas de bord libre)", invoked == ["dup_border"] and not curves(), (invoked, len(curves())))
 note = m.cmd_notice_text() or ""
-chk("... la barre de commande l'explique et propose Duplicate Edge", "closed solid" in note and "Duplicate Edge" in note, note)
+chk("... la barre de commande l'explique et propose Duplicate Face Border (le contour d'une face)", "closed solid" in note and "Ctrl+Shift+click" in note and "DupFaceBorder" in note, note)
 r, o = run(m.DESSIN_OT_dup_border)
 chk("... en avertissement", o._reports and o._reports[0][0] == 'WARNING' and "closed solid" in o._reports[0][1], o._reports)
 # boîte ouverte (sans couvercle) : la bordure est le carré du haut
@@ -194,9 +196,12 @@ chk("Pipe avec un maillage sélectionné (pas de courbe) : avertissement, l'outi
 # ================= 4. Commandes au survol =================
 SEC = "survol"
 clear(); m.cmd_notice_clear()
-for lab, tid, opname in (("Extract Surface", "dessin.extract_srf_tool", "extract_srf"), ("Duplicate Edge", "dessin.dup_edge_tool", "dup_edge")):
+HOVER = dict(ELEVEN); HOVER["Duplicate Face Border"] = ("dupfaceborder", "dessin.dup_face_border_tool")
+sg = m.cmd_suggest("dupborder")
+chk("« dupborder » donne toujours Duplicate Border en premier (et non la nouvelle commande)", bool(sg) and sg[0]["key"] == "tool:dessin.dup_border_tool", [e["key"] for e in sg[:3]])
+for lab, tid, opname in (("Extract Surface", "dessin.extract_srf_tool", "extract_srf"), ("Duplicate Edge", "dessin.dup_edge_tool", "dup_edge"), ("Duplicate Face Border", "dessin.dup_face_border_tool", "dup_face_border")):
     chk(f"{lab} : mode « now » (rien à désigner avant)", m.tool_run_mode(ctx, tid) == 'now')
-    e, err = typed(ELEVEN[lab][0])
+    e, err = typed(HOVER[lab][0])
     chk(f"{lab} depuis la ligne de commande : la commande démarre tout de suite (sans armer l'outil, qui prendrait le clic sur la suggestion pour une désignation)",
         err == "" and armed == [] and now == [opname] and not invoked, (err, armed, now))
     chk(f"... et Entrée la répète", m._CMD["last"] == "tool:" + tid and m.cmd_by_key(m._CMD["last"]) is not None, m._CMD["last"])
@@ -274,5 +279,36 @@ arc = 2 * nseg * math.sin(math.pi / (2 * nseg))            # longueur de la lign
 cuts = [sl.cut(z) for z in (0.5, 1.0, 1.5)]
 ok = all(len(chains) == 1 and chains[0][1] is False and abs(sum(np.linalg.norm(b - a) for a, b in zip(chains[0][0], chains[0][0][1:])) - arc) < 1e-6 for chains, _p in cuts)
 chk("Contour d'un demi-cylindre (surface ouverte) : un arc ouvert par plan, de la bonne longueur", ok, [[(len(c), cl) for c, cl in chains] for chains, _p in cuts])
+
+# ================= DupBorder sur une face choisie (Ctrl+Maj+clic), comme Rhino =================
+SEC = "DupBorder + face"
+def edit_on(o, pick):
+    sel(o); bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_mode(type='FACE')
+    bm = bmesh.from_edit_mesh(o.data); bm.faces.ensure_lookup_table()
+    for f in bm.faces: f.select_set(pick(f))
+    bmesh.update_edit_mesh(o.data)
+import bmesh
+clear(); m.cmd_notice_clear()
+Cb = cube(2.0, loc=(0, 0, 0)); edit_on(Cb, lambda f: f.normal.z > 0.5)
+chk("face du dessus choisie en Édition : « dupborder » part tout de suite (mode « now »)", m.tool_run_mode(ctx, "dessin.dup_border_tool") == 'now')
+r, o = run(m.DESSIN_OT_dup_border); cs = curves()
+chk("DupBorder sur une face d'un solide : une courbe fermée de 4 points, périmètre 8, à z=2", 'FINISHED' in r and len(cs) == 1 and cs[0].data.splines[0].use_cyclic_u
+    and len(cs[0].data.splines[0].points) == 4 and abs(clen(cs[0]) - 8.0) < 1e-6 and all(abs(p.co[2] - 2.0) < 1e-6 for p in cs[0].data.splines[0].points),
+    (r, [clen(c) for c in cs]))
+chk("... retour en mode Objet, la courbe est sélectionnée, le solide n'est pas modifié", BC.mode == 'OBJECT' and cs[0].select_get() and len(Cb.data.polygons) == 6)
+clear(); m.cmd_notice_clear()
+Cb = cube(2.0, tri=True); edit_on(Cb, lambda f: f.normal.z > 0.5)
+r, o = run(m.DESSIN_OT_dup_border); cs = curves()
+chk("... face triangulée en deux facettes : toujours une seule courbe de 4 points (la face entière)", 'FINISHED' in r and len(cs) == 1 and len(cs[0].data.splines) == 1
+    and abs(clen(cs[0]) - 8.0) < 1e-6, (r, [(len(s.points)) for c in cs for s in c.data.splines]))
+clear(); m.cmd_notice_clear()
+Cb = cube(2.0); edit_on(Cb, lambda f: False)
+r, o = run(m.DESSIN_OT_dup_border)
+chk("mode Édition sans face choisie : avertissement qui dit quoi faire, aucune courbe", 'CANCELLED' in r and not curves() and "Ctrl+Shift+click" in (m.cmd_notice_text() or ""), (r, m.cmd_notice_text()))
+bpy.ops.object.mode_set(mode='OBJECT')
+clear(); m.cmd_notice_clear()
+Cb = cube(2.0); sel(Cb); r, o = run(m.DESSIN_OT_dup_border)
+note = m.cmd_notice_text() or ""
+chk("objet entier solide fermé : message court qui parle de Ctrl+Maj+clic et de DupFaceBorder", 'CANCELLED' in r and "Ctrl+Shift+click" in note and "DupFaceBorder" in note and len(note) < 115, (len(note), note))
 
 summary()

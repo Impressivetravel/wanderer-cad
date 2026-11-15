@@ -64,7 +64,7 @@ class DESSIN_TT_selection_boite(bpy.types.WorkSpaceTool):
     )
 
     def draw_settings(context, layout, tool):
-        layout.label(text="Esc: deselect  ·  Double-click an edge: select the loop  ·  Drag an object: move  ·  drag empty space: box (left → right: inside, right → left: touched)  ·  Shift: add  ·  Ctrl/Cmd: remove  ·  Ctrl/Cmd+Shift: vertex / edge / face")
+        layout.label(text="Esc: deselect  ·  Double-click an edge: select the loop (Alt: ring; face mode: row of faces)  ·  Drag an object: move  ·  drag empty space: box (left → right: inside, right → left: touched)  ·  Shift: add  ·  Ctrl/Cmd: remove  ·  Ctrl/Cmd+Shift: vertex / edge / face")
 
 
 class DESSIN_TT_selection_lasso(bpy.types.WorkSpaceTool):
@@ -900,9 +900,9 @@ DESSIN_TT_blend_srf = _pick_then_run_tool(
     "DESSIN_TT_blend_srf", "dessin.blend_srf_tool", "dessin.blend_srf", "Blend Surface",
     "Creates a smooth surface between the facing edges of two surfaces or curves: click the two objects, then Enter / Space",
     "Click the two surfaces (or curves)  ·  Enter / Space: blend options  ·  Esc: leave")
-DESSIN_TT_blend_srf.bl_description = ("Creates a smooth surface between two edges: click the first edge (C: chain the connected edges), Enter, "
+DESSIN_TT_blend_srf.bl_description = ("Creates a smooth surface between two open edges: click the first edge (one side of the border; C: the whole border), Enter, "
                                       "click the second edge, Enter - then adjust the continuity and tension in the panel")
-DESSIN_TT_blend_srf.dessin_hint = "Click the first edge  ·  C: chain edges  ·  Enter  ·  second edge  ·  Enter  ·  Esc: leave"
+DESSIN_TT_blend_srf.dessin_hint = "Click the first edge, Enter  ·  click the second edge, Enter  ·  C: whole border  ·  Esc: leave"
 DESSIN_TT_blend_srf.bl_keymap = (("dessin.blend_srf", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
                                  ("dessin.blend_srf", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
                                  ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None))
@@ -973,11 +973,11 @@ DESSIN_TT_extrude.bl_context_mode = 'EDIT_MESH'
 DESSIN_TT_extrude_crv = _draw_tool_cls(
     "DESSIN_TT_extrude_crv", "dessin.extrude_crv_tool", "dessin.extrude_crv", "Extrude Curve",
     "Like ExtrudeCrv: extrudes curves, outlines or flat surfaces into a volume: select them, Enter, base point, then the height (mouse or typed value, Enter)",
-    "Select the curves first, Enter  ·  base point  ·  height  ·  C: cap  ·  D: delete input  ·  B: both sides  ·  T: tapered (Tab: angle)  ·  P: to point")
+    "Select the curves first, Enter  ·  base point  ·  height  ·  C: Solid Yes / No  ·  D: delete input  ·  B: both sides  ·  T: tapered (Tab: angle)  ·  P: to point")
 DESSIN_TT_extrude_srf = _draw_tool_cls(
     "DESSIN_TT_extrude_srf", "dessin.extrude_srf_tool", "dessin.extrude_srf", "Extrude Surface",
     "Extrudes surfaces into a solid along their normal: select them, Enter, base point, then the height (mouse or typed value, Enter)",
-    "Select the surfaces first, Enter  ·  base point  ·  height (mouse or typed)  ·  C: cap the ends  ·  D: delete the input")
+    "Select the surfaces first, Enter  ·  base point  ·  height (mouse or typed)  ·  C: Solid Yes / No  ·  D: delete the input")
 
 # ---- commandes Rhino de la 2.96.124 : un bouton par commande ----
 DESSIN_TT_pipe = _pick_then_run_tool(
@@ -1010,6 +1010,11 @@ DESSIN_TT_dup_edge = _draw_tool_cls(
     "Like DupEdge: click the edges of a surface or solid to copy them as curves",
     "Click: start  ·  hover an edge, click to copy it as a curve  ·  Enter / Esc: done", hover=False)
 DESSIN_TT_dup_edge._in_group = True         # menu déroulant de Duplicate Border
+DESSIN_TT_dup_face_border = _draw_tool_cls(
+    "DESSIN_TT_dup_face_border", "dessin.dup_face_border_tool", "dessin.dup_face_border", "Duplicate Face Border",
+    "Like DupFaceBorder: click the faces of a surface or solid to copy their border as curves (holes included)",
+    "Click: start  ·  hover a face, click to copy its border as a curve  ·  Enter / Esc: done", hover=False)
+DESSIN_TT_dup_face_border._in_group = True  # menu déroulant de Duplicate Border
 DESSIN_TT_merge_faces = _pick_then_run_tool(
     "DESSIN_TT_merge_faces", "dessin.merge_faces_tool", "dessin.merge_faces", "Merge All Faces",
     "Like MergeAllFaces: merges the coplanar faces of the selected objects into single faces. Click the objects, then Enter",
@@ -1026,16 +1031,21 @@ DESSIN_TT_orient = _draw_tool_cls(
     "DESSIN_TT_orient", "dessin.orient_tool", "dessin.orient", "Orient",
     "Like Orient (2 points): moves and rotates the selection so that two reference points land on two target points (D: also scale, C: copy)",
     "Select the objects  ·  2 reference points, then 2 target points  ·  D: scale to the target length  ·  C: copy")
+DESSIN_TT_extend_crv = _draw_tool_cls(
+    "DESSIN_TT_extend_crv", "dessin.extend_crv_tool", "dessin.extend_crv", "Extend Curve",
+    "Like Extend: click near the end of a curve, then give its new end: click, type a length, or Enter to stop at the next curve, edge or surface. The curve keeps its shape",
+    "Click near the end of a curve  ·  new end: click, type a length, or Enter: up to the next curve or surface  ·  Esc: done")
+DESSIN_TT_extend_crv.dessin_icon = "extend_crv"
 for _t, _k in ((DESSIN_TT_pipe, "pipe"), (DESSIN_TT_intersect, "intersect"), (DESSIN_TT_section, "section"), (DESSIN_TT_contour, "contour"),
-               (DESSIN_TT_extract_srf, "extract_srf"), (DESSIN_TT_dup_border, "dup_border"), (DESSIN_TT_dup_edge, "dup_edge"),
+               (DESSIN_TT_extract_srf, "extract_srf"), (DESSIN_TT_dup_border, "dup_border"), (DESSIN_TT_dup_edge, "dup_edge"), (DESSIN_TT_dup_face_border, "dup_face_border"),
                (DESSIN_TT_merge_faces, "merge_faces"), (DESSIN_TT_unroll, "unroll"), (DESSIN_TT_rebuild_srf, "rebuild_srf"),
                (DESSIN_TT_orient, "orient")):
     _t.dessin_icon = _k
 # famille de la barre d'outils -> boutons ajoutés à la fin de cette famille
 RHINO_TOOLS = {
-    "curves": [DESSIN_TT_intersect, DESSIN_TT_section, DESSIN_TT_contour, DESSIN_TT_dup_border, DESSIN_TT_dup_edge],
+    "curves": [DESSIN_TT_intersect, DESSIN_TT_section, DESSIN_TT_contour, DESSIN_TT_dup_border, DESSIN_TT_dup_face_border, DESSIN_TT_dup_edge],
     "transform": [DESSIN_TT_orient],
-    "modify": [DESSIN_TT_merge_faces],
+    "modify": [DESSIN_TT_extend_crv, DESSIN_TT_merge_faces],
     "srf_edit": [DESSIN_TT_extract_srf, DESSIN_TT_unroll, DESSIN_TT_rebuild_srf],
     "solids": [DESSIN_TT_pipe],
 }
@@ -1057,8 +1067,7 @@ DESSIN_TT_layout_detail.dessin_icon = "detail"
 LAYOUT_TOOLS = [DESSIN_TT_layout, DESSIN_TT_layout_detail]     # à la fin de la famille Annotation de la barre
 
 # ordre dans la barre d'outils (un séparateur avant chaque famille)
-for _t in (DESSIN_TT_curve_cp, DESSIN_TT_curve_interp, DESSIN_TT_pen, DESSIN_TT_sketch):
-    _t._in_group = True   # menu déroulant des courbes (tête : Polyline)
+# Polyline, Control Point Curve, Interpolate Curve, Pen et Sketch : côte à côte dans la barre, sans menu déroulant
 for _t in (DESSIN_TT_srf_corners, DESSIN_TT_planar_srf, DESSIN_TT_edge_srf, DESSIN_TT_network_srf, DESSIN_TT_patch,      # tête : Plane
            DESSIN_TT_extrude_srf, DESSIN_TT_extrude_path,                                          # tête : Extrude Curve
            DESSIN_TT_rail_revolve,                                                                 # tête : Revolve

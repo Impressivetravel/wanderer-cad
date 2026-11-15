@@ -2,7 +2,7 @@
 
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
-> **Status: stable (2.96.126).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+> **Status: stable (2.96.127).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 
 ![The dimensioned drawing on the left, the model and the command line on the right](docs/images/napoleone-00-hero.jpg)
 
@@ -12,13 +12,14 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 
 ## Features
 
-- **Command line** at the bottom of the viewport: type a command name or an alias, then Enter or Space. Typed values (lengths, angles, coordinates) work with most tools, and **Ctrl/Cmd + V pastes numbers or a whole list of coordinates** into the running command.
+- **Command line** at the bottom of the viewport: type a command name or an alias, then Enter or Space. Typed values (lengths, angles, coordinates) work with most tools, and **Ctrl/Cmd + V pastes numbers or a whole list of coordinates** into the running command. You can add **your own aliases** (`aliasedit`, as in AutoCAD and Rhino), and the interface speaks **eleven languages**, each with the command aliases that language uses in AutoCAD and Rhino.
 - **Drawing**: polylines, control point curves, interpolated curves, rectangles, circles, ellipses, arcs, polygons, points, construction lines. `C` closes a curve, `F3` switches object snaps, **Enter repeats the last typed value**.
 - **Curve editing**: join, explode, trim, split, divide, overkill, fillet, chamfer, extend, offset, rebuild, simplify, change degree, insert and remove control points, match and blend curves.
 - **Curves from objects**: Intersect, Section, Contour, Duplicate Border, Duplicate Edge, Project.
 - **Transform**: move, copy, rotate, scale (reference points, 1D, 2D, to size), mirror, rectangular and polar arrays, align, stretch, **Orient**. Move, rotate and scale also work on curve points in Edit Mode.
 - **Gumball**: move, rotate and scale handles on the selection, plus an **extrusion sphere** and a **cut handle**: a closed flat curve cuts the solids on its way, or adds to them with Ctrl/Cmd.
 - **Surfaces and solids**: planar, edge and network surfaces, patch, extrude (straight, along a curve, both sides, tapered, to a point), revolve, loft, sweep, **Pipe**, booleans (each result is checked: closed solid, coherent volume), **PushPull on flat and curved faces**, fillet and chamfer on edges and between surfaces, extend, split at isocurve, untrim, offset surface, **Extract Surface**, **Merge All Faces**, **Unroll Surface**, **Rebuild Surface**. Explode separates a solid into its smooth surfaces.
+- **History** (option `H`, off by default) keeps the result editable: Extrude, Revolve, Thicken, Pipe and the booleans create a Blender modifier instead of a fixed mesh, so the height, the angle, the thickness or the radius can still be changed in the Modifiers tab, and a boolean follows its operand when you move it.
 - **SubD**: boxes, spheres, cylinders, cones, tori and planes, loft, sweep, revolve and MultiPipe over a quad control cage, with cage editing tools (crease, insert edge, bevel, inset, bridge...) and live symmetry.
 - **Precision**: object snaps (End, Near, Point, Mid, Cen, Int, Perp, Tan, Quad, Knot, Vertex) from the status bar or the OSnap menu, **one-shot snaps** (hold Shift over the snap boxes and click the ones you want for the next point), **Grid Snap** (`F9`, 10 cm by default), Ortho, axis locks (`X` / `Y` / `Z`), smart tracking (X / Y / Z lines and **the extension of the segment that ends at a tracked point**), polar tracking. A snap budget keeps very large scenes responsive.
 - **Annotation**: linear, continued / baseline, ordinate, radius, angle and arc length dimensions, center marks, text, area and length measurement, **Make 2D** drawings from a 3D model.
@@ -30,7 +31,7 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 - **Selection**: select, box, circle, lasso, selection filters, and `Ctrl/Cmd + Shift` sub-object selection (vertex, edge, face, or an area of points) straight into Edit Mode.
 - **Groups**, named view tabs and navigation presets.
 - **Mac**: `Cmd` acts as `Ctrl` in every gesture.
-- **Look**: themes Blueprint, Vellum and Ghost; icon styles Atlas, Blueprint, Ochre and Target.
+- **Look**: six themes — Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light); icon styles Atlas, Blueprint, Ochre and Target. A **Presets** row sets the whole workflow to Rhino, AutoCAD or Blender in one click.
 
 ## A complete example: two Napoleone coffee tables
 
@@ -89,13 +90,21 @@ The mouse navigation of the viewport can follow the program you come from — Bl
 
 ![Navigation style](docs/images/ui-navigation-style.jpg)
 
-Everything else is in the add-on preferences:
+Everything else is in the add-on preferences, in ten sections: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gumball, Toolbar, Performance, DXF / DWG and Shortcuts.
 
-![Add-on preferences](docs/images/ui-preferences.jpg)
+![Add-on preferences](docs/images/wassily-preferences.jpg)
 
-Three themes ship with the add-on and install in one click from those preferences. Here they are with the two tables in wireframe:
+*The Presets row sets the workflow (Rhino, AutoCAD, Blender) in one click; the theme has its own row just below. Every option a preset sets stays editable in the sections underneath.*
 
-![The three built-in themes](docs/images/napoleone-16-themes.jpg)
+The right-click menu gained a **Display As** submenu (Bounds, Wire, Solid, Textured) for the selected objects, with a dot on the current choice.
+
+![Display As in the object context menu](docs/images/wassily-display-as.jpg)
+
+Six themes ship with the add-on and install in one click from the preferences: **Blueprint**, **Carbon** and **Midnight** for the dark ones — the screenshots above are in Blueprint — and three light ones, here on the same model:
+
+![Graphite, Vellum and Ivory](docs/images/wassily-themes-light.jpg)
+
+*Left to right: **Graphite**, which follows the Rhino interface, **Vellum** and **Ivory**.*
 
 ## Installation
 

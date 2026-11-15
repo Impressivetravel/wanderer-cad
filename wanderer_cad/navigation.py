@@ -111,7 +111,8 @@ class DESSIN_OT_orbit_pan(bpy.types.Operator):
         return context.area is not None and context.area.type == 'VIEW_3D' and context.region_data is not None
 
     def invoke(self, context, event):
-        if navigate_or_menu(context, event, start_navigation):
+        btn = event.type
+        if navigate_or_menu(context, event, lambda c: start_navigation(c, btn)):
             return {'FINISHED'}
         return {'PASS_THROUGH'}      # perspective / vue libre : l'orbite de Blender (ou de votre keymap) s'applique
 
@@ -199,7 +200,7 @@ def navigate_or_menu(context, event, start):
     return True
 
 
-def start_navigation(context):
+def start_navigation(context, button=None):
     """Lance le pan (vues orthogonales alignées) ou l'orbite choisis. False : laisser Blender / votre keymap faire l'orbite."""
     area_type = context.area.type if context.area is not None else ''
     if area_type and area_type != 'VIEW_3D':        # tous les autres éditeurs : le bouton d'orbite fait le pan
@@ -253,7 +254,7 @@ class DESSIN_OT_orbit_hold(bpy.types.Operator):
         if event.type == 'MOUSEMOVE':
             tol = max(1, pref("mouse_menu_tol"))
             if abs(event.mouse_x - self._x) > tol or abs(event.mouse_y - self._y) > tol:
-                if not start_navigation(context):
+                if not start_navigation(context, self._btn):
                     try:
                         bpy.ops.view3d.rotate('INVOKE_DEFAULT')
                     except RuntimeError:
@@ -549,17 +550,60 @@ NAV_KEYS = {
 
 
 def apply_nav_inputs():
-    """Réglages natifs de Blender liés à la navigation (zoom vers le curseur, pivot, sens du zoom...)."""
+    """Réglage natif lié au clic droit bref. Les réglages de navigation de Blender (Auto Depth, zoom vers la souris,
+    sens du zoom, orbite autour de la sélection) ne sont plus écrasés à l'ouverture : seules les cases de Wanderer
+    les changent, une par une, quand vous les cochez."""
+    try:
+        if pref("mouse_menu") == 'RIGHT_CLICK':
+            bpy.context.preferences.inputs.drag_threshold_mouse = pref("mouse_menu_tol")     # seuil clic / glissement
+    except (AttributeError, RuntimeError):
+        pass
+
+
+NAV_INPUTS = {"nav_zoom_cursor": ("use_zoom_to_mouse",), "nav_auto_depth": ("use_mouse_depth_navigate",),
+              "nav_invert_zoom": ("invert_zoom_wheel", "invert_mouse_zoom")}
+_NAV_SYNC = {"on": False}
+
+
+def nav_input_set(name, value):
+    """Écrit dans Blender le réglage natif qui correspond à la case `name` de Wanderer."""
+    if _NAV_SYNC["on"]:
+        return
     try:
         inp = bpy.context.preferences.inputs
-        inp.use_zoom_to_mouse = pref("nav_zoom_cursor")
-        inp.use_rotate_around_active = True       # toujours : l'orbite tourne autour de la sélection
-        inp.use_mouse_depth_navigate = pref("nav_auto_depth")
-        inp.invert_zoom_wheel = pref("nav_invert_zoom")
-        inp.invert_mouse_zoom = pref("nav_invert_zoom")
-        if pref("mouse_menu") == 'RIGHT_CLICK':
-            inp.drag_threshold_mouse = pref("mouse_menu_tol")     # seuil clic / glissement de Blender
+        for attr in NAV_INPUTS[name]:
+            setattr(inp, attr, bool(value))
+    except (AttributeError, RuntimeError, KeyError):
+        pass
+
+
+def nav_inputs_sync(prefs):
+    """À l'ouverture : les cases de Wanderer reprennent les réglages de Blender (rien n'est écrit dans Blender)."""
+    if prefs is None:
+        return
+    _NAV_SYNC["on"] = True
+    try:
+        inp = bpy.context.preferences.inputs
+        for name, attrs in NAV_INPUTS.items():
+            v = bool(getattr(inp, attrs[0]))
+            if getattr(prefs, name) != v:
+                setattr(prefs, name, v)
     except (AttributeError, RuntimeError):
+        pass
+    finally:
+        _NAV_SYNC["on"] = False
+
+
+def nav_inputs_sync_soon():
+    def go():
+        try:
+            nav_inputs_sync(bpy.context.preferences.addons[__package__].preferences)
+        except (KeyError, AttributeError, ReferenceError):
+            pass
+        return None
+    try:
+        bpy.app.timers.register(go, first_interval=0.3)
+    except (AttributeError, ValueError):
         pass
 
 
@@ -761,6 +805,18 @@ def _update_cursor(self, context):
 def _update_nav_inputs(self, context):
     apply_nav_inputs()
     _update_view_keymap()
+
+
+def _update_zoom_cursor(self, context):
+    nav_input_set("nav_zoom_cursor", self.nav_zoom_cursor)
+
+
+def _update_auto_depth(self, context):
+    nav_input_set("nav_auto_depth", self.nav_auto_depth)
+
+
+def _update_invert_zoom(self, context):
+    nav_input_set("nav_invert_zoom", self.nav_invert_zoom)
 
 
 # ---- Named Views (vues nommées, comme dans Rhino) : menu « Named Views » de l'en-tête du viewport 3D ----

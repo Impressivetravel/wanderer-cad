@@ -8,6 +8,8 @@ import re
 import time
 from mathutils import Vector
 
+from .languages import LANG_ALIASES, LANG_LABELS
+
 
 TAU = 2.0 * math.pi
 SNAP_RADIUS = 14.0  # pixels
@@ -74,7 +76,7 @@ FR_LABELS = {
     "Extrude": "Extruder", "Extrude Curve": "Extruder la courbe", "Extrude Along Curve": "Extruder le long d'une courbe", "Extrude Surface": "Extruder une surface",
     "Fillet Edge": "Congé d'arête", "Clipping Plane": "Plan de coupe", "Fillet Curve": "Raccord", "Chamfer Curve": "Chanfrein", "Group": "Grouper", "Groups": "Groupes", "Join": "Joindre",
     "Lasso Select": "Sélection au lasso", "Leave the tool": "Quitter l'outil", "Loft": "Lissage", "Make 2D": "Créer le 2D",
-    "Match Surface": "Adapter la surface", "Material": "Matériau", "Mirror": "Miroir", "Move": "Déplacer",
+    "Match Surface": "Adapter la surface", "Material": "Matériau", "Display As": "Afficher comme", "Theme": "Thème", "Mirror": "Miroir", "Move": "Déplacer",
     "Move (base → destination)": "Déplacer (base → destination)", "Named Views": "Vues nommées",
     "Offset Edge": "Décaler l'arête", "Offset Surface": "Décaler la surface", "Overkill": "Nettoyer", "Inset": "Incruster", "SubD Loft": "Lissage SubD", "SubD Sweep 1": "Balayage SubD 1 rail", "SubD Sweep 2": "Balayage SubD 2 rails", "SubD Revolve": "Révolution SubD", "Through the curves": "Par les courbes", "Points per curve": "Points par courbe", "SubD Box": "Boîte SubD", "SubD Sphere": "Sphère SubD", "SubD Cylinder": "Cylindre SubD", "SubD Cone": "Cône SubD", "SubD Torus": "Tore SubD", "SubD Plane": "Plan SubD", "To SubD": "Vers SubD", "SubD to Mesh": "SubD vers maillage", "Toggle SubD Display": "Affichage SubD lisse / cage", "Crease": "Pli", "Remove Crease": "Retirer le pli", "Insert Edge": "Insérer une arête", "Slide": "Glisser", "Bridge": "Pont", "Fill": "Remplir", "Append Face": "Ajouter une face", "Merge Faces": "Fusionner les faces", "Weld": "Souder", "Stitch": "Coudre", "Extract Faces": "Extraire les faces", "Select Loop": "Sélectionner la boucle", "Select Ring": "Sélectionner l'anneau", "Symmetry X": "Symétrie X", "Symmetry Y": "Symétrie Y", "Symmetry Z": "Symétrie Z", "SubD faces": "Faces SubD", "Pipe radius": "Rayon des tubes", "ID Point": "Point ID", "Show Edges": "Afficher les arêtes",
     "Patch": "Remplissage", "Pick object": "Choisir un objet", "Planar Surface": "Surface plane", "Plane": "Plan",
@@ -133,13 +135,15 @@ FR_ALIASES = {
     "match_srf_tool": "adapter", "rail_revolve_tool": "revolrail", "shell_tool": "coque", "xline_tool": "do droite",
     "stretch_tool": "e etirer", "divide_tool": "div me diviser mesurer", "overkill_tool": "nettoyer", "clip_plane_tool": "plancoupe plandecoupe clip", "fillet_curve_tool": "raccord", "chamfer_curve_tool": "chanfrein",
     "pipe_tool": "tuyau", "intersect_tool": "intersectionobjets", "section_tool": "coupe", "contour_tool": "contours",
-    "extract_srf_tool": "extrairesrf", "dup_border_tool": "dupliquerbord dupliquerbordure", "dup_edge_tool": "dupliquerarete",
+    "extract_srf_tool": "extrairesrf", "dup_border_tool": "dupliquerbord dupliquerbordure", "dup_edge_tool": "dupliquerarete", "dup_face_border_tool": "dupliquerbordface dupliquerbordureface", "extend_crv_tool": "prolonger prolongercourbe allonger",
     "merge_faces_tool": "fusionnerfaces", "unroll_tool": "developper developpersrf", "rebuild_srf_tool": "reconstruiresrf",
     "orient_tool": "orienter",
 }
 FR_LABELS.update({
     "Pipe": "Tuyau", "Intersect": "Intersection d'objets", "Section": "Section", "Contour": "Contour",
-    "Extract Surface": "Extraire une surface", "Duplicate Border": "Dupliquer la bordure", "Duplicate Edge": "Dupliquer une arête",
+    "Extend Curve": "Prolonger la courbe",
+    "Alias Editor": "Éditeur d'alias",
+    "Extract Surface": "Extraire une surface", "Duplicate Border": "Dupliquer la bordure", "Duplicate Edge": "Dupliquer une arête", "Duplicate Face Border": "Dupliquer la bordure d'une face",
     "Merge All Faces": "Fusionner les faces coplanaires", "Unroll Surface": "Développer une surface",
     "Rebuild Surface": "Reconstruire une surface", "Orient": "Orienter",
 })
@@ -155,6 +159,7 @@ FR_LABELS.update({
     "Export PDF": "Exporter en PDF", "Export SVG": "Exporter en SVG", "Export DXF": "Exporter en DXF", "Page": "Page", "Print": "Impression",
 })
 FR_ACTION_ALIASES = {
+    "Alias Editor": "alias editeuralias modifieralias",
     "Layout": "miseenpage presentation nouvellemiseenpage", "Model": "objet modele ongletobjet",
     "Next Layout": "miseenpagesuivante", "Paper Space": "papier espacepapier epapier", "Update Viewports": "majfenetres majdetails regen", "Viewport Scale": "echellefenetre echelledetail",
     "Fit Viewport": "cadrerfenetre cadrerdetail", "Pan Viewport": "eobjet espaceobjet panofenetre panodetail", "Page Setup": "formatpapier", "Export PDF": "imprimer tracer exporterpdf",
@@ -189,6 +194,23 @@ FR_PHRASES = (
     ("click to set the direction (steps of 90°)", "cliquer pour fixer la direction (pas de 90°)"),
     ("click or drag a box to select the edges", "cliquer ou tracer une zone pour sélectionner les arêtes"),
     ("click the edges / a curve or drag a box", "cliquer les arêtes / une courbe ou tracer une zone"),
+    ("click: the whole edge, Ctrl+click: one segment, click a selected edge: remove it", "clic : toute l'arête, Ctrl+clic : un seul segment, clic sur une arête choisie : la retirer"),
+    ("click: the whole edge, Ctrl+click: one segment", "clic : toute l'arête, Ctrl+clic : un seul segment"),
+    ("click near the end of the curve to extend", "cliquer près du bout de la courbe à prolonger"),
+    ("Enter / Esc: finish", "Entrée / Échap : terminer"),
+    ("new end: move the mouse and click, or type the length then Enter", "nouveau bout : déplacer la souris et cliquer, ou taper la longueur puis Entrée"),
+    ("Enter: up to the next curve or surface", "Entrée : jusqu'à la courbe ou la surface suivante"),
+    ("next curve or surface at", "courbe ou surface suivante à"),
+    ("stops on the curve or surface it meets", "s'arrête sur la courbe ou la surface rencontrée"),
+    ("Click near the end of an open curve", "Cliquer près du bout d'une courbe ouverte"),
+    ("Extension length must be positive", "La longueur du prolongement doit être positive"),
+    ("click the first edge, then Enter", "cliquer la première arête, puis Entrée"),
+    ("click the second edge, then Enter", "cliquer la deuxième arête, puis Entrée"),
+    ("ChainEdges (whole border)", "Chaîner (tout le bord)"),
+    ("Shift: add", "Maj : ajouter"), ("Ctrl: remove", "Ctrl : retirer"), ("Backspace: clear", "Retour arrière : effacer"),
+    ("no open edge found", "aucun bord ouvert trouvé"),
+    ("it joins the open edges of surfaces, or curves (a closed solid has none: detach a face with Extract Surface first)",
+     "il relie les bords ouverts de surfaces, ou des courbes (un solide fermé n'en a pas : détacher d'abord une face avec Extraire une surface)"),
     ("click the corners of the contour", "cliquer les coins du contour"),
     ("click a circle or an arc", "cliquer un cercle ou un arc"),
     ("click to confirm", "cliquer pour valider"),
@@ -274,6 +296,8 @@ FR_PHRASES = (
     ("C: copy / replace", "C : copier / remplacer"), ("C: from center", "C : depuis le centre"), ("R: free reference", "R : référence libre"), ("R: reference by two points", "R : référence par deux points"), ("R: reference / free reference", "R : référence / référence libre"), ("R: next mode", "R : mode suivant"), ("R: back to normal", "R : retour au mode normal"), ("reference angle: first point", "angle de référence : premier point"), ("reference angle: second point", "angle de référence : second point"), ("new angle: point, or type the angle then Enter", "nouvel angle : point, ou taper l'angle puis Entrée"), ("reference length: first point", "longueur de référence : premier point"), ("reference length: second point", "longueur de référence : second point"), ("new length: point (distance from the base point), or type the length then Enter", "nouvelle longueur : point (distance depuis le point de base), ou taper la longueur puis Entrée"), ("R: reference", "R : référence"),
     ("R: back to normal", "R : retour à la normale"),
     ("C: cap the ends", "C : boucher les extrémités"), ("D: delete the input", "D : supprimer l'entrée"),
+    ("H: History = Yes", "H : Historique = Oui"), ("History = Yes", "Historique = Oui"), ("History = No", "Historique = Non"), ("H: History = No", "H : Historique = Non"),
+    ("C: Solid = Yes", "C : Solide = Oui"), ("C: Solid = No (surface only)", "C : Solide = Non (surface seule)"),
     ("Esc: cancel", "Échap : annuler"), ("Enter/Space: quit", "Entrée/Espace : quitter"), ("Enter/Space: confirm", "Entrée/Espace : valider"),
     ("Esc: exit", "Échap : sortir"), ("Esc: leave", "Échap : quitter"),
     ("X/Y/Z: lock axis", "X/Y/Z : verrouiller l'axe"), ("X/Y/Z: change axis, same key: release", "X/Y/Z : changer d'axe, même touche : relâcher"),
@@ -315,7 +339,9 @@ FR_PHRASES = (
     ("click the surface first, then Enter", "cliquer d'abord la surface, puis Entrée"),
     ("click the solids or surfaces first, then Enter", "cliquer d'abord les solides ou les surfaces, puis Entrée"),
     ("a closed solid has no free border", "un solide fermé n'a pas de bord libre"),
-    ("use Duplicate Edge (DupEdge) to copy one of its edges", "utiliser Dupliquer une arête (DupEdge) pour copier une de ses arêtes"),
+    ("Ctrl+Shift+click a face, or use DupFaceBorder", "Ctrl+Maj+clic sur une face, ou utiliser DupFaceBorder"),
+    ("select a face first (Ctrl+Shift+click), then DupBorder", "choisir d'abord une face (Ctrl+Maj+clic), puis DupBorder"),
+    ("curve(s) on the selected face(s)", "courbe(s) sur la ou les faces choisies"),
     ("no coplanar faces to merge", "aucune face coplanaire à fusionner"),
     ("Select the surfaces, solids or curves to cut first", "Sélectionner d'abord les surfaces, solides ou courbes à couper"),
     ("the plane does not cross the selected objects", "le plan ne traverse pas les objets sélectionnés"),
@@ -352,9 +378,25 @@ def pref_applied_language():
     return _LANG_APPLIED["v"] or 'EN'
 
 
+def labels_of(code):
+    """Table « nom anglais -> nom traduit » d'une langue (vide pour l'anglais)."""
+    if code == 'FR':
+        return FR_LABELS
+    return LANG_LABELS.get(code, {})
+
+
+def label_in(table, en):
+    """Nom traduit ; un nom d'opérateur suivi d'une précision entre parenthèses (« Move (base → destination) ») prend
+    la traduction de son nom seul si la phrase entière n'est pas dans la table."""
+    return table.get(en) or table.get(en.split(" (")[0].strip())
+
+
 def tr_label(label):
     """Nom d'une commande ou d'un outil dans la langue du module."""
-    return FR_LABELS.get(label, label) if lang() == 'FR' else label
+    code = lang()
+    if code == 'EN':
+        return label
+    return labels_of(code).get(label, label)
 
 
 def tr_text(txt):
@@ -376,18 +418,29 @@ def tr_text(txt):
 
 
 def apply_language(classes_iter):
-    """Au démarrage : noms français des outils, opérateurs et menus (bl_label ; l'original reste dans dessin_en_label)."""
-    if lang() != 'FR':
-        return
+    """Noms des outils, opérateurs et menus dans la langue choisie (bl_label ; l'original reste dans dessin_en_label).
+    Réversible : appelée à chaque enregistrement de l'add-on, elle remet aussi l'anglais, ou passe d'une langue à une autre,
+    sans redémarrer Blender."""
+    code = lang()
+    table = labels_of(code) if code != 'EN' else {}
     for cls in classes_iter:
         try:
             en = cls.__dict__.get("dessin_en_label", getattr(cls, "bl_label", ""))
-            fr = FR_LABELS.get(en)
-            if fr and en:
+            if not en:
+                continue
+            tr = label_in(table, en) if table else None
+            if tr:
                 cls.dessin_en_label = en
-                cls.bl_label = fr
+                cls.bl_label = tr
+            elif "dessin_en_label" in cls.__dict__:
+                cls.bl_label = en               # pas de nom dans cette langue : retour au nom anglais
         except (AttributeError, TypeError):
             continue
+
+
+def language_caches_clear():
+    """La langue vient de changer : les phrases déjà traduites ne valent plus."""
+    _TR_CACHE.clear()
 
 
 def idle_tool():

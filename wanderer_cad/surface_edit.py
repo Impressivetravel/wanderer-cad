@@ -4,11 +4,13 @@ import bmesh
 import bpy
 import gpu
 import math
+import time
 import numpy as np
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
 from .core import idle_tool
+from .history import history_thicken
 from .drawing import find_window_region, get_shader, px_scale, region_rv3d
 from .base import DessinBase
 from .subd import subd_modifier
@@ -402,6 +404,7 @@ class DESSIN_OT_subd_revolve(_RevolveBody):
     bl_description = ("SubD revolved around an axis, like Revolve with a SubD result: select the curves, Enter, two points for the axis, "
                       "then Enter for 360° or type the angle (C: cap, D: delete input). The surface passes through the profile")
     TITLE = "SubD Revolve"
+    HISTORY_OK = False
 
     def build(self, context, spec):
         _, o, d, angle, cap, delete = spec
@@ -555,6 +558,9 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
                                              ('OPPOSITE', "Opposite to the normal", ""),
                                              ('BOTH', "Both sides (centered)", "")))
     delete_input: bpy.props.BoolProperty(name="Delete input", default=True)
+    history: bpy.props.BoolProperty(
+        name="History (editable modifier)", default=False,
+        description="Keeps the surface and adds a Solidify modifier: the thickness can be changed later in the Modifiers tab")
 
     def invoke(self, context, event):
         if not [o for o in context.selected_objects if o.type == 'MESH' and len(o.data.polygons)]:
@@ -567,6 +573,7 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
         col.prop(self, "thickness")
         col.prop(self, "direction", text="")
         col.prop(self, "delete_input")
+        col.prop(self, "history")
 
     def execute(self, context):
         targets = [o for o in context.selected_objects if o.type == 'MESH' and len(o.data.polygons)]
@@ -574,6 +581,10 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
             self.report({'INFO'}, "Click the surfaces to thicken, then Enter")
             return {'CANCELLED'}
         made = []
+        if self.history:
+            # History : modificateur Solidify, sur la surface elle-même (Delete input) ou sur sa copie
+            made = [history_thicken(context, obj, self.thickness, self.direction, not self.delete_input) for obj in targets]
+            targets = []
         for obj in targets:
             if self.direction == 'BOTH':
                 me = offset_surface_mesh(obj, self.thickness * 0.5, True, True)
@@ -584,12 +595,14 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
             for c in (obj.users_collection or [context.scene.collection]):
                 c.objects.link(new)
             made.append(new)
-        if self.delete_input:
+        if self.delete_input and targets:
             delete_objects(targets)
         deselect_all_objects(context)
         for ob in made:
             ob.select_set(True)
         context.view_layer.objects.active = made[-1]
+        if self.history:
+            cmd_notice("Thicken: History = Yes. Change the thickness in the Modifiers tab (Thicken > Thickness)")
         return {'FINISHED'}
 
 
@@ -1270,7 +1283,31 @@ def blend_surface(runA, runB, tangent=True, tension=1.0, segments=24, rows_n=12)
     return grid_mesh(np.array(rows), False, False, False), ""
 
 
-_BLEND = {"on": False, "last": None}
+_BLEND = {"on": False, "last": None, "warned": 0.0}
+BLEND_CORNER_DEG = 30.0      # au-delà de cet angle entre deux segments, le bord change de côté (comme les arêtes de Rhino)
+
+
+def loop_sides(P, closed, deg=BLEND_CORNER_DEG):
+    """Découpe un bord en côtés, aux angles : numéro de côté de chaque segment. Le bord d'un rectangle a quatre côtés,
+    celui d'un disque ou le bout d'un tube un seul. C'est l'arête que Rhino prend d'un clic."""
+    P = np.asarray(P, dtype=np.float64)
+    n = len(P)
+    nseg = n if closed else n - 1
+    side = np.zeros(max(nseg, 0), dtype=np.int64)
+    if nseg < 2:
+        return side
+    d = P[(np.arange(nseg) + 1) % n] - P[:nseg]
+    ln = np.linalg.norm(d, axis=1)
+    d = d / np.where(ln > 1e-12, ln, 1.0)[:, None]
+    cos_lim = math.cos(math.radians(deg))
+    k = 0
+    for i in range(1, nseg):
+        if float(d[i - 1].dot(d[i])) < cos_lim:
+            k += 1
+        side[i] = k
+    if closed and k > 0 and float(d[nseg - 1].dot(d[0])) >= cos_lim:
+        side[side == k] = 0             # pas d'angle au point de départ : le dernier côté continue le premier
+    return side
 BLEND_COLORS = {"hover": (1.0, 0.85, 0.2, 1.0), "A": (1.0, 0.35, 0.25, 1.0), "B": (0.25, 0.8, 1.0, 1.0)}
 
 
@@ -1396,7 +1433,7 @@ def blend_draw_cb(op):
 class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
     bl_idname = "dessin.blend_srf"
     bl_label = "Blend Surface"
-    bl_description = ("Creates a smooth surface between two edges, like Rhino: click the first edge (C: chain the connected edges), "
+    bl_description = ("Creates a smooth surface between two open edges, like Rhino: click the first edge (one side of the border; C: the whole border), "
                       "Enter, click the second edge, Enter. Then adjust the continuity and tension of each side in the panel")
     bl_options = {'REGISTER', 'UNDO'}
 
@@ -1432,8 +1469,16 @@ class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
             return {'CANCELLED'}
         self.loops = _blend_collect(context)
         if not self.loops:
-            self.report({'INFO'}, "No open edge found: blend needs surfaces with open edges or curves")
-            return {'CANCELLED'}
+            msg = ("Blend Surface: no open edge found  ·  it joins the open edges of surfaces, or curves "
+                   "(a closed solid has none: detach a face with Extract Surface first)")
+            if event.type == 'MOUSEMOVE':          # outil armé, simple survol : le dire une fois, sans répéter à chaque mouvement
+                if time.monotonic() - _BLEND["warned"] > 6.0:
+                    _BLEND["warned"] = time.monotonic()
+                    cmd_notice(msg)
+                return {'CANCELLED', 'PASS_THROUGH'}
+            _BLEND["warned"] = time.monotonic()
+            return nothing_done(self, msg)
+        self.sides = [loop_sides(l['P'], l['closed']) for l in self.loops]
         segA, segB, lid, sid = [], [], [], []
         for li, l in enumerate(self.loops):
             P = np.asarray(l['P'], dtype=np.float64)
@@ -1447,7 +1492,7 @@ class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
         self.LID, self.SID = np.concatenate(lid), np.concatenate(sid)
         self.phase = 0
         self.picks = [None, None]
-        self.chain = True
+        self.chain = False          # comme Rhino : un clic prend une arête (un côté du bord) ; C : tout le bord
         self.hover = None
         self.mouse = (event.mouse_x - self.region.x, event.mouse_y - self.region.y)
         _BLEND["on"] = True
@@ -1461,8 +1506,8 @@ class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
 
     def prompt(self):
         which = "first" if self.phase == 0 else "second"
-        txt = (f"Blend Surface: select the {which} edge   [ChainEdges: {'Yes' if self.chain else 'No'} (C)  ·  Shift: add  ·  Ctrl/Cmd: remove  ·  "
-               f"Enter: done  ·  Backspace: clear  ·  Esc: cancel]")
+        txt = (f"Blend Surface: click the {which} edge, then Enter   [ChainEdges (whole border): {'Yes' if self.chain else 'No'} (C)  ·  "
+               f"Shift: add  ·  Ctrl: remove  ·  Backspace: clear  ·  Esc: cancel]")
         set_prompt(self.area, txt)
 
     def end_modal(self, context):
@@ -1498,7 +1543,12 @@ class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
         l = self.loops[li]
         n = len(l['P'])
         nseg = n if l['closed'] else n - 1
-        return set(range(nseg)) if self.chain else {si}
+        if self.chain:
+            return set(range(nseg))             # ChainEdges : tout le bord
+        side = self.sides[li]
+        if si >= len(side):
+            return {si}
+        return set(np.nonzero(side == side[si])[0].tolist())       # le côté du bord sous le curseur, d'un angle à l'autre
 
     def seg_points(self, li, segs):
         l = self.loops[li]
@@ -2011,6 +2061,6 @@ class DESSIN_OT_align(_ProfileOp, bpy.types.Operator):
 
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
-    global cmd_click_idle, cmd_hit, cmd_log, set_prompt
-    from .cplane import cmd_log, set_prompt
+    global cmd_click_idle, cmd_hit, cmd_log, cmd_notice, nothing_done, set_prompt
+    from .cplane import cmd_log, cmd_notice, nothing_done, set_prompt
     from .command_line import cmd_click_idle, cmd_hit

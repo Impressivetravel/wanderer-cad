@@ -14,7 +14,7 @@ from .drawing import get_shader, project_px, px_scale
 from .subd import expand_groups
 from .gumball import (
     DESSIN_OT_gumball, GUMBALL_AXES, GUMBALL_COLORS, GUMBALL_PX, GumballBase, extrude_direction, extrude_info,
-    gumball_axes, gumball_k, gumball_selection, gumball_selection_cached,
+    gumball_axes, gumball_frozen, gumball_k, gumball_selection, gumball_selection_cached,
 )
 from .surfaces import (
     chain_open_paths, deselect_all_objects, extrude_general, extrude_surface, mesh_object_from_arrays, nest_groups,
@@ -55,6 +55,58 @@ def _gb_box_tris(x, y, z):
 GB_DOT_TRIS = _gb_sphere_tris()
 GB_BAR_TRIS = _gb_box_tris(1.0, 0.2, 0.2)
 
+# ---------------- Gumball : arcs de rotation (quarts de cercle) et carrés de déplacement dans un plan, comme Rhino ----------------
+# Les rotations étaient trois cercles entiers autour du centre : ils recouvraient la sphère d'extrusion et le trait de coupe
+# posés sur les flèches. Comme dans Rhino, ce sont maintenant des quarts de cercle, du côté opposé aux flèches (entre les deux
+# poignées d'échelle), et un petit carré dans l'angle de deux flèches déplace la sélection dans leur plan.
+GB_ARC_R = 0.62            # rayon des arcs (fraction de la longueur d'une flèche)
+GB_ARC_START = math.pi     # l'arc va de -X à -Y dans le repère de sa poignée (X, Y : les deux axes de son plan)
+GB_ARC_SWEEP = math.pi / 2.0
+GB_ARC_PICK_PX = 5.0       # demi-épaisseur de la zone cliquable, en pixels
+GB_PLANE_LO = 0.20         # carré de déplacement plan : de 20 % à 34 % de la longueur des flèches, dans leur angle
+GB_PLANE_HI = 0.34
+
+
+def gb_arc_points(n=24):
+    """Points de l'arc (rayon 1) dans le repère de sa poignée."""
+    return [(math.cos(GB_ARC_START + GB_ARC_SWEEP * i / n), math.sin(GB_ARC_START + GB_ARC_SWEEP * i / n), 0.0) for i in range(n + 1)]
+
+
+def gb_arc_tris(r, n=24, sides=6):
+    """Triangles d'un tube de rayon r le long de l'arc (visible quel que soit l'angle de vue, contrairement à un ruban plat)."""
+    rings = []
+    for cx, cy, _z in gb_arc_points(n):
+        rings.append([(cx * (1.0 + r * math.cos(TAU * j / sides)), cy * (1.0 + r * math.cos(TAU * j / sides)), r * math.sin(TAU * j / sides))
+                      for j in range(sides)])
+    out = []
+    for i in range(n):
+        A, B = rings[i], rings[i + 1]
+        for j in range(sides):
+            k = (j + 1) % sides
+            out += [A[j], B[j], B[k], A[j], B[k], A[k]]
+    return out
+
+
+def gb_plane_quad():
+    lo, hi = GB_PLANE_LO, GB_PLANE_HI
+    return [(lo, lo, 0.0), (hi, lo, 0.0), (hi, hi, 0.0), (lo, hi, 0.0)]
+
+
+def gb_plane_tris():
+    q = gb_plane_quad()
+    return [q[0], q[1], q[2], q[0], q[2], q[3]]
+
+
+def gb_frame_matrix(origin, x, y, z, scale):
+    """Repère d'une poignée plane : ses axes X et Y sont deux axes du Gumball, Z leur normale."""
+    R = Matrix((x, y, z)).transposed().to_4x4()
+    return Matrix.Translation(origin) @ R @ Matrix.Scale(scale, 4)
+
+
+def gb_plane_axes(axes, a):
+    """Les deux axes du plan perpendiculaire à l'axe a, dans l'ordre direct (X : Y, Z ; Y : Z, X ; Z : X, Y)."""
+    return axes[(a + 1) % 3], axes[(a + 2) % 3]
+
 
 class DESSIN_GT_gb_dot(bpy.types.Gizmo):
     """Sphère d'extrusion du Gumball (une vraie poignée : Blender la surligne et la détecte lui-même)."""
@@ -80,6 +132,47 @@ class DESSIN_GT_gb_bar(bpy.types.Gizmo):
     def setup(self):
         if not hasattr(self, "shape"):
             self.shape = self.new_custom_shape('TRIS', GB_BAR_TRIS)
+
+    def draw(self, context):
+        self.draw_custom_shape(self.shape)
+
+    def draw_select(self, context, select_id):
+        self.draw_custom_shape(self.shape, select_id=select_id)
+
+
+class DESSIN_GT_gb_arc(bpy.types.Gizmo):
+    """Arc de rotation du Gumball : un quart de cercle, avec une zone cliquable un peu plus épaisse que le trait."""
+    bl_idname = "DESSIN_GT_gb_arc"
+    __slots__ = ("shape", "pick", "lw")
+
+    def shapes(self):
+        lw = round(float(pref("gumball_line")), 1)
+        if getattr(self, "lw", None) != lw:
+            px = GB_ARC_R * GUMBALL_PX                      # rayon de l'arc en pixels
+            self.shape = self.new_custom_shape('TRIS', gb_arc_tris(max(lw, 1.0) * 0.5 / px))
+            self.pick = self.new_custom_shape('TRIS', gb_arc_tris(max(GB_ARC_PICK_PX, lw * 0.5 + 2.0) / px))
+            self.lw = lw
+
+    def setup(self):
+        self.shapes()
+
+    def draw(self, context):
+        self.shapes()
+        self.draw_custom_shape(self.shape)
+
+    def draw_select(self, context, select_id):
+        self.shapes()
+        self.draw_custom_shape(self.pick, select_id=select_id)
+
+
+class DESSIN_GT_gb_plane(bpy.types.Gizmo):
+    """Carré de déplacement dans un plan, dans l'angle de deux flèches du Gumball."""
+    bl_idname = "DESSIN_GT_gb_plane"
+    __slots__ = ("shape",)
+
+    def setup(self):
+        if not hasattr(self, "shape"):
+            self.shape = self.new_custom_shape('TRIS', gb_plane_tris())
 
     def draw(self, context):
         self.draw_custom_shape(self.shape)
@@ -635,7 +728,7 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
             col = GUMBALL_COLORS[a]
             for store, kind, gtype, style in ((self.gz_move, 'MOVE', "GIZMO_GT_arrow_3d", 'NORMAL'),
                                               (self.gz_scale, 'SCALE', "GIZMO_GT_arrow_3d", 'BOX'),
-                                              (self.gz_rot, 'ROTATE', "GIZMO_GT_dial_3d", None)):
+                                              (self.gz_rot, 'ROTATE', DESSIN_GT_gb_arc.bl_idname, None)):
                 gz = self.gizmos.new(gtype)
                 props = gz.target_set_operator(DESSIN_OT_gumball.bl_idname)
                 props.kind = kind
@@ -645,8 +738,22 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
                 if style is not None:
                     _gz_set(gz, draw_style=style)
                 else:
-                    _gz_set(gz, draw_options={'CLIP'}, line_width=float(pref("gumball_line")))
+                    _gz_set(gz, select_bias=1.0)
                 store.append(gz)
+        # carrés de déplacement dans un plan (comme Rhino) : créés à part, pour qu'une erreur ici ne retire jamais les flèches
+        self.gz_plane = []
+        try:
+            for a in range(3):
+                gz = self.gizmos.new(DESSIN_GT_gb_plane.bl_idname)
+                props = gz.target_set_operator(DESSIN_OT_gumball.bl_idname)
+                props.kind = 'PLANE'
+                props.axis = a
+                _gz_set(gz, color=GUMBALL_COLORS[a], alpha=0.55, color_highlight=(1.0, 0.85, 0.2), alpha_highlight=0.9,
+                        use_draw_modal=True, use_draw_scale=False, scale_basis=1.0, select_bias=1.0)
+                gz.hide = True
+                self.gz_plane.append(gz)
+        except Exception:
+            self.gz_plane = []
         # sphère d'extrusion et trait de coupe (comme le Gumball de Rhino) : créés à part, pour qu'une erreur ici ne retire
         # jamais les flèches
         self.gz_ext, self.gz_cut = [], []
@@ -666,9 +773,11 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
             self.gz_ext, self.gz_cut = [], []
 
     def place(self, context):
-        pivot, top = gumball_selection_cached(context)
+        frozen = gumball_frozen(context)            # déplacement en cours : les poignées restent où elles étaient (Rhino)
+        pivot, top = (frozen[0], [True]) if frozen is not None else gumball_selection_cached(context)
         rv3d, region = context.region_data, context.region
-        every = self.gz_move + self.gz_scale + self.gz_rot
+        planes = getattr(self, "gz_plane", [])
+        every = self.gz_move + self.gz_scale + self.gz_rot + planes
         pulls = getattr(self, "gz_ext", []) + getattr(self, "gz_cut", [])
         if pivot is None or not top or rv3d is None or region is None:
             for gz in every + pulls:
@@ -678,15 +787,16 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
         proj = rv3d.window_matrix[0][0] or 1.0
         px = max(abs(v.w), 1e-6) / (0.5 * region.width * proj)      # unités monde par pixel au centre
         px *= gumball_k(context)
-        axes = gumball_axes(context)
+        axes = frozen[1] if frozen is not None else gumball_axes(context)
         for a in range(3):
             d = axes[a]
             self.gz_move[a].matrix_basis = _axis_matrix(pivot, d, GUMBALL_PX * px)
             self.gz_scale[a].matrix_basis = _axis_matrix(pivot, -d, GUMBALL_PX * 0.98 * px)
-            self.gz_rot[a].matrix_basis = _axis_matrix(pivot, d, GUMBALL_PX * 0.62 * px)
-        lw = float(pref("gumball_line"))
-        for gz in self.gz_rot:
-            _gz_set(gz, line_width=lw)
+            bx, by = gb_plane_axes(axes, a)
+            # arc de rotation : quart de cercle entre les deux poignées d'échelle (côté opposé aux flèches)
+            self.gz_rot[a].matrix_basis = gb_frame_matrix(pivot, bx, by, d, GUMBALL_PX * GB_ARC_R * px)
+            if planes:                          # carré de déplacement plan : dans l'angle des deux flèches
+                planes[a].matrix_basis = gb_frame_matrix(pivot, bx, by, d, GUMBALL_PX * px)
         for gz in every:
             gz.hide = False
         flat = gumball_flat_axes(context, axes)
@@ -903,14 +1013,15 @@ def gumball_handle_at(context, mx, my, region, rv3d):
             dist = seg_dist(sp, tip2)
             if dist <= 9.0 * sc and dist < best_d:
                 best, best_d = ('SCALE', a), dist
-        bu = d.orthogonal().normalized()
-        bv = d.cross(bu)
-        R = GUMBALL_PX * 0.62 * px
-        ring = []
-        for i in range(49):
-            ang = TAU * i / 48
-            q = project_px(rv3d, region, pivot + (bu * math.cos(ang) + bv * math.sin(ang)) * R)
-            ring.append(q)
+        bu, bv = gb_plane_axes(axes, a)
+        R = GUMBALL_PX * GB_ARC_R * px
+        ring = [project_px(rv3d, region, pivot + (bu * x + bv * y) * R) for x, y, _z in gb_arc_points()]
+        quad = [project_px(rv3d, region, pivot + (bu * x + bv * y) * (GUMBALL_PX * px)) for x, y, _z in gb_plane_quad()]
+        if all(q is not None for q in quad):
+            # carré de déplacement plan : la souris est dedans (même côté de ses quatre bords)
+            sgn = [(quad[(i + 1) % 4] - quad[i]).cross(m - quad[i]) for i in range(4)]
+            if (all(s_ >= 0 for s_ in sgn) or all(s_ <= 0 for s_ in sgn)) and best_d > 4.0 * sc:
+                best, best_d = ('PLANE', a), 4.0 * sc
         for q0, q1 in zip(ring, ring[1:]):
             if q0 is None or q1 is None:
                 continue

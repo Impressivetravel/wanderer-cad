@@ -80,6 +80,47 @@ def gumball_axes(context):
     return AXES3
 
 
+# Poignées figées pendant qu'on déplace la sélection (comme dans Rhino) : le Gumball reste à sa place de départ pendant le
+# glisser, puis rejoint la sélection au relâchement. Sans cela ses flèches suivaient l'objet à chaque mouvement de souris.
+_GB_DRAG = {"pivot": None, "axes": None, "owner": ""}
+
+
+def gumball_freeze(context, pivot, owner):
+    """Fige le Gumball en `pivot` tant que l'opération modale `owner` (début du nom de sa classe) est en cours."""
+    try:
+        _GB_DRAG["axes"] = [Vector(a) for a in gumball_axes(context)]
+        _GB_DRAG["pivot"] = Vector(pivot)
+        _GB_DRAG["owner"] = owner
+    except (AttributeError, TypeError, ValueError, ReferenceError):
+        gumball_unfreeze()
+
+
+def gumball_unfreeze(context=None):
+    _GB_DRAG["pivot"] = _GB_DRAG["axes"] = None
+    if context is not None:
+        try:
+            for area in context.screen.areas:           # les poignées rejoignent tout de suite la sélection
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+        except (AttributeError, ReferenceError, RuntimeError):
+            pass
+
+
+def gumball_frozen(context):
+    """(centre, axes) des poignées figées, ou None si aucun déplacement n'est en cours. Si l'opération s'est terminée sans
+    prévenir (annulée par Blender), le Gumball est libéré."""
+    if _GB_DRAG["pivot"] is None:
+        return None
+    try:
+        ops = context.window.modal_operators
+    except (AttributeError, RuntimeError, ReferenceError):
+        ops = None
+    if ops is not None and not any(op.bl_idname.startswith(_GB_DRAG["owner"]) for op in ops):
+        gumball_unfreeze()
+        return None
+    return _GB_DRAG["pivot"], _GB_DRAG["axes"]
+
+
 def gumball_selection(context):
     """(centre des poignées, éléments) : centre de la boîte englobante, ou point choisi avec Relocate Gumball."""
     pivot, items = _gumball_selection_raw(context)
@@ -164,6 +205,8 @@ class GumballBase(bpy.types.Operator):
         m = self.mouse(context, event)
         ro = region_2d_to_origin_3d(region, rv3d, m)
         rv = region_2d_to_vector_3d(region, rv3d, m)
+        if self.kind == 'PLANE':                # déplacement dans le plan perpendiculaire à l'axe : point visé sur ce plan
+            return geometry.intersect_line_plane(ro, ro + rv, self.pivot, self.dir)
         if self.kind == 'ROTATE':
             hit = geometry.intersect_line_plane(ro, ro + rv, self.pivot, self.dir)
             if hit is None:
@@ -178,6 +221,8 @@ class GumballBase(bpy.types.Operator):
         return (res[0] - self.pivot).dot(self.dir)
 
     def default_value(self):
+        if self.kind == 'PLANE':
+            return Vector((0.0, 0.0, 0.0))
         return 1.0 if self.kind == 'SCALE' else 0.0
 
     def enter_last(self, enter=True):
@@ -194,7 +239,7 @@ class GumballBase(bpy.types.Operator):
     def snap_move(self, context, event, value):
         """Snappy Dragging : la flèche se cale sur l'accrochage (End, Mid, Cen...) sous le curseur."""
         try:
-            if self.kind != 'MOVE' or self.edit or context.scene.dessin.gumball_drag != 'SNAPPY' or osnap("disable"):
+            if self.kind not in {'MOVE', 'PLANE'} or self.edit or context.scene.dessin.gumball_drag != 'SNAPPY' or osnap("disable"):
                 return value
             if getattr(self, "_snapd", None) is None:
                 names = set()
@@ -208,11 +253,16 @@ class GumballBase(bpy.types.Operator):
             return value
         if hit is None:
             return value
+        if self.kind == 'PLANE':                # le centre des poignées vient à l'aplomb du point accroché, dans le plan
+            d = hit[0] - self.pivot
+            return d - self.dir * d.dot(self.dir)
         return (hit[0] - self.pivot).dot(self.dir)
 
     def value_from_sample(self, s, shift):
         if s is None:
             return self.value
+        if self.kind == 'PLANE':
+            return s - self.ref
         if self.kind == 'MOVE':
             return s - self.ref
         if self.kind == 'SCALE':
@@ -232,6 +282,8 @@ class GumballBase(bpy.types.Operator):
 
     def xform(self, value, uniform=False):
         p = self.pivot
+        if self.kind == 'PLANE':
+            return Matrix.Translation(value)
         if self.kind == 'MOVE':
             return Matrix.Translation(self.dir * value)
         if self.kind == 'ROTATE':
@@ -283,6 +335,10 @@ class GumballBase(bpy.types.Operator):
 
     def _label(self):
         ax = GUMBALL_AXES[self.axis]
+        if self.kind == 'PLANE':
+            names = "".join(GUMBALL_AXES[i] for i in range(3) if i != self.axis)
+            v = self.value / self.unit_f
+            return f"Move in the {names} plane: ({v.x:.3f}, {v.y:.3f}, {v.z:.3f}) {self.unit_label}".strip()
         if self.kind == 'MOVE':
             v = self.value / self.unit_f
             return f"Move {ax}: {v:.3f} {self.unit_label}".strip()
@@ -297,7 +353,7 @@ class GumballBase(bpy.types.Operator):
             last = "" if lv is None else f" (nothing typed: {fmt_typed(lv / self.unit_f if self.kind == 'MOVE' else lv)}, last value)"
             txt = f"{self.label()}   |   type the value: {self.typed or '_'} {unit}   |   Enter: apply{last}   Esc: cancel"
         else:
-            txt = f"{self.label()}   |   release: apply   Esc: cancel   (a click without dragging lets you type the value)" + ("   |   90° steps, Shift: free rotation" if self.kind == 'ROTATE' else "")
+            txt = f"{self.label()}   |   release: apply   Esc: cancel" + ("" if self.kind == 'PLANE' else "   (a click without dragging lets you type the value)") + ("   |   90° steps, Shift: free rotation" if self.kind == 'ROTATE' else "")
         try:
             set_prompt(context.area, txt)
         except (AttributeError, ReferenceError):
@@ -312,6 +368,7 @@ class GumballBase(bpy.types.Operator):
         ghost_show(context.area, self._ghost)
 
     def finish_ui(self, context):
+        gumball_unfreeze(context)
         ghost_hide()
         try:
             set_prompt(context.area, None)
@@ -349,6 +406,7 @@ class GumballBase(bpy.types.Operator):
             return {'CANCELLED'}
         self.ref = s0
         self.last = s0
+        gumball_freeze(context, self.pivot, "DESSIN_OT_gumball")       # les poignées restent à leur place pendant le glisser
         context.window_manager.modal_handler_add(self)
         self.header(context)
         return {'RUNNING_MODAL'}
@@ -426,6 +484,8 @@ class GumballBase(bpy.types.Operator):
         if et == 'LEFTMOUSE' and event.value == 'RELEASE':
             if self.mode == 'drag':
                 return self.commit(context)
+            if self.kind == 'PLANE':
+                return self.cancel_all(context)         # déplacement dans un plan : pas de valeur à taper, un clic ne fait rien
             self.mode = 'type'          # simple clic : on tape la valeur
             self.typed = ''
             self.value = self.default_value()
@@ -442,7 +502,7 @@ class DESSIN_OT_gumball(GumballBase):
     bl_description = ("Drag to transform the selection from its center; click without dragging, then type the "
                       "distance / angle / scale factor and press Enter")
 
-    kind: bpy.props.EnumProperty(items=(('MOVE', "Move", ""), ('ROTATE', "Rotate", ""), ('SCALE', "Scale", "")),
+    kind: bpy.props.EnumProperty(items=(('MOVE', "Move", ""), ('ROTATE', "Rotate", ""), ('SCALE', "Scale", ""), ('PLANE', "Move in a plane", "")),
                                  default='MOVE', options={'SKIP_SAVE'})
     axis: bpy.props.IntProperty(default=0, min=0, max=2, options={'SKIP_SAVE'})
 

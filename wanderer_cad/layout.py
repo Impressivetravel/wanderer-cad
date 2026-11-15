@@ -15,7 +15,7 @@ from mathutils import Euler, Matrix, Quaternion, Vector
 from . import layout_engine as le
 from .core import cp_set, cp_state, idle_tool, lang
 from .base import DessinBase
-from .drawing import find_window_region, get_shader, px_scale
+from .drawing import find_window_region, get_shader, line_px, px_scale
 from .tools_draw import DESSIN_OT_rectangle
 
 
@@ -1749,7 +1749,7 @@ def layout_draw_cb():
         shader = get_shader('3D')
         gpu.state.blend_set('ALPHA')
         gpu.state.depth_test_set('NONE')
-        gpu.state.line_width_set(2.0 * px_scale())
+        gpu.state.line_width_set(line_px(2.0))
         shader.bind()
         for o in sel:
             d = o.dessin_detail
@@ -1763,7 +1763,7 @@ def layout_draw_cb():
             M = live.matrix_world
             w, h = d.width / 2.0, d.height / 2.0
             c = [tuple(M @ Vector((x, y, 0.0))) for x, y in ((-w, -h), (w, -h), (w, h), (-w, h))]
-            gpu.state.line_width_set(ACTIVE_VP_WIDTH * px_scale())
+            gpu.state.line_width_set(line_px(ACTIVE_VP_WIDTH))
             shader.uniform_float("color", (0.04, 0.4, 0.95, 1.0))
             batch_for_shader(shader, 'LINES', {"pos": [c[0], c[1], c[1], c[2], c[2], c[3], c[3], c[0]]}).draw(shader)
         gpu.state.line_width_set(1.0)

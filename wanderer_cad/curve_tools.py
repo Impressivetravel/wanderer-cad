@@ -9,6 +9,7 @@ from .drawing import find_window_region, project_px, px_scale, region_rv3d
 from .base import DessinBase
 from .selection import objects_under_cursor
 from .surfaces import object_paths
+from .trim import wire_graph
 from .surface_tools import _rdp, fit_nurbs
 
 
@@ -575,12 +576,7 @@ class DessinCrvEnds(DessinBase):
         super().update_cursor(context, event)
 
     def end_hilite(self, r):
-        o, si, at_end = r
-        p, d, _l = curve_end(o, si, at_end)
-        sp = o.data.splines[si]
-        segs = _spline_segments_world(o, sp)
-        pts = segs[-1][1] if at_end else segs[0][1]
-        return list(zip(pts[:-1], pts[1:])) + [(p, p + d * 0.0001)], p
+        return curve_end_hilite(r)
 
     def compute(self):
         self.hilite = []
@@ -664,6 +660,293 @@ class DESSIN_OT_blend_crv(DessinCrvEnds):
     def apply(self, context, a, b):
         pts = blend_curve_points(a[0], a[1], a[2], b[0], b[1], b[2])
         build_blend_curve(context, pts)
+
+
+# ---- Extend Curve : prolonge une courbe par une extrémité, comme Extend de Rhino et d'AutoCAD ----
+
+EXTEND_MAGNET_PX = 14.0       # à moins de cette distance (écran) d'une limite, le prolongement s'y arrête
+
+
+def _bspline_point(P4, order, u):
+    """Point d'une NURBS de Blender sans « Endpoint » (nœuds uniformes), au paramètre u."""
+    n, k = len(P4), order
+    N = [1.0 if i <= u < i + 1 else 0.0 for i in range(n + k - 1)]
+    for deg in range(2, k + 1):
+        N = [(u - i) / (deg - 1) * N[i] + (i + deg - u) / (deg - 1) * N[i + 1] for i in range(n + k - deg)]
+    num, den = Vector((0.0, 0.0, 0.0)), 0.0
+    for i in range(n):
+        w = N[i] * P4[i][3]
+        num += Vector(P4[i][:3]) * w
+        den += w
+    return num / den if abs(den) > 1e-12 else Vector(P4[-1][:3])
+
+
+def extension_ray(o, si, at_end):
+    """(point monde de l'extrémité, direction unitaire sortante) : là où la courbe finit vraiment, et dans quel sens."""
+    sp = o.data.splines[si]
+    if sp.type == 'NURBS' and not sp.use_endpoint_u and not sp.use_cyclic_u and len(sp.points) >= max(sp.order_u, 2):
+        # NURBS « ouverte » de Blender : elle n'atteint pas ses points de contrôle extrêmes
+        P4 = [tuple(q.co) for q in sp.points]
+        k = max(2, min(sp.order_u, len(P4)))
+        u0, u1 = float(k - 1), float(len(P4))
+        ue, ui = (u1 - 1e-9, u1 - 1e-4) if at_end else (u0, u0 + 1e-4)
+        mw = o.matrix_world
+        p = mw @ _bspline_point(P4, k, ue)
+        d = p - mw @ _bspline_point(P4, k, ui)
+        if d.length > 1e-12:
+            return p, d.normalized()
+    p, d, _l = curve_end(o, si, at_end)
+    return p, d
+
+
+def extend_curve(o, si, at_end, length):
+    """Prolonge la spline si de `length` (unités monde) par une extrémité, tout droit dans sa direction, comme Extend
+    (Type=Line). La courbe d'origine garde exactement sa forme :
+    - polyligne : le dernier segment s'allonge (une ligne reste une ligne de deux points) ;
+    - Bézier : un point est ajouté, relié par un segment droit tangent ;
+    - NURBS : un segment droit est ajouté à la courbe (ajouter un point de contrôle déformerait la courbe)."""
+    sp = o.data.splines[si]
+    p, d = extension_ray(o, si, at_end)
+    inv = o.matrix_world.inverted()
+    a, q = inv @ p, inv @ (p + d * length)
+    if sp.type == 'POLY':
+        pt = sp.points[-1] if at_end else sp.points[0]
+        pt.co = (q.x, q.y, q.z, pt.co[3])
+    elif sp.type == 'BEZIER':
+        bps = sp.bezier_points
+        data = [[bp.co.copy(), bp.handle_left.copy(), bp.handle_right.copy(), bp.handle_left_type, bp.handle_right_type,
+                 bp.radius, bp.tilt] for bp in bps]
+        third = (q - a) / 3.0
+        if at_end:
+            old = data[-1]
+            old[2] = old[0] + third                  # la poignée de sortie part droit vers le nouveau bout
+            old[3] = old[4] = 'FREE'                 # (figée : sinon Blender la recalculerait et la courbe bougerait)
+            data.append([q.copy(), q - third, q + third, 'FREE', 'FREE', old[5], old[6]])
+        else:
+            old = data[0]
+            old[1] = old[0] + third
+            old[3] = old[4] = 'FREE'
+            data.insert(0, [q.copy(), q + third, q - third, 'FREE', 'FREE', old[5], old[6]])
+        bps.add(1)
+        for bp, (c, hl, hr, _tl, _tr, rad, tilt) in zip(bps, data):
+            bp.handle_left_type = bp.handle_right_type = 'FREE'
+            bp.co, bp.handle_left, bp.handle_right = c, hl, hr
+            bp.radius, bp.tilt = rad, tilt
+        for bp, (_c, _hl, _hr, tl, tr, _rad, _tilt) in zip(bps, data):
+            bp.handle_left_type, bp.handle_right_type = tl, tr
+    else:
+        ns = o.data.splines.new('POLY')
+        ns.points.add(1)
+        ns.points[0].co = (a.x, a.y, a.z, 1.0)
+        ns.points[1].co = (q.x, q.y, q.z, 1.0)
+    o.data.update_tag()
+
+
+def extend_limits(context):
+    """Limites possibles d'un prolongement : segments (monde) des courbes et contours visibles, par objet."""
+    dg = context.evaluated_depsgraph_get()
+    out, total = {}, 0
+    for obj in context.visible_objects:
+        if obj.type not in {'CURVE', 'MESH'} or "dessin_cotation" in obj.keys() or "dessin_cotation_texte" in obj.keys():
+            continue
+        try:
+            g = wire_graph(obj, dg)
+        except (RuntimeError, ReferenceError, ValueError, TypeError, AttributeError):
+            g = None
+        if not g or not g[1]:
+            continue
+        V = np.array([tuple(v) for v in g[0]], dtype=np.float64)
+        E = np.array(g[1], dtype=np.int64).reshape(-1, 2)
+        out[obj.name] = (V[E[:, 0]], V[E[:, 1]])
+        total += len(E)
+        if total > 200000:
+            break
+    return out
+
+
+def extension_hits(context, p, d, limits, skip=None):
+    """Distances, le long de la demi-droite (p, d), où le prolongement rencontre une autre courbe, un contour, ou la
+    première surface sur son chemin. Triées, sans doublon."""
+    P = np.array(p, dtype=np.float64)
+    D = np.array(d, dtype=np.float64)
+    ts = []
+    for name, (A, B) in limits.items():
+        if name == skip or not len(A):
+            continue
+        E = B - A
+        W = P - A
+        b = E @ D
+        c = (E * E).sum(axis=1)
+        dd = W @ D
+        ee = (E * W).sum(axis=1)
+        den = c - b * b
+        ok = den > 1e-12 * np.maximum(c, 1e-30)
+        den = np.where(ok, den, 1.0)
+        t = (b * ee - c * dd) / den
+        u = (ee - b * dd) / den
+        gap = np.linalg.norm((P + t[:, None] * D) - (A + u[:, None] * E), axis=1)
+        tol = np.maximum(1e-4, 2e-6 * np.maximum(np.abs(A).max(axis=1), np.abs(P).max()))
+        keep = ok & (t > 1e-6) & (u >= -1e-6) & (u <= 1.0 + 1e-6) & (gap <= tol)
+        ts += t[keep].tolist()
+    try:        # surfaces et solides : le premier point touché
+        hit, loc, _n, _i, _ob, _m = context.scene.ray_cast(context.evaluated_depsgraph_get(), Vector(p) + Vector(d) * 1e-5, Vector(d))
+        if hit:
+            ts.append((loc - Vector(p)).length)
+    except (RuntimeError, ReferenceError, TypeError, AttributeError):
+        pass
+    out = []
+    for t in sorted(ts):
+        if t > 1e-6 and (not out or t - out[-1] > 1e-6 * max(1.0, t)):
+            out.append(float(t))
+    return out
+
+
+def curve_end_hilite(r):
+    """Segments (monde) du bout de courbe r = (objet, spline, extrémité finale ?), et son point."""
+    o, si, at_end = r
+    p, d, _l = curve_end(o, si, at_end)
+    sp = o.data.splines[si]
+    segs = _spline_segments_world(o, sp)
+    pts = segs[-1][1] if at_end else segs[0][1]
+    return list(zip(pts[:-1], pts[1:])) + [(p, p + d * 0.0001)], p
+
+
+class DESSIN_OT_extend_crv(DessinBase):
+    bl_idname = "dessin.extend_crv"
+    bl_label = "Extend Curve"
+    bl_description = ("Like Extend: click near the end of a curve, then give its new end: move the mouse and click (the "
+                      "extension stops on the curves, edges and surfaces it meets), type a length, or press Enter to stop "
+                      "at the first one. The curve keeps its shape. Stays active")
+
+    TITLE = "Extend Curve"
+    NEEDED = 2
+    NUMFIELDS = 1
+    PLANAR = False
+    LOCK_OK = False
+
+    def lock_allowed(self):
+        return False
+
+    def prompt(self):
+        if self._end is None:
+            return "click near the end of the curve to extend   [Enter / Esc: finish]"
+        nxt = f"   [Enter: up to the next curve or surface, {self.fmt(self._hits[0])}]" if self._hits else ""
+        return "new end: move the mouse and click, or type the length then Enter" + nxt
+
+    def invoke(self, context, event):
+        self._mouse = None
+        self._end = None
+        self._ray = None
+        self._hits = []
+        self._hl = []
+        self._limits = None
+        self._force = None
+        self.hilite = []
+        if context.mode != 'OBJECT':
+            self.report({'WARNING'}, "Switch to Object mode")
+            return {'CANCELLED'}
+        return super().invoke(context, event)
+
+    def update_cursor(self, context, event):
+        region = find_window_region(self.area, event.mouse_x, event.mouse_y)
+        self._mouse = (event.mouse_x - region.x, event.mouse_y - region.y) if region is not None else None
+        super().update_cursor(context, event)
+
+    def hits_of(self, context, r, p, d):
+        if self._limits is None:
+            try:
+                self._limits = extend_limits(context)
+            except (RuntimeError, ReferenceError, ValueError, TypeError, AttributeError):
+                self._limits = {}
+        return extension_hits(context, p, d, self._limits, skip=r[0].name)
+
+    def length_now(self):
+        """(longueur du prolongement, arrêté sur une limite ?)"""
+        if self._force is not None:
+            return self._force, True
+        t = self.typed_value(0)
+        if t is not None:
+            return abs(t), False
+        if self.cur is None or self._ray is None:
+            return 0.0, False
+        p, d = self._ray
+        L = max(0.0, (self.cur - p).dot(d))
+        best = None
+        try:
+            rv3d = region_rv3d(self.region, self.area)
+            here = project_px(rv3d, self.region, p + d * L)
+            lim = EXTEND_MAGNET_PX * px_scale()
+            for h in self._hits[:64]:
+                at = project_px(rv3d, self.region, p + d * h)
+                if here is not None and at is not None and (at - here).length <= lim and (best is None or abs(h - L) < abs(best - L)):
+                    best = h
+        except (AttributeError, ReferenceError, TypeError):
+            best = None
+        return (best, True) if best is not None else (L, False)
+
+    def compute(self):
+        self.hilite = []
+        if self._end is None:
+            r = pick_curve_end(self, bpy.context)
+            if r is None:
+                return [], [], "Click near the end of an open curve", None
+            self.hilite, _p = curve_end_hilite(r)
+            p, d = extension_ray(r[0], r[1], r[2])
+            hits = self.hits_of(bpy.context, r, p, d)
+            guides = [[p, p + d * hits[0]]] if hits else []
+            info = r[0].name + (" : end" if r[2] else " : start")
+            if hits:
+                info += f"  ·  next curve or surface at {self.fmt(hits[0])}"
+            return [p], guides, info, None
+        p, d = self._ray
+        L, stopped = self.length_now()
+        self.hilite = self._hl
+        info = f"Extend {self.fmt(L)}" + ("  (stops on the curve or surface it meets)" if stopped else "")
+        return [p, p + d * L], [], info, None
+
+    def click(self, context):
+        if self._end is None:
+            r = pick_curve_end(self, context)
+            if r is None:
+                self.report({'INFO'}, "Click near the end of an open curve")
+                return
+            p, d = extension_ray(r[0], r[1], r[2])
+            self._end, self._ray = r, (p, d)
+            self._hits = self.hits_of(context, r, p, d)
+            self._hl = curve_end_hilite(r)[0]
+            self.points.append(p.copy())
+            self.refresh(context)
+            return
+        self.finish_shape(context)
+
+    def can_confirm_typed(self):
+        return self._end is not None
+
+    def modal(self, context, event):
+        # Entrée sans rien taper : jusqu'à la première courbe ou surface rencontrée (Extend d'AutoCAD, Rhino avec limites)
+        if (event.type in {'RET', 'NUMPAD_ENTER', 'SPACE'} and event.value == 'PRESS' and self._end is not None
+                and not any(self.typed) and self._hits):
+            self._force = self._hits[0]
+            try:
+                self.finish_shape(context)
+            finally:
+                self._force = None
+            return {'RUNNING_MODAL'}
+        return super().modal(context, event)
+
+    def finish_shape(self, context):
+        if self._end is None:
+            return
+        L, _stopped = self.length_now()
+        if L <= 1e-9:
+            self.report({'WARNING'}, "Extension length must be positive")
+            return
+        o, si, at_end = self._end
+        extend_curve(o, si, at_end, L)
+        self._end, self._ray, self._hits, self._hl = None, None, [], []
+        self._limits = None                 # la courbe a changé : les limites sont relues au besoin
+        self.reset_state()                  # l'outil reste actif : on peut prolonger une autre extrémité
+        self.refresh(context)
 
 
 # ---- Blocs (Block, Insert, BlockEdit, ExplodeBlock, gestionnaire) : collections instanciées de Blender ----

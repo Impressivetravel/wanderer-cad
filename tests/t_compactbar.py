@@ -297,7 +297,7 @@ ann = getattr(m.DESSIN_AP_prefs, "__annotations__", {}).get("mode_icons")
 kw = getattr(ann, "keywords", None) or {}
 chk("le réglage existe dans les préférences : case à cocher « Mode bar: icons only », décochée par défaut", kw.get("default") is False and kw.get("name") == "Mode bar: icons only"
     and m.PREF_DEFAULTS.get("mode_icons") is False and m.pref("mode_icons") is False, (kw.get("name"), kw.get("default")))
-chk("... il est affiché dans le panneau (rubrique Command line) et redessine les vues quand on le change", 'cbox.prop(self, "mode_icons")' in src_prefs and kw.get("update") is m._update_cmd_line)
+chk("... il est affiché dans le panneau (rubrique Command line) et redessine les vues quand on le change", 'layout.prop(self, "mode_icons")' in src_prefs and kw.get("update") is m._update_cmd_line)
 chk("... « Reset to defaults » le remet à zéro (il fait partie des réglages par défaut)", "mode_icons" in list(m.PREF_DEFAULTS) and "for name in list(PREF_DEFAULTS)" in src_prefs)
 chk("décoché : icônes seulement en vue réduite (comportement inchangé)", m.modes_icons(0) is False and m.modes_icons(1) is True and m.modes_icons(3) is True)
 ref = {}

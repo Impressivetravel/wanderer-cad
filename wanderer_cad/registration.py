@@ -60,8 +60,8 @@ from .layers import (
 )
 from .import_dxf import DESSIN_OT_export_cad, DESSIN_OT_import_cad, menu_export_cad, menu_import_cad
 from .objects import (
-    DESSIN_MT_ctx_material, DESSIN_MT_ctx_polyline, DESSIN_MT_ctx_select, DESSIN_OT_extend_crv, DESSIN_OT_group,
-    DESSIN_OT_material_remove_all, DESSIN_OT_poly_edit, DESSIN_OT_track_to, DESSIN_OT_ungroup, _GROUP_SEL,
+    DESSIN_MT_ctx_display, DESSIN_MT_ctx_material, DESSIN_MT_ctx_polyline, DESSIN_MT_ctx_select, DESSIN_OT_group,
+    DESSIN_OT_display_as, DESSIN_OT_material_remove_all, DESSIN_OT_poly_edit, DESSIN_OT_track_to, DESSIN_OT_ungroup, _GROUP_SEL,
     install_ctx_object_menu, menu_ctx_extra, menu_group, uninstall_ctx_object_menu,
 )
 from .curve_edit import (
@@ -96,7 +96,7 @@ from .surface_tools import (
     DESSIN_OT_chamfer_srf, DESSIN_OT_extend_srf, DESSIN_OT_fillet_srf, DESSIN_OT_network_srf, DESSIN_OT_split_iso,
 )
 from .curve_tools import (
-    DESSIN_OT_blend_crv, DESSIN_OT_change_degree, DESSIN_OT_insert_point, DESSIN_OT_match_crv, DESSIN_OT_rebuild_crv,
+    DESSIN_OT_blend_crv, DESSIN_OT_change_degree, DESSIN_OT_extend_crv, DESSIN_OT_insert_point, DESSIN_OT_match_crv, DESSIN_OT_rebuild_crv,
     DESSIN_OT_remove_point, DESSIN_OT_simplify_crv,
 )
 from .blocks import (
@@ -116,7 +116,7 @@ from .lights import (
     DESSIN_OT_light_sun,
 )
 from .gumball_handles import (
-    DESSIN_GGT_gumball, DESSIN_GT_gb_bar, DESSIN_GT_gb_dot, DESSIN_OT_gumball_pull, DESSIN_PT_gumball, _EXT_BALL,
+    DESSIN_GGT_gumball, DESSIN_GT_gb_arc, DESSIN_GT_gb_bar, DESSIN_GT_gb_dot, DESSIN_GT_gb_plane, DESSIN_OT_gumball_pull, DESSIN_PT_gumball, _EXT_BALL,
     draw_extrude_ball, statusbar_osnap,
 )
 from .menus import DESSIN_MT_menu, menu_add
@@ -147,7 +147,7 @@ from .navigation import (
     DEFAULT_TABS, DESSIN_OT_context_menu, DESSIN_OT_grs_key, DESSIN_OT_middle_action, DESSIN_OT_mouse_block,
     DESSIN_OT_mouse_track, DESSIN_OT_orbit_hold, DESSIN_OT_orbit_pan, DESSIN_OT_orbit_persp, DESSIN_OT_pan2d,
     DESSIN_OT_shortcuts_clear, DESSIN_OT_trackpad_pan, DESSIN_OT_trackpad_persp, add_grs_to_tool_keymaps,
-    apply_nav_inputs, register_grs_keymap, register_shortcuts, register_view_keymap, start_navigation,
+    apply_nav_inputs, nav_inputs_sync_soon, register_grs_keymap, register_shortcuts, register_view_keymap, start_navigation,
     unregister_grs_keymap, unregister_shortcuts, unregister_view_keymap,
 )
 from .views import (
@@ -158,17 +158,22 @@ from .views import (
 from .cplane import DESSIN_OT_cplane, DESSIN_OT_cplane_elevation, _CP_DRAW, cplane_draw_cb
 from .pushpull import DESSIN_OT_pushpull, _AUTOCP, autocp_timer
 from .rhino_commands import (
-    DESSIN_OT_contour, DESSIN_OT_dup_border, DESSIN_OT_dup_edge, DESSIN_OT_extract_srf, DESSIN_OT_intersect,
+    DESSIN_OT_contour, DESSIN_OT_dup_border, DESSIN_OT_dup_edge, DESSIN_OT_dup_face_border, DESSIN_OT_extract_srf, DESSIN_OT_intersect,
     DESSIN_OT_merge_faces, DESSIN_OT_orient, DESSIN_OT_pipe, DESSIN_OT_rebuild_srf, DESSIN_OT_section,
     DESSIN_OT_unroll,
 )
 from .command_line import (
     CmdKeyEvent, DESSIN_MT_auto_cplane, DESSIN_MT_grid_snap, DESSIN_MT_mouse_menu, DESSIN_MT_osnap, DESSIN_MT_polar_angle,
     DESSIN_OT_command_line, DESSIN_OT_cplane_named, DESSIN_OT_grid_snap_set, DESSIN_OT_grid_snap_step, DESSIN_OT_osnap_hold,
-    DESSIN_OT_osnap_set, _VBAR, register_osnap_hold_keys, unregister_osnap_hold_keys, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
+    DESSIN_OT_osnap_set, DESSIN_OT_quick_type_toggle, _VBAR, register_osnap_hold_keys, unregister_osnap_hold_keys, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
     unregister_cmd_keymap, unregister_mouse_track, views_bar_cb,
 )
-from .preferences import DESSIN_AP_prefs, DESSIN_OT_install_theme, DESSIN_OT_prefs_reset
+from .preferences import (
+    DESSIN_AP_prefs, DESSIN_OT_alias_add, DESSIN_OT_alias_edit, DESSIN_OT_alias_remove, DESSIN_OT_apply_preset, DESSIN_OT_install_theme,
+    DESSIN_OT_prefs_reset, DESSIN_OT_restore_theme, DESSIN_PG_alias, aliases_restore_soon,
+)
+from .command_line import alias_changed
+from .core import language_caches_clear
 
 
 classes = (
@@ -314,6 +319,7 @@ classes = (
     DESSIN_OT_contour,
     DESSIN_OT_extract_srf,
     DESSIN_OT_dup_edge,
+    DESSIN_OT_dup_face_border,
     DESSIN_OT_dup_border,
     DESSIN_OT_merge_faces,
     DESSIN_OT_unroll,
@@ -407,6 +413,8 @@ classes = (
     DESSIN_OT_ungroup,
     DESSIN_OT_material_remove_all,
     DESSIN_MT_ctx_material,
+    DESSIN_OT_display_as,
+    DESSIN_MT_ctx_display,
     DESSIN_OT_track_to,
     DESSIN_MT_ctx_select,
     DESSIN_PT_shapes,
@@ -431,6 +439,8 @@ classes = (
     DESSIN_OT_select_loop,
     DESSIN_GT_gb_dot,
     DESSIN_GT_gb_bar,
+    DESSIN_GT_gb_arc,
+    DESSIN_GT_gb_plane,
     DESSIN_GGT_gumball,
     DESSIN_PT_gumball,
     DESSIN_PT_cotation,
@@ -439,11 +449,17 @@ classes = (
     DESSIN_OT_shortcuts_clear,
     DESSIN_OT_prefs_reset,
     DESSIN_OT_install_theme,
+    DESSIN_OT_restore_theme,
+    DESSIN_OT_alias_add,
+    DESSIN_OT_alias_remove,
+    DESSIN_OT_alias_edit,
+    DESSIN_OT_apply_preset,
     DESSIN_OT_trim_mode,
     DESSIN_AP_prefs,
     DESSIN_MT_polar_angle,
     DESSIN_OT_osnap_set,
     DESSIN_OT_osnap_hold,
+    DESSIN_OT_quick_type_toggle,
     DESSIN_MT_osnap,
     DESSIN_OT_grid_snap_set,
     DESSIN_OT_grid_snap_step,
@@ -948,6 +964,7 @@ def _wrap_rclick(cls):
 
 def register():
     # les préférences d'abord : la langue choisie doit être connue avant d'enregistrer les noms d'outils
+    bpy.utils.register_class(DESSIN_PG_alias)        # (le type des alias, dont les préférences ont besoin)
     bpy.utils.register_class(DESSIN_AP_prefs)
     try:
         _LANG_APPLIED["v"] = lang()
@@ -956,6 +973,10 @@ def register():
         apply_language(list(classes) + tool_classes)
     except (KeyError, AttributeError, ReferenceError, RuntimeError):
         pass
+    # rien de ce qui a été gardé en mémoire dans une autre langue ne doit survivre (suggestions, phrases traduites) :
+    # sans cela la ligne de commande répondait encore un moment dans l'ancienne langue
+    alias_changed()
+    language_caches_clear()
     rc_bases = (DessinBase, GumballBase, DessinCornerRound, DESSIN_OT_divide, DESSIN_OT_offset_surface, DESSIN_OT_blend_srf)
     mac_cls = rc_bases + (DESSIN_OT_selection_boite, _SelShapeBase, DESSIN_OT_selection_cercle, DESSIN_OT_select_loop,
                           DESSIN_OT_layer_current, DESSIN_OT_layer_click, DESSIN_OT_view_restore, _ProfileOp)
@@ -1187,9 +1208,11 @@ def register():
     register_shortcuts()
     register_grs_keymap()
     apply_nav_inputs()
+    nav_inputs_sync_soon()          # les cases de navigation reprennent les réglages de Blender, sans les changer
     register_view_keymap()
     register_cmd_keymap()
     register_mouse_track()
+    aliases_restore_soon()          # alias de l'utilisateur gardés d'une installation précédente
     register_sel_filter_keys()
     register_osnap_hold_keys()
     if _CMD["handle"] is None:
@@ -1375,6 +1398,10 @@ def unregister():
     del bpy.types.Collection.dessin_layer
     for c in reversed(classes):
         bpy.utils.unregister_class(c)
+    try:
+        bpy.utils.unregister_class(DESSIN_PG_alias)
+    except RuntimeError:
+        pass
 
 
 def _late_imports():

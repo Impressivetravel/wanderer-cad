@@ -21,6 +21,8 @@ from .gumball import DESSIN_MT_gumball
 from .gumball_handles import OSNAP_BAR
 from .toolbar import DESSIN_TT_selection_boite, _SELECT_TOOL_IDS
 from .navigation import BASE_VIEWS, DESSIN_OT_mouse_track, MOUSE_KEYMAPS, _update_view_keymap
+from .languages import LANG_ALIASES, LANG_LABELS
+from .core import language_caches_clear
 from .views import CMD_ALIASES, CMD_KEY_ITEMS, DESSIN_MT_named_views, _CMD, current_view_name, tab_names, view_label
 from .layout import bar_tabs, is_layout, layout_zoom_page, tab_click
 from .cplane import (
@@ -107,7 +109,7 @@ CMD_ACTIONS = (
     ("Undo", "undo", "ed.undo", "Undo the last action", _act_op("ed.undo")),
     ("Redo", "redo", "ed.redo", "Redo the last undone action", _act_op("ed.redo")),
     ("Delete", "e del delete erase", "", "Delete the selected objects", _act_delete),
-    ("Extend Curve", "extendcrv extend extendcurve", "", "Extend the selected curves by a length or up to the nearest other curve", _act_invoke("dessin.extend_crv")),
+    ("Alias Editor", "aliasedit alias aliases", "", "Create your own command aliases, like AliasEdit in AutoCAD and the aliases of Rhino", _act_invoke("dessin.alias_edit")),
     ("Select All", "sa all selectall", "", "Select every object", _act_op("object.select_all", action='SELECT')),
     ("Select None", "sn none deselect selnone", "", "Deselect everything", _act_op("object.select_all", action='DESELECT')),
     ("Invert Selection", "si invert selinvert", "", "Invert the selection", _act_op("object.select_all", action='INVERT')),
@@ -277,6 +279,38 @@ def cmd_native_build():
 CMD_VIEW_ALIASES = {"Top": "tp", "Front": "fr", "Right": "rt", "Left": "lf", "Back": "bk", "Bottom": "bt", "Perspective": "pe"}
 
 
+ALIAS_STATE = {"test": None}      # (tests) alias imposés : [(alias, commande)], à la place de ceux des préférences
+
+
+def user_aliases():
+    """Alias de l'utilisateur, comme AliasEdit d'AutoCAD et les alias de Rhino : [(alias, commande)]."""
+    if ALIAS_STATE["test"] is not None:
+        return [(a, c) for a, c in ALIAS_STATE["test"] if a.strip() and c.strip()]
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        return [(a.alias, a.command) for a in prefs.aliases if a.alias.strip() and a.command.strip()]
+    except (KeyError, AttributeError, ReferenceError, TypeError):
+        return []
+
+
+def alias_target(entries, command):
+    """La commande que désigne le texte `command` (son nom, ou l'un de ses alias) : son rang dans entries, ou None.
+    À nom égal, un outil de Wanderer passe avant une commande native de Blender."""
+    q = cmd_norm(command)
+    qc = q.replace(" ", "")
+    if not qc:
+        return None
+    best = None
+    for i, e in enumerate(entries):
+        for j, nm in enumerate(e["names"]):
+            if cmd_norm(nm).replace(" ", "") == qc:
+                rank = (2 if e.get("gen") else (1 if e["kind"] == "native" else 0), j, i)
+                if best is None or rank < best[0]:
+                    best = (rank, i)
+                break
+    return best[1] if best else None
+
+
 def cmd_entries(context=None):
     """[{key, label, names, desc, kind, ref}] : outils de la barre, commandes générales, vues et commandes natives de Blender."""
     out = []
@@ -285,6 +319,9 @@ def cmd_entries(context=None):
     for c in classes_:
         counts[cmd_clean_label(c.bl_label)] = counts.get(cmd_clean_label(c.bl_label), 0) + 1
     act_names = {lab for lab, _al, _x, _d, _fn in CMD_ACTIONS}
+    code = lang()
+    loc = LANG_ALIASES.get(code) if code in LANG_LABELS else None       # alias propres à la langue (hors anglais / français)
+    taken = {a for al_ in loc.values() for a in al_.split()} if loc else set()
     for c in classes_:
         label = cmd_clean_label(c.bl_label)
         if getattr(c, "dessin_cmd_hidden", False):
@@ -300,6 +337,12 @@ def cmd_entries(context=None):
             en_label = cmd_clean_label(c.__dict__.get("dessin_en_label", ""))
             if en_label and en_label != label:
                 names.append(en_label)
+        elif loc is not None:
+            # alias de la langue d'abord (ceux d'AutoCAD et de Rhino dans cette langue), puis le nom anglais et les alias
+            # anglais qui ne sont pas déjà pris par un alias de la langue
+            en_label = cmd_clean_label(c.__dict__.get("dessin_en_label", "")) or label
+            names = ([label] + loc.get(en_label, "").split() + ([en_label] if en_label != label else [])
+                     + [a for a in CMD_ALIASES.get(short, "").split() if a not in taken])
         out.append({"key": "tool:" + c.bl_idname, "label": label, "names": names, "kind": "tool", "ref": c.bl_idname,
                     "desc": getattr(c, "dessin_hint", "") or c.bl_description})
     fr = lang() == 'FR'
@@ -308,6 +351,9 @@ def cmd_entries(context=None):
         names = [shown] + al.split()
         if fr:
             names = [shown, label] + FR_ACTION_ALIASES.get(label, "").split()
+        elif loc is not None:
+            names = ([shown] + loc.get(label, "").split() + ([label] if label != shown else [])
+                     + [a for a in al.split() if a not in taken])
         out.append({"key": "act:" + label, "label": shown, "names": names, "kind": "act", "ref": fn, "desc": desc})
     for name, _t in BASE_VIEWS:
         vnames = [name + " view", name.lower()] + CMD_VIEW_ALIASES.get(name, "").split()
@@ -315,6 +361,9 @@ def cmd_entries(context=None):
         if fr:
             vlabel = "Vue " + tr_label(name).lower()
             vnames += [vlabel, tr_label(name).lower()]
+        elif loc is not None and tr_label(name) != name:
+            vlabel = tr_label(name)
+            vnames += [vlabel, vlabel.lower()]
         out.append({"key": "view:" + name, "label": vlabel, "names": vnames, "kind": "view",
                     "ref": name, "desc": "Restore the " + name + " view"})
     taken = {e["label"].lower() for e in out}
@@ -332,6 +381,13 @@ def cmd_entries(context=None):
         if cmd_compact(e["label"]) in ours:
             e = dict(e, label=e["label"] + NATIVE_TAG)
         out.append(e)
+    # alias de l'utilisateur : chacun s'ajoute à la commande qu'il désigne (copie de l'entrée : celles de Blender sont partagées)
+    for alias, command in user_aliases():
+        i = alias_target(out, command)
+        if i is not None:
+            e = out[i]
+            mine = list(e.get("user", ())) + [alias.strip()]
+            out[i] = dict(e, user=mine, alias=" ".join(mine))
     return out
 
 
@@ -352,7 +408,7 @@ def cmd_norm(s):
         import re
         import unicodedata
         flat = "".join(ch for ch in unicodedata.normalize("NFKD", s.lower()) if not unicodedata.combining(ch))
-        v = _NORM_CACHE[s] = re.sub(r"[^a-z0-9]+", " ", flat).strip()
+        v = _NORM_CACHE[s] = re.sub(r"[\W_]+", " ", flat).strip()       # lettres et chiffres de toutes les écritures
     return v
 
 
@@ -412,6 +468,11 @@ def cmd_suggest(text, limit=8):
             if sc_ is not None:
                 sc_ += 0.0005 * j
                 best = sc_ if best is None else min(best, sc_)
+        for nm in e.get("user", ()):                # alias de l'utilisateur : tapé en entier, il passe avant tout le reste
+            sc_ = cmd_score(q, nm)
+            if sc_ is not None:
+                sc_ = -1.0 if sc_ == 0.0 else sc_ - 0.0004
+                best = sc_ if best is None else min(best, sc_)
         if best is not None:
             if e["label"] in CMD_PAPER_FIRST:          # même alias que dans AutoCAD : la commande des fenêtres passe devant
                 best += -0.02 if paper else 0.02       # sur une mise en page, derrière dans le modèle (ms : Match Surface)
@@ -446,7 +507,7 @@ RUN_ON_SELECTION = {"dessin.join_tool": "join", "dessin.explode_tool": "explode"
 
 # Commandes « on survole, on clique » dont l'outil de la barre attend un premier clic pour démarrer : tapées dans la ligne de
 # commande, elles démarrent tout de suite (rien à désigner avant), comme avant la 2.97.1
-RUN_NOW = {"dessin.extract_srf_tool": "extract_srf", "dessin.dup_edge_tool": "dup_edge"}
+RUN_NOW = {"dessin.extract_srf_tool": "extract_srf", "dessin.dup_edge_tool": "dup_edge", "dessin.dup_face_border_tool": "dup_face_border"}
 
 
 def tool_run_mode(context, tool_id):
@@ -454,6 +515,8 @@ def tool_run_mode(context, tool_id):
     (elle est lancée sur la sélection déjà faite) ou 'arm' (l'outil attend qu'on désigne les objets)."""
     if tool_id in RUN_NOW:
         return 'now'
+    if tool_id == "dessin.dup_border_tool" and context.mode == 'EDIT_MESH':
+        return 'now'          # DupBorder sur la face choisie en Édition (Ctrl+Maj+clic) : tout de suite, sans armer l'outil
     if (tool_id in RUN_ON_SELECTION and context.mode == 'OBJECT'
             and any(o.type in {'MESH', 'CURVE'} for o in context.selected_objects)):
         return 'selection'
@@ -513,7 +576,7 @@ def cmd_run(context, entry):
             if tool_run_mode(context, ref) == 'now':
                 # la commande démarre seule, sans armer son outil : armé, il prendrait le clic qui vient de choisir la
                 # suggestion pour une désignation dans la vue
-                op_invoke(RUN_NOW[ref])
+                op_invoke(RUN_NOW.get(ref) or RUN_ON_SELECTION[ref])
             else:
                 arm_tool(ref)
                 run_on_selection(context, ref)
@@ -975,13 +1038,13 @@ def cmd_fixed_width(avail, share, own_row, vw, mw, sc, typing=False):
 
 
 def group_center(width, left, right, groupw, sc):
-    """Centre horizontal du groupe (onglets + commande + modes) : au milieu de la vue, mais jamais sous la barre d'outils
-    ni sous la barre latérale (même très large)."""
+    """Centre horizontal du groupe (onglets + commande + modes) : au milieu de la place laissée libre entre la barre
+    d'outils et la barre latérale, donc avec la même marge des deux côtés, et jamais sous l'un des panneaux."""
+    c = (left + (width - right)) / 2.0           # centre de la zone visible, panneaux déduits
     lo = left + 12 * sc + groupw / 2.0
     hi = width - right - 12 * sc - groupw / 2.0
-    c = width / 2.0
     if lo > hi:
-        return (left + width - right) / 2.0
+        return c
     return min(max(c, lo), hi)
 
 
@@ -1274,7 +1337,7 @@ MODE_BUTTONS = (("grid_snap", "Grid Snap", "Grid Snap (F9): the cursor snaps to 
                 ("smart_tracks", "SmartTrack", "Smart tracks on / off: alignment guides from points you hover"),
                 ("gumball", "Gumball", "Gumball on / off: move / rotate / scale handles on the selection (arrow: Gumball menu, orientation Global / Local / View, Snappy Dragging = object snaps while dragging)"),
                 ("auto_cplane", "Auto CPlane", "Auto CPlane on / off: the construction plane follows the planar object or face you select (arrow: Sticky option, back to the ground plane)"),
-                ("cmd_type", "Quick Type", "Quick Type on / off: typing a letter starts the command line (letters then lose Blender's own shortcuts; Space still opens it)"))
+                ("cmd_type", "Quick Type", "Quick Type on / off (Shift+Q): typing a letter starts the command line (letters then lose Blender's own shortcuts; Space still opens it)"))
 MODE_ARROWS = {"grid_snap": "gridsnapmenu", "polar": "polarmenu", "osnap_enable": "osnapmenu", "gumball": "gumballmenu",
                "auto_cplane": "autocplanemenu"}
 OSNAP_LABELS = dict(OSNAP_BAR)
@@ -2048,6 +2111,25 @@ def register_cmd_keymap():
         pass
 
 
+class DESSIN_OT_quick_type_toggle(bpy.types.Operator):
+    """Maj+Q : active ou désactive Quick Type (même réglage que la puce « Quick Type » de la barre du bas)."""
+    bl_idname = "dessin.quick_type_toggle"
+    bl_label = "Toggle Quick Type"
+    bl_description = "Quick Type on / off (Shift+Q): typing a letter in the 3D viewport starts the command line with that letter"
+    bl_options = {'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == 'VIEW_3D'
+
+    def execute(self, context):
+        mode_click(context, "cmd_type")
+        on = bool(pref("cmd_type"))
+        msg = "Quick Type " + ("on" if on else "off")
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
 _TRACK_KEYMAPS = []
 
 
@@ -2057,6 +2139,8 @@ def register_mouse_track():
     if kc is None:
         return
     km = kc.keymaps.new(name="3D View", space_type='VIEW_3D')
+    kmi = km.keymap_items.new(DESSIN_OT_quick_type_toggle.bl_idname, 'Q', 'PRESS', shift=True)
+    _TRACK_KEYMAPS.append((km, kmi))
     kmi = km.keymap_items.new(DESSIN_OT_mouse_track.bl_idname, 'MOUSEMOVE', 'ANY', any=True)
     _TRACK_KEYMAPS.append((km, kmi))
     kmi = km.keymap_items.new(DESSIN_OT_esc_select.bl_idname, 'ESC', 'PRESS')
@@ -2079,6 +2163,21 @@ def unregister_cmd_keymap():
         except (RuntimeError, ReferenceError, TypeError):
             pass
     _CMD_KEYMAPS.clear()
+
+
+def alias_changed(self=None, context=None):
+    """Un alias a été ajouté, modifié ou retiré : les suggestions gardées en mémoire ne valent plus."""
+    _SUGG_MEMO.clear()
+
+
+def language_changed(self=None, context=None):
+    """La langue vient d'être changée dans les préférences. Tout ce qui était gardé en mémoire dans l'ancienne langue est
+    oublié tout de suite (suggestions de la ligne de commande, phrases traduites), puis l'add-on est réenregistré un
+    instant plus tard : noms des outils, des menus et de la barre passent ensemble à la nouvelle langue, sans attendre
+    un redémarrage de Blender."""
+    _SUGG_MEMO.clear()
+    language_caches_clear()
+    _reload_addon_later()
 
 
 def _update_cmd_line(self=None, context=None):
