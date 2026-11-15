@@ -4,11 +4,18 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 
 > **Status: stable (2.96.127).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 
-![The dimensioned drawing on the left, the model and the command line on the right](docs/images/napoleone-00-hero.jpg)
+![Wanderer CAD: precision drawing and modeling, without leaving the Blender viewport](docs/images/slides/01-wanderer-cad.jpg)
 
-*One Blender session, two viewports: the dimensioned drawing in wireframe on the left, the model on the right with the layers and the command line completing `spl`. The piece is the **Napoleone** coffee table, designed by **Claudio Salocchi for Acerbis**, remodeled with Wanderer CAD only. See [the full workflow](#a-complete-example-two-napoleone-coffee-tables) below.*
+## A quick tour
 
-![Two Napoleone coffee tables modeled with Wanderer CAD](docs/images/napoleone-01-overview.jpg)
+| | |
+|---|---|
+| ![A command line, like CAD software](docs/images/slides/02-command-line.jpg) | ![A Gumball, as in Rhino](docs/images/slides/03-gumball.jpg) |
+| ![Object snaps and SmartTrack](docs/images/slides/04-snaps-smarttrack.jpg) | ![Control points you can see](docs/images/slides/05-curves.jpg) |
+| ![Extrude, with History](docs/images/slides/06-extrude-history.jpg) | ![Dimensions](docs/images/slides/07-dimensions.jpg) |
+| ![Layouts, from the model to a sheet](docs/images/slides/08-layouts.jpg) | ![Layers and selection filters](docs/images/slides/09-layers-filters.jpg) |
+| ![Every tool in the sidebar](docs/images/slides/10-tools-panel.jpg) | ![Your workflow in one click](docs/images/slides/11-presets-preferences.jpg) |
+| ![Six themes, one click](docs/images/slides/12-themes.jpg) | ![Help where you need it](docs/images/slides/13-tooltips-display-as.jpg) |
 
 ## Features
 
@@ -34,6 +41,12 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 - **Look**: six themes — Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light); icon styles Atlas, Blueprint, Ochre and Target. A **Presets** row sets the whole workflow to Rhino, AutoCAD or Blender in one click.
 
 ## A complete example: two Napoleone coffee tables
+
+![The dimensioned drawing on the left, the model and the command line on the right](docs/images/napoleone-00-hero.jpg)
+
+*One Blender session, two viewports: the dimensioned drawing in wireframe on the left, the model on the right with the layers and the command line completing `spl`. The piece is the **Napoleone** coffee table, designed by **Claudio Salocchi for Acerbis**, remodeled with Wanderer CAD only. *
+
+![Two Napoleone coffee tables modeled with Wanderer CAD](docs/images/napoleone-01-overview.jpg)
 
 The pictures below are screenshots taken while modeling two **Napoleone** coffee tables — the model designed by **Claudio Salocchi** for **Acerbis** — in two sizes: a 72 x 72 cm one and a 144 x 72 cm one, both 355.5 mm high. The construction is a folded steel "V" bridge resting on two lacquered sides, base plates and a glass top. Every part was made with Wanderer commands, in millimetres, from the reference models.
 
