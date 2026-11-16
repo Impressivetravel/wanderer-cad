@@ -2,7 +2,7 @@
 
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
-> **Status: stable (2.96.127).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+> **Status: stable (2.96.128).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 
 ![Wanderer CAD: precision drawing and modeling, without leaving the Blender viewport](docs/images/slides/01-wanderer-cad.jpg)
 
@@ -15,7 +15,7 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 | ![Extrude, with History](docs/images/slides/06-extrude-history.jpg) | ![Dimensions](docs/images/slides/07-dimensions.jpg) |
 | ![Layouts, from the model to a sheet](docs/images/slides/08-layouts.jpg) | ![Layers and selection filters](docs/images/slides/09-layers-filters.jpg) |
 | ![Every tool in the sidebar](docs/images/slides/10-tools-panel.jpg) | ![Your workflow in one click](docs/images/slides/11-presets-preferences.jpg) |
-| ![Six themes, one click](docs/images/slides/12-themes.jpg) | ![Help where you need it](docs/images/slides/13-tooltips-display-as.jpg) |
+| ![Help where you need it](docs/images/slides/13-tooltips-display-as.jpg) | |
 
 ## Features
 
@@ -30,15 +30,17 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 - **SubD**: boxes, spheres, cylinders, cones, tori and planes, loft, sweep, revolve and MultiPipe over a quad control cage, with cage editing tools (crease, insert edge, bevel, inset, bridge...) and live symmetry.
 - **Precision**: object snaps (End, Near, Point, Mid, Cen, Int, Perp, Tan, Quad, Knot, Vertex) from the status bar or the OSnap menu, **one-shot snaps** (hold Shift over the snap boxes and click the ones you want for the next point), **Grid Snap** (`F9`, 10 cm by default), Ortho, axis locks (`X` / `Y` / `Z`), smart tracking (X / Y / Z lines and **the extension of the segment that ends at a tracked point**), polar tracking. A snap budget keeps very large scenes responsive.
 - **Annotation**: linear, continued / baseline, ordinate, radius, angle and arc length dimensions, center marks, text, area and length measurement, **Make 2D** drawings from a 3D model.
-- **Layouts**: paper sheets (A5 to A0, Letter, ANSI, Arch, custom) with **viewports on the model at scale** (hidden lines removed or dashed), with grips and a double-click to work inside them as in AutoCAD, a title block, dimensions on the sheet that give the length of the model and follow their viewport, and vector **PDF / SVG / DXF / DWG** export.
-- **DXF and DWG**: import a drawing with its layers, colors, blocks and text; export the model (lines, polylines, true arcs and circles, 3D faces, text) or the sheets. DXF needs nothing; DWG goes through the free ODA File Converter installed on your computer.
+- **Layouts**: paper sheets (A5 to A0, Letter, ANSI, Arch, custom) with **viewports on the model at scale** (hidden lines removed or dashed), with grips and a double-click to work inside them as in AutoCAD, a title block, dimensions on the sheet that give the length of the model and follow their viewport, and vector **PDF / SVG / DXF** export.
+- **DXF**: import a drawing with its layers, colors, blocks and text; export the model (lines, polylines, true arcs and circles, 3D faces, text) or the sheets. Read and written by the add-on itself, nothing to install. For a DWG, save it as DXF from your CAD program first.
 - **Hatches**: ten patterns with scale, rotation and spacing, hatch by picking a point, match, base point, boundary, explode.
 - **Blocks**: make, insert, edit in place (every copy follows), explode, select copies.
 - **Layers** built on Blender collections: colors, sublayers, visibility and lock, saved layer states.
 - **Selection**: select, box, circle, lasso, selection filters, and `Ctrl/Cmd + Shift` sub-object selection (vertex, edge, face, or an area of points) straight into Edit Mode.
 - **Groups**, named view tabs and navigation presets.
+- **Four views** as in Rhino (Top, Perspective, Front, Right), each with its own display, the toolbar full height at the left and one set of bars under them.
+- **Lock** objects as in Rhino (Freeze in 3ds Max): still visible and snappable, no longer selectable; Unlock All and Unlock Selected from the right-click menu.
 - **Mac**: `Cmd` acts as `Ctrl` in every gesture.
-- **Look**: six themes — Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light); icon styles Atlas, Blueprint, Ochre and Target. A **Presets** row sets the whole workflow to Rhino, AutoCAD or Blender in one click.
+- **Look**: icon styles Atlas, Blueprint, Ochre and Target. A **Presets** row sets the whole workflow to Rhino, AutoCAD, 3ds Max or Blender in one click.
 
 ## A complete example: two Napoleone coffee tables
 
@@ -103,21 +105,15 @@ The mouse navigation of the viewport can follow the program you come from — Bl
 
 ![Navigation style](docs/images/ui-navigation-style.jpg)
 
-Everything else is in the add-on preferences, in ten sections: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gumball, Toolbar, Performance, DXF / DWG and Shortcuts.
+Everything else is in the add-on preferences, in nine sections: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gumball, Toolbar, Performance and Shortcuts.
 
 ![Add-on preferences](docs/images/wassily-preferences.jpg)
 
-*The Presets row sets the workflow (Rhino, AutoCAD, Blender) in one click; the theme has its own row just below. Every option a preset sets stays editable in the sections underneath.*
+*The Presets row sets the workflow (Rhino, AutoCAD, 3ds Max, Blender) in one click. Every option a preset sets stays editable in the sections underneath.*
 
 The right-click menu gained a **Display As** submenu (Bounds, Wire, Solid, Textured) for the selected objects, with a dot on the current choice.
 
 ![Display As in the object context menu](docs/images/wassily-display-as.jpg)
-
-Six themes ship with the add-on and install in one click from the preferences: **Blueprint**, **Carbon** and **Midnight** for the dark ones — the screenshots above are in Blueprint — and three light ones, here on the same model:
-
-![Graphite, Vellum and Ivory](docs/images/wassily-themes-light.jpg)
-
-*Left to right: **Graphite**, which follows the Rhino interface, **Vellum** and **Ivory**.*
 
 ## Installation
 
@@ -126,6 +122,8 @@ Requires **Blender 4.2 or newer**. Developed and tested on Blender 5.1 and 5.2.
 1. Download the latest `wanderer-x.y.z.zip` from the [Releases](../../releases) page.
 2. In Blender: *Edit > Preferences > Get Extensions*, open the drop-down menu at the top right and choose **Install from Disk...**, then select the zip.
 3. Enable **Wanderer CAD**. If you have an older version installed, remove it first and restart Blender.
+
+**Themes (optional).** The six Wanderer themes come in one separate file, `wanderer_themes-x.y.z.zip`, next to the add-on on each release: Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light). Install it the same way (*Install from Disk...*, or drag it into Blender), then choose a theme in *Preferences > Themes*. It is also on the Blender Extensions website.
 
 ## What changed
 

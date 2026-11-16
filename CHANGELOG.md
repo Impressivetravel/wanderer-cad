@@ -1,3 +1,220 @@
+# Wanderer CAD 2.96.128 — what's new since 2.96.127
+
+## New command
+
+- **Orient 3 Points** (`orient3pt`, `o3pt`, as Orient3Pt in Rhino): moves and rotates the selection from one plane to another. Pick three reference points (origin, X direction, side of the plane), then three target points. Unlike Orient (2 points), it controls the full orientation, including the rotation around the X direction, so a part can be laid flat on a tilted face or turned over. The size does not change; C makes a copy. It is in the Orient dropdown of the toolbar, in the Wanderer menu and on the command line.
+
+## Layout: title block, images, annotations, detail views
+
+The layout (paper sheets) gets closer to AutoCAD's paper space and SketchUp LayOut. Everything below is in the **Layout** tab of the sidebar, and is exported in the PDF.
+
+- **Custom title block.** A new *Title Block* panel: four templates (Classic block, Bottom strip, Side strip as on architectural drawings, Compact), a position (any corner, a strip at the bottom or on the right) and a width. The title block is a list of **cells** you can add, remove, reorder and rename: caption, text, width, row height, text height, alignment. *Copy to All Layouts* gives every sheet the same title block, and a new layout takes the title block of the last one.
+- **Automatic fields**, as LayOut's auto-text: `<Project>` `<Title>` `<DrawnBy>` `<Date>` `<Sheet>` `<Sheets>` `<Rev>` `<Scale>` `<Format>` `<Layout>` `<File>` `<Today>`. Type them in a cell of the title block, or in any text on the sheet (`<Sheet> / <Sheets>` gives 02 / 05): they are filled in and kept up to date by themselves.
+- **Logo and images.** A *Logo* file for the title block (PNG with transparency, JPEG...), fitted in its cell. *Insert Image* places any image on the sheet (a photo, a render); move and resize it like any object. Images are embedded in the PDF and the SVG (the DXF shows their outline).
+- **Annotate panel.** Text, Leader, Dimension, Continue, Angle, Radius, Line, Rectangle, Circle and Hatch in one place, drawn on the sheet in millimeters, plus Image, Field and **North Arrow**.
+- **Drawing titles.** *Viewport labels: Drawing title* writes a numbered title under each viewport: the number in a circle, the name above a line, the scale below. Viewports are numbered by themselves, or type your own number.
+- **Scale bar.** Tick *Scale bar* on a viewport: a graphic scale with round divisions (0, 1, 2, 3, 4 m) is drawn under it and follows its scale.
+- **Detail View** (`detailview`, like VIEWDETAIL in AutoCAD): draw a rectangle around a part of a viewport, then click where the enlarged view goes. It is created at a scale at least twice as large (1:100 gives 1:50), and the part is marked with a letter on the original viewport. The mark follows the detail view when you pan or rescale it, and goes away with it.
+
+- **Edit the title block on the sheet, like a table.** Double-click the title block (or *Edit on the Sheet* in the Title Block panel, or `titleblock`): drag its free edge to stretch it, drag a line between two cells or two rows to resize them, drag the block to another corner of the frame. Click a cell to select it, double-click it to type its caption and text. **C** adds a column (the cell is split in two), **R** adds a row (Shift + R: above), **X** deletes the cell, Tab goes to the next cell. Enter, Esc or a click elsewhere: done. The panel has the same *Column* and *Row* buttons.
+- **Free title block, as it is drawn in AutoCAD.** *Convert to Free Drawing* (`explodetitle`) turns the title block into ordinary objects on a layer *Title block*: a rectangle, one line per separation, the texts (those with fields such as `<Scale>` or `<Sheet>` stay automatic) and the logo. Edit them with the usual tools (Stretch, Move, Line, Rectangle, Text, Field...). *Copy to All Layouts* and new layouts take this drawing; *Back to a Template* removes it.
+
+## Print settings per layer
+
+As in AutoCAD's layer manager (Plot / No Plot, lineweight) and Rhino's layer panel (print color, print width). Two places show the same table: **Layers > Print Settings** in the model, and **Layout > Print by Layer** on a sheet (layers of the model, then layers of the sheet).
+
+- **Printed or not.** Click the printer of a layer: its objects stay visible on screen (in light gray on the sheets) but are left out of the PDF, SVG and DXF. Sublayers follow their parent. On a sheet, a viewport placed on a layer that is not printed loses only its border, as in AutoCAD; the layer *Sheet* holds the frame and the title block.
+- **Print width.** *Default* (the line widths of the layout's Print panel) or one of AutoCAD's lineweights, from 0.05 to 2.11 mm. A sublayer left on Default follows its parent. Hidden edges are never thicker than the visible edges of their layer. *Show line widths* displays each layer with its own width.
+- **Print color.** Pick a color to print a layer in it whatever the color mode of the layout; the cross next to it goes back to the color mode. The layout's *Colors* list gains **Grayscale** next to Black and Layer colors.
+- **Print width of an object.** *Selected objects* at the bottom of the table gives the selection its own print width, whatever its layer (*By Layer* to follow the layer again), like the lineweight of an object in AutoCAD.
+
+## 4 views
+
+- **A button at the left of the view tabs splits the 3D view into four views, as in Rhino**: Top, Perspective, Front and Right. While the four views are shown the button becomes a single rectangle: click it to go back to one view, the active one. Also `4views` and `maximizeview` in the command line.
+- **Each view has its own display.** Every view carries its title at the top left: click the arrow next to it to choose Wireframe, Shaded, Textures or Rendered for that view only, to change its projection, or to maximize it. Blender's own Toggle Quad View cannot do this (its four views share one display). Each view gets its display back the next time you open the four views.
+- **Double-click the title of a view to keep it alone**, as in Rhino.
+- **The bottom bars are drawn once, centred under the four views**, instead of once in each view: one set of view tabs, one command line, one mode bar. They show the **active view**: the last one you clicked in, or typed a command over. Its title is highlighted and its tab is lit; a click on a tab changes that view. A single click on a title makes a view active without touching the selection.
+- **A drawing command follows the mouse from one view to the next**, as in Rhino: first point in Top, next point in Perspective. The command line shows the running command whichever view it is in.
+- **The toolbar runs the full height, at the left of the four views**, as in Rhino: it gets its own narrow column, just its width, that shows nothing else (no header, grid, objects or bars) and closes with the four views. The four views keep equal sizes. When the toolbar changes width (one or two columns of icons), its column follows; to widen the toolbar, first pull the edge of the column, then the edge of the toolbar. The header stays in the top-left view, the sidebar (N) in the top-right view; if the toolbar was hidden, there is no column. Opening a layout closes the four views first.
+- **Blender's own Toggle Quad View (Ctrl + Alt + Q) gets the bars once too**, centred under its four views.
+
+## Blender Extensions platform
+
+To follow the rules of extensions.blender.org:
+
+- **Themes removed.** The six Wanderer themes, the "Install theme" and "Restore my previous theme" buttons and the look part of the presets are gone; your current Blender theme is not touched. They now come as one separate theme extension, `wanderer_themes`, next to the add-on on each GitHub release and on extensions.blender.org: install it like the add-on (Install from Disk, or drag it into Blender), then choose a theme in Preferences > Themes. Blender applies Blueprint when it is installed. The Appearance section of the preferences says where to find them.
+- **DWG removed.** Wanderer no longer calls an outside program (ODA File Converter, LibreDWG). DXF import and export, written by the add-on itself, stay as they were, for the model and for the layout sheets. To open a DWG, save it as DXF from your CAD program first. The "ODA File Converter" setting and the DXF / DWG section of the preferences are gone.
+- No more background thread: on very large scenes the snap index is now computed right after the view is drawn, inside Blender.
+- The modules are loaded without touching Python's module list, and the tags are reduced to Modeling.
+
+## Bottom bar and right-click menu
+
+- **Quick Type comes first** among the mode buttons, right next to the command line it opens, before Grid Snap.
+- **Right-click menu**: Select, Display As, Material, Lock / Unlock, Isolate, Local View (Quit Local View when you are in it) and Show All (when objects are hidden) now come at the top of the menu, before Shade Smooth.
+
+## Lock objects
+
+- **Lock, Unlock All and Unlock Selected**, as in Rhino (Freeze / Unfreeze in 3ds Max), in the right-click menu and the command line (`lock`, `freeze`, `unlock`, `unfreeze`, `unlockselected`). A locked object stays visible and you can still snap to it, but it can no longer be selected (click or window) nor changed by a command. Right-click with a selection: Lock. Right-click when something is locked, even with nothing selected: Unlock All, or Unlock Selected to click the ones to free (Enter to finish, Esc to cancel). Locks that Wanderer sets itself (layout frames) are never lifted. The Maya alias `freeze` of Apply Transforms is now `freezetransforms`.
+
+## 3ds Max preset, copy with Shift + drag
+
+- **A 3ds Max workflow preset**, next to Rhino, AutoCAD and Blender: 3ds Max navigation (the middle button pans, Alt + middle orbits), zoom towards the cursor, Shift + drag to copy. A right click still ends a command, but Enter does not repeat the last one.
+- **Shift + drag as in 3ds Max**: on an object it opens **Clone Options** (Copy or Instance, number of copies, name: Box002, Box003...), each copy moved again by the same amount; Cancel makes none. On edges or faces it **extrudes** (the moved part stays joined by new faces), and Ctrl + Shift + drag copies them apart. With Alt (Rhino) nothing changes: a single copy.
+- **Copy while dragging: Alt (Rhino) or Shift (3ds Max)**, a new choice in Preferences > Gumball. With Shift, Shift + drag on an object or on a Gumball handle moves a copy, as in 3ds Max; the copy is kept even if you let go of Shift during the drag. Alt then takes Shift's usual role (keep the dominant axis, uniform scale, free rotation). Shift + click still adds to the selection. The command line shows which key copies.
+- **With Alt held, the Gumball handle under the mouse lights up.** Blender stops highlighting its handles while Alt is down, so you could not see which arrow Alt + drag would take. Wanderer now lights it itself, in the usual yellow, with the Select tool.
+- If Blender uses Alt to emulate the middle mouse button (Preferences > Input > Emulate 3 Button Mouse), Alt + drag orbits the view instead of copying: the Gumball preferences now say so, and Shift + drag is the way out.
+
+## Changed
+
+- **The Gumball replaces the gizmo of Blender's Move, Rotate, Scale and Transform tools**, as in Rhino. With one of these tools active, Blender's own gizmo was shown and Wanderer hid its Gumball, which looked like the Gumball was missing. Now the Gumball shows with these tools too, and their gizmo comes back as soon as you switch to another tool or turn the Gumball off. Other tools (Extrude, Bevel, Knife...) keep their own gizmo.
+- **Rhino and AutoCAD presets: Quick Type is off by default.** Applying the Rhino or AutoCAD workflow preset no longer turns on Quick Type (typing a letter starts the command line): the letters keep Blender's shortcuts and Space opens the command line. Turn Quick Type on from the bottom bar, or with Shift+Q, when you want it.
+- **Show or hide the Wanderer bars from the 3D view header**: a new button, just left of Selectability & Visibility, shows or hides the three bars at the bottom of the 3D view (view tabs, command line, modes) for a clean view. While they are hidden, the command line comes back as soon as you type a command.
+- **The bottom bars no longer move when the sidebar (N) opens**: they keep their place and size, centred between the toolbar and the edge of the view, and the sidebar simply passes over them. Press N to close it if it is in the way.
+- **The view tabs show the real view, as the viewport titles in Rhino.** When you set a view that has no tab (Back, Bottom, Left...), the tab you were in takes its name and stays lit (Perspective becomes Bottom), then gets its own name back as soon as you click another tab. The Perspective tab is called **Axonometric** when the 3D view is orthographic, and it keeps that projection when you come back to it from another tab. A side view in perspective (Blender's "Right Perspective", from a click on the navigation gizmo) lights the Right tab, not Perspective.
+- **The bottom bars follow the add-on language**, like the view tabs: the mode buttons (Grid Snap, Polar, OSnap, Auto CPlane, Quick Type) and the empty command line ("Type a command") are now translated in the 11 languages. As in Rhino, Ortho, SmartTrack and Gumball keep their names.
+- **Language: Follow Blender's language.** A new choice at the top of the Language list in the add-on preferences: Wanderer takes the same language as Blender's interface, and follows it when you change it. English if Blender's language is not one of Wanderer's 11 languages.
+- **Tool names checked against AutoCAD and Rhino**: Mirror is now Simetría in Spanish, Hatch is Hachures in French (as the AutoCAD command), and the Turkish name of Extrude Curve no longer reads like Extend.
+- **The tool groups of the Wanderer > Tools panel open unfolded** (Select, Curves, Transform...), even in files where they had been folded. A new arrow next to the search field expands all the groups, and turns upwards to collapse them all once they are open.
+- **The Gumball follows the selection while you drag it, as in Rhino.** It used to stay at its starting place until you released the mouse. It now moves with the object, and turns with it during a rotation. The handle you drag simply lights up: the grey copy that Blender's arrows left at their starting place is gone.
+- **Typing a Gumball value opens a small bubble**, as in Rhino: click a handle without dragging, and a bubble next to it asks for the value ("Distance to move in Y", the axis in its colour) and shows what you type. Enter applies, Esc cancels. It has the rounded look of the bottom bars. It pops in with a short growing animation; the selection moves only when you press Enter, as in Rhino. While it is open only the move arrows stay, and a click elsewhere cancels the value.
+- **Selected curves show through objects, as in Rhino.** A curve drawn on a face or passing through a solid stays fully visible, in the selection colour, as long as it is selected.
+- **CPlane on a face stays put.** `cplane`, then a click on a face, sets the construction plane on that face. If Auto CPlane was on, it turns off, so the plane no longer follows the selection or the face under the cursor. Turn Auto CPlane back on from the bottom bar when you want it again.
+
+## Fixed
+
+- **Clicking an object of a group selects the whole group** until it is ungrouped, even when the group was already selected (it used to keep only the clicked object). Shift + click adds or removes the whole group, Ctrl + click removes it.
+- **Plane, Rectangle, Box, Area Light, Clipping Plane and layout Viewport work with Ortho on.** Ortho (and Polar) pulled the opposite corner onto an axis, so the shape was flat and nothing was made; the opposite corner is now free, as in Rhino. Lines and polylines still follow Ortho.
+- **Command line: the end of a long prompt was cut off.** The prompt of Fillet Edge, and of any command with a long hint, ended with "…" whatever the command bar size. A prompt too long for the bar now continues on the next lines (up to four); the keys (Esc, Enter...) stay below it. A short prompt keeps its single line.
+- **Radius dimension on a fillet.** Radius / Diameter found "no circle or arc" on the fillet of a polyline (Fillet Curve) or on the corner of a rounded rectangle, because the fillet is part of the polyline and not a separate arc. Click the fillet: the dimension reads its radius (R), or its diameter with D. Arc Length Dimension and Center Mark work on fillets too.
+- **Four views: orbit or pan during a command moved the wrong view.** With "quick secondary click as Enter" on, dragging with the right button while a command was running moved the view where the command had started, not the one under the mouse. It now moves the view under the mouse.
+- **PushPull: a curve that touches the edge of a face can be pulled.** A closed curve drawn on a face was only taken when it sat strictly inside the face. Drawn against an edge (a rectangle on the side of a box, resting on its bottom edge), in a corner, or from one edge to the other, it was ignored, or it cut the face badly. As in Rhino, it now splits the face into its zones, and each zone can be pushed or pulled. It also works against the edge of a hole, and with curves that cross each other.
+- **The Gumball never appeared when another add-on kept a background command running** (the BlenderKit asset bar, for example): Wanderer took it for a Blender edit in progress and hid its handles, so only Blender's own gizmos showed. Only Blender's real edit commands (Move, Knife, Loop Cut, Bevel...) now hide the Gumball.
+- **Ctrl + Shift + orbit from a Front / Top / Right view always switched to perspective**, even with Auto Perspective off in Blender's Preferences > Navigation. It now follows that setting: off, the view stays orthographic (User Orthographic), as in Blender.
+
+---
+
+# Wanderer CAD 2.96.127 — what's new since 2.96.126
+
+2.96.127 answers user reports: `dupborder` on the top of a box gave nothing; Revolve could not turn around the Z axis in a perspective view; several other commands could not leave the construction plane, where Rhino can; Extend Curve and Blend Surface were hard to get to work; a theme could not be put back; and there was no way to create your own aliases.
+
+## New command
+
+- **Duplicate Face Border** (`dupfaceborder`, as DupFaceBorder in Rhino): hover a face of a solid or a surface, its border lights up, click to create a closed curve on it. Holes are included. Keep clicking other faces, then Enter or Esc to finish. The solid is not modified. It is in the menu of Duplicate Border in the toolbar, in the Wanderer menu and on the command line.
+- A face is a face as Rhino sees it: the whole side of a cylinder gives its two circles, not its 64 facets. A closed smooth surface such as a sphere has no border.
+
+## History: results that stay editable (Blender modifiers)
+
+A new option **History = Yes / No**, off by default, keeps the result editable with a Blender modifier instead of creating a fixed mesh. It is remembered from one use to the next.
+
+- **Extrude Curve, Extrude Surface** (key `H`): the height stays editable in the Modifiers tab (modifier "Extrude"). Solid = Yes on closed flat profiles gives a closed solid; otherwise the surface alone. Not available with BothSides, Tapered or ToPoint: the usual mesh is created and the command says so.
+- **Revolve** (key `H`): a Screw modifier named "Revolve"; the angle and the number of steps stay editable. The ends of a partial revolve are not capped.
+- **Thicken** (checkbox): a Solidify modifier on the surface; the thickness stays editable.
+- **Pipe** (checkbox): a curve with a thickness; the radius stays editable in the curve's Data tab (Geometry > Bevel > Depth).
+- **Boolean Union, Difference, Intersection** (key `H`): Boolean modifiers; the other objects stay in the scene as wireframe operands, hidden from renders, and moving them updates the result. Not available for Boolean Split.
+
+The other commands (Trim, Fillet Edge, Duplicate Border, snaps...) are unchanged and work on the real geometry: apply the modifier first (Modifiers tab > Apply) before using them on such an object. Loft, Sweep and Network Surface have no History option.
+
+## Four new themes, and Ghost retired
+
+- **Wanderer Graphite** follows the Rhino interface: neutral gray panels, toolbars and command bar, and a **light viewport** with a soft gradient, as in Rhino's parallel and perspective views. Selected objects are outlined in yellow, like Rhino.
+- **Wanderer Carbon**: near-black, strictly neutral gray. The darkest of the set, the most contrast for the geometry.
+- **Wanderer Midnight**: deep blue night, the dark version of Blueprint, with a cyan accent.
+- **Wanderer Ivory**: warm paper and brown ink, the softest on the eyes.
+- **Wanderer Ghost has been removed.** If you had applied it, it stays in Preferences > Themes, where it was copied when installed.
+
+The six themes sit in Preferences > Appearance: dark ones on the first row (Blueprint, Carbon, Midnight), light ones on the second (Graphite, Vellum, Ivory).
+
+## Presets: Rhino, AutoCAD or Blender in one click
+
+A new **Presets** box at the top of the preferences (Preferences > Add-ons > Wanderer CAD) sets several options at once, on one **Workflow** row: *Rhino* (right button orbits, a quick right click is Enter, Rhino cursor, zoom towards the cursor, typing a letter starts the command line), *AutoCAD* (middle button pans, crosshair, typing starts the command line) or *Blender* (Blender's navigation, letters keep Blender's shortcuts).
+
+The box shows which workflow is in place, and every option a preset sets stays editable below. The look is not part of a preset: pick a theme on the Theme row, just below.
+
+## Languages
+
+- **Nine more languages** for the tool names and the command line: German, Spanish, Italian, Portuguese, Russian, Turkish, Simplified Chinese, Japanese and Korean, besides English and French.
+- Each language has **the command aliases AutoCAD and Rhino use in that language**: `linie`, `kreis`, `schieben`, `dehnen` in German; `linea`, `circulo`, `desplaza`, `alarga` in Spanish; `отрезок`, `круг`, `перенести` in Russian... The English names and aliases keep working when a local alias does not already use them. In Chinese, Japanese and Korean the aliases stay in English, as in AutoCAD and Rhino; only the names are translated.
+- In these nine languages the prompts shown while a command runs are still in English. The translations have not been reviewed by native speakers yet: corrections are welcome.
+- **The language now applies at once**, without restarting Blender, in both directions. Before, the tool names waited for a restart while the aliases changed immediately, and the command line kept answering in the previous language for a while.
+
+## Your own aliases (AliasEdit)
+
+- **Command aliases**, as AliasEdit in AutoCAD and the aliases of Rhino. Type `aliasedit` in the command line (or open Preferences > Add-ons > Wanderer CAD > Command aliases): add an alias and the command it runs, by its name or one of its aliases (`ee` for `Extend Curve`, `c` for `Copy`...). The list shows which command each alias runs, or "unknown command".
+- Your aliases come before the built-in ones: with `c` set to Copy, `c` runs Copy and Circle is the next suggestion.
+- They are saved with Blender's preferences. A copy is also kept in Blender's configuration folder, so they come back if you remove the add-on and install it again.
+
+## Extend Curve is now a tool
+
+Extend Curve used to be a dialog that only worked on curves selected beforehand, and it changed the shape of NURBS curves and arcs. It is now an interactive tool, as Extend in Rhino and AutoCAD (`extend`, `ex`, toolbar, Wanderer menu):
+
+- **Click near the end of a curve**, then give the new end: move the mouse and click, **type a length**, or press **Enter to stop at the next curve, edge or surface** on the way. The mouse also catches those limits when it passes near them.
+- The tool stays active: extend another end, then Enter or Esc to finish.
+- **The curve keeps its exact shape.** A line stays a two-point line, a polyline lengthens its last segment, an arc or a Bezier curve gets a straight tangent segment, a NURBS curve gets a straight segment added (adding a control point would bend it).
+
+## Shortcut
+
+- **Quick Type on / off with Shift+Q** in the 3D viewport, the same switch as the Quick Type button in the bottom bar. Blender does not use Shift+Q by default. With Quick Type on, Q alone still starts the command line.
+
+## Commands that could not leave the construction plane
+
+In a perspective or top view, these commands stayed flat on the construction plane: the `Z` key was ignored and a point snapped above the plane was flattened onto it.
+
+- **Revolve** and **SubD Revolve**: `X`, `Y` and `Z` lock the axis, snapped points keep their height, and the length of the axis can be typed. As in Rhino, **Enter after the first point** makes the axis perpendicular to the construction plane through that point.
+- **Mirror**: `X`, `Y` and `Z` mirror across that axis, as XAxis, YAxis and ZAxis in Rhino. Before the first point the mirror goes through the origin of the construction plane, at once. After the first point it goes through that point: `Z` mirrors across the plane parallel to the construction plane (top to bottom), then click or Enter.
+- **Rotate**: after the center, `X`, `Y` or `Z` chooses the rotation axis. The same key again goes back to the construction plane. The angle can be typed or given with the mouse.
+- **Array: Polar**: after the center, `X`, `Y` or `Z` chooses the axis of the array.
+- **Orient**: `X`, `Y` and `Z` lock the direction of the second reference point and of the second target point, so an object can be stood upright without anything to snap to.
+- **Stretch**: the base point and the destination are real 3D points: they keep the height of the point they snap to, and `Z` locks a vertical move.
+- **Construction Line**: `X`, `Y` and `Z` draw the line along that axis, so a vertical line is possible.
+- **Dimension**: a height can be dimensioned. Snap the second point straight above the first one (the two ends of a vertical edge), or press `Z`: the dimension is drawn in the vertical plane that faces the view.
+
+Planar shapes (circle, rectangle, arc, polygon...) and the base of solids stay on the construction plane, as in Rhino.
+
+## Gumball, closer to Rhino
+
+- **The Gumball stays in place while you drag.** Its arrows used to follow the object at every mouse move. Now the handles wait where they were and join the selection when the button is released (also when an object is dragged with the Select tool, and while a value is typed).
+- **Rotation handles are quarter arcs**, no longer three full circles. They sit on the side opposite to the arrows, between the scale handles, so they no longer cover the extrude dot and the cut bar of the arrows.
+- **New: planar move.** A small square in the corner of two arrows moves the selection in their plane (XY, YZ, ZX). Drag it; snaps work as with the arrows; Alt makes a copy.
+
+## Selection in Edit Mode: double-click
+
+The double-click of the Select tools now follows the sub-object selection of Rhino, according to the selection mode:
+
+- **Edges**: double-click an edge for its loop, as before. **Alt + double-click** selects its **ring**.
+- **Faces**: click a face, then double-click the next one: the whole **row of faces** in that direction. Without a selected neighbor, the direction comes from the edge of the face nearest to the cursor.
+- **Vertices**: click a vertex, then double-click the next one: the whole **chain**.
+- **Shift** adds, **Ctrl/Cmd** removes. With Shift, when the element is between two selected elements of the same loop, only the **part between them** is selected.
+- Ctrl+Shift+double-click (sub-object selection from Object Mode) now adds the loop; it used to remove it.
+
+## Fixed
+
+- **The bottom bars were off-centre when the sidebar was open.** View tabs, command line and mode buttons were centred on the whole viewport and then pushed away from the panels, so a wide sidebar left a large gap on the left and almost none on the right. They are now centred on the space left free between the toolbar and the sidebar: the same margin on both sides.
+- **Extrude Curve could merge several objects into one.** When the contours of different objects were extruded together, the test that detects a contour inside another (a hole, as in Rhino) only looked at one point of the contour, so an unrelated contour could be swallowed and the result came out as a single object holding several shells. A contour is now taken as a hole only when it lies entirely inside the other one.
+- **Scale: a typed length was read in Blender units instead of the scene unit.** In a scene in centimetres, typing 1 after the reference point gave 100 cm. The typed length is now in the displayed unit (1 = 1 cm), in Scale, Scale 2D and Scale 1D. A value typed right after the base point is still a factor.
+- **Boolean Difference, Intersection and Split: the first set now stays highlighted** while you pick the second one, as in Rhino. Before, it was deselected after Enter, so you could not tell whether it had been taken into account. Clicking it again during the second step does not remove it.
+- **Preview lines and the crosshair were far too thick on scaled screens.** On Windows at 150 % or 200 % (4K), or with Blender's Resolution Scale above 1, the screen scale was applied twice to line widths: a 2 px preview line became 4.5 to 14 px wide. Line widths now follow the screen scale once. This affects the drawing preview, the crosshair, snap markers, highlighted curves, the offset arrows and the layout viewport frames. Nothing changes on a 100 % screen or on a Mac.
+
+- **Blend Surface joined the whole outlines of two surfaces instead of the two edges you clicked.** A click took the complete border of a surface (the four sides of a rectangle), so the result was unusable between two flat surfaces. A click now takes one edge, from corner to corner, as in Rhino; the end of a tube is still taken whole. `C` (ChainEdges) takes the whole border. When there is no open edge (only closed solids), the command now says so and tells you to detach a face with Extract Surface.
+- **Themes: your own theme could be lost.** Applying a Wanderer theme replaced the current theme, and a theme you had customised without saving it could not be put back. Your theme is now saved first as "Theme before Wanderer" (listed in Preferences > Themes), and a button **Restore my previous theme** sits under the theme rows. A theme lost before this version cannot be recovered: pick one in Preferences > Themes.
+- **Wanderer changed Blender's own navigation settings at every start.** Auto Depth, Zoom to Mouse Position, the zoom direction and Orbit Around Selection were overwritten with Wanderer's values each time Blender opened, so turning Auto Depth on in Preferences > Navigation did not last. Wanderer no longer writes them at start: its checkboxes now show Blender's settings, and a checkbox changes only its own setting when you click it.
+
+## Changed
+
+- **The preferences are reorganised.** Ten collapsible sections, in the order you set them: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gumball, Toolbar, Performance, DXF / DWG, Shortcuts. The four first are open, the rest folded. No setting was removed; the ones that were loose at the bottom of the page now sit with the others.
+- **A sixth theme, Wanderer Ivory**: warm paper and brown ink, the softest of the light themes.
+- **The Presets box has a single Workflow row** (Rhino, AutoCAD, Blender). The "Workflow and look" and "Look only" rows are gone: the theme has its own row just below, and three rows of buttons were one too many.
+- **The curve tools are side by side in the toolbar.** Polyline, Control Point Curve, Interpolate Curve, Pen and Sketch were in one dropdown under Polyline; each has its own button now.
+- **Right-click > Display As.** The object context menu has a **Display As** submenu (Bounds, Wire, Solid, Textured) for the selected objects, instead of going to Object properties > Viewport Display. A dot marks the current choice. Handy to show a Boolean operand kept by History as a solid again.
+- **Offset Edge, Fillet Edge, Chamfer Edge: a click takes the whole edge**, as in Rhino: the full circle at the top of a cylinder, the whole border of a curved surface, not one small mesh segment at a time (a border of 204 segments needed 204 clicks or a box). Hovering shows the edge that will be taken. Ctrl+click still takes a single segment; edges stop at corners, so a box keeps its twelve edges.
+- **Offset Edge takes what is already selected.** A curve selected before the command is used directly: the command goes straight to the side and the distance, as in Rhino. On a surface or a solid you still choose the edge.
+- **Extrude Curve and Extrude Surface: the cap option is now called Solid = Yes / No**, as in Rhino, and it is shown from the first prompt (key `C`). Solid = No gives the surface only, without caps, ready for Offset Surface or Thicken.
+- `l` now starts Line / Polyline in English, as in AutoCAD.
+- **Duplicate Border and Duplicate Face Border create one curve per border**, as in Rhino: the top and the bottom of a tube are two separate closed polylines, each selected, offset or exploded on its own. Explode turns one into its segments.
+
+- **Duplicate Border on a face of a solid**, as in Rhino: Ctrl+Shift+click a face of the solid (it goes into sub-object selection), then `dupborder` (or Enter): the border of that face is created as closed curves, holes included. The whole side of a cylinder gives its two circles. Several faces can be selected. On a whole closed solid it still creates nothing (a solid has no free border, as in Rhino), and the message now says to Ctrl+Shift+click a face or use Duplicate Face Border.
+
+---
+
 # Wanderer CAD 2.96.126 — what's new since 2.96.125
 
 2.96.126 makes the layouts work **like the layouts of AutoCAD**: a viewport has **grips**, a **double-click** enters it, and `MV`, `MS` and `PS` do what an AutoCAD user expects. It also adds the **export of the model to DXF**, and the **import and export of DWG** through the free ODA File Converter.
