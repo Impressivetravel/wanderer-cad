@@ -1,0 +1,27 @@
+import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _os.environ.get('WANDERER_SRC') or _os.path.join(_HERE, '..', 'wanderer_cad', '__init__.py')
+exec(open(_os.path.join(_HERE,'harness.py')).read())
+# Les barres du bas suivent la langue du module : boutons de mode, ligne de commande au repos (comme les onglets de vues)
+res=[]
+def chk(n,ok,info=""): res.append(bool(ok)); print(("OK  " if ok else "BAD ")+n, info)
+def setlang(code):
+    m.PREF_DEFAULTS["language"]=code; m.language_caches_clear()
+def labels():
+    items,_a,_t=m.modes_layout(ctx, area.as_pointer(), 1.0)
+    return [l for _k,l,_w in items]
+setlang('EN')
+en=labels()
+chk("anglais : Quick Type (au plus près de la ligne de commande), puis Grid Snap, Ortho, Polar, OSnap...", [x for x in en if x!="Quick Type"][:4]==["Grid Snap","Ortho","Polar","OSnap"] and en[0]==("Quick Type" if "Quick Type" in en else "Grid Snap"), en)
+setlang('FR')
+fr=labels()
+chk("français : Magnétisme grille, Ortho, Polaire, Accrochage, SmartTrack, Gumball (comme Rhino)", [x for x in fr if x!="Saisie rapide"][:6]==["Magnétisme grille","Ortho","Polaire","Accrochage","SmartTrack","Gumball"], fr)
+chk("... Auto CPlan, Saisie rapide", "Auto CPlan" in fr and ("Saisie rapide" in fr or not m.pref("cmd_line")), fr)
+chk("... « Type a command » -> « Taper une commande »", m.tr_text("Type a command")=="Taper une commande")
+setlang('DE')
+de=labels()
+chk("allemand : Rasterfang, Objektfang, Auto-KEbene", "Rasterfang" in de and "Objektfang" in de and "Auto-KEbene" in de, de)
+chk("... « Type a command » -> « Befehl eingeben »", m.tr_text("Type a command")=="Befehl eingeben")
+setlang('JA')
+chk("japonais : グリッドスナップ", "グリッドスナップ" in labels(), labels())
+setlang('EN')
+chk("retour en anglais", labels()==en)
+print("RESULTAT",sum(res),"/",len(res))
