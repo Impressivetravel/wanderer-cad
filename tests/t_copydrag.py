@@ -1,4 +1,4 @@
-# Copier en glissant : Alt + glisser (Rhino) ou Maj + glisser (3ds Max), sur une flèche du Gumball ou sur l'objet lui-même.
+# Copier en glissant : Alt + glisser (Rhino) ou Maj + glisser (3ds Max), sur une flèche du Gizmo ou sur l'objet lui-même.
 import os as _os
 _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _os.environ.get('WANDERER_SRC') or _os.path.join(_HERE, '..', 'wanderer_cad', '__init__.py')
 exec(open(_os.path.join(_HERE, 'harness.py')).read())
@@ -41,7 +41,7 @@ def gb_drag(**mods):
     send(o, 'LEFTMOUSE', 'RELEASE', 11, 0, **mods)
     return boxes()
 
-SEC = "Gumball, Alt (Rhino)"
+SEC = "Gizmo, Alt (Rhino)"
 chk("Alt + glisser la flèche X : une copie en x = 10, l'original reste en 0", gb_drag(alt=True) == [0.0, 10.0], boxes())
 chk("sans touche : simple déplacement", gb_drag() == [10.0], boxes())
 chk("Maj + glisser la flèche (réglage Alt) : pas de copie", gb_drag(shift=True) == [10.0], boxes())
@@ -161,7 +161,7 @@ chk("Alt pressé au-dessus de la flèche X : elle est repérée, l'évènement c
 hov('MOUSEMOVE', 'NOTHING', 0, 2, alt=True)
 chk("la souris passe sur la flèche Y, Alt toujours maintenu : c'est elle qui est repérée", AH["handle"] == ('MOVE', 1), AH["handle"])
 hov('MOUSEMOVE', 'NOTHING', 30, 30, alt=True)
-chk("loin du Gumball : plus rien d'éclairé", AH["handle"] is None, AH["handle"])
+chk("loin du Gizmo : plus rien d'éclairé", AH["handle"] is None, AH["handle"])
 hov('MOUSEMOVE', 'NOTHING', 2, 0, alt=True); hov('LEFT_ALT', 'RELEASE', 2, 0)
 chk("Alt lâché : plus rien d'éclairé", AH["handle"] is None, AH["handle"])
 m.PREF_DEFAULTS['copy_key'] = 'SHIFT'; hov('LEFT_ALT', 'PRESS', 2, 0)
@@ -179,4 +179,27 @@ chk("Alt lâché : la flèche Y retrouve sa couleur", G.gz_move[1].color == (0, 
 hov('LEFT_ALT', 'PRESS', 2, 0)
 o, r = gop('MOVE', 0, 2, 0, alt=True); send(o, 'MOUSEMOVE', 'NOTHING', 6, 0, alt=True); send(o, 'LEFTMOUSE', 'RELEASE', 6, 0)
 chk("après Alt + glisser, la surbrillance ne reste pas accrochée", AH["handle"] is None, AH["handle"])
+
+SEC = "#17 Alt + clic sur une flèche, puis la valeur tapée (Rhino)"
+setkey('ALT')
+def click_type(val, release_alt=True, toggle=False, **mods):
+    clear(); cube()
+    o, r = gop('MOVE', 0, 1, 0, **mods)
+    send(o, 'LEFTMOUSE', 'RELEASE', 1, 0, **mods)                 # clic sans glisser : on tape la valeur
+    if release_alt:
+        send(o, 'LEFT_ALT', 'RELEASE', 1, 0)                     # Alt relâché avant de taper
+    if toggle:
+        send(o, 'LEFT_ALT', 'PRESS', 1, 0, alt=True); send(o, 'LEFT_ALT', 'RELEASE', 1, 0)
+    for ch in val:
+        type(o).modal(o, ctx, ev('A', 'PRESS', *scr(1, 0), unicode=ch, ascii=ch))
+    r = send(o, 'RET', 'PRESS', 1, 0)
+    return r, boxes()
+r, bx = click_type("5", alt=True)
+chk("Alt + clic, Alt relâché, 5 + Entrée : une copie en x = 5, l'original reste", bx == [0.0, 5.0], (r, bx))
+r, bx = click_type("5", release_alt=False, alt=True)
+chk("Alt gardé jusqu'à Entrée : une copie aussi", bx == [0.0, 5.0], (r, bx))
+r, bx = click_type("5")
+chk("clic sans Alt : simple déplacement", bx == [5.0], (r, bx))
+r, bx = click_type("5", toggle=True, alt=True)
+chk("Alt pressé de nouveau pendant la saisie : la copie est annulée (déplacement)", bx == [5.0], (r, bx))
 summary()

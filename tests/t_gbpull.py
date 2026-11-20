@@ -1,4 +1,4 @@
-# Gumball : sphère d'extrusion et trait de coupe (règles d'affichage par axe, extrusion, coupe / ajout, face poussée)
+# Gizmo : sphère d'extrusion et trait de coupe (règles d'affichage par axe, extrusion, coupe / ajout, face poussée)
 import os as _os
 _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _os.environ.get('WANDERER_SRC') or _os.path.join(_HERE, '..', 'wanderer_cad', '__init__.py')
 src=open(_os.path.join(_HERE,'t_pushpull.py')).read()
@@ -113,7 +113,7 @@ cut_case("courbe flottante poussée dans le solide : coupe (2 de profondeur)", a
 cut_case("courbe flottante + Ctrl : ajoute (bossage de 1 devant)", away, 3.0, 64+4, ctrl=True)
 cut_case("courbe flottante tirée à l'opposé : rien à couper, solide intact", away, -2.0, None)
 clear(); b=box(); c=poly("c",front); sel(c)
-undo_redo("trait de coupe du Gumball", lambda: pull('CUT',Y,[('drag',0,1.0)]))
+undo_redo("trait de coupe du Gizmo", lambda: pull('CUT',Y,[('drag',0,1.0)]))
 s=stats(bpy.data.objects["Box"]); chk("... après Rétablir : poche toujours propre", abs(s["vol"]-60)<1e-4 and solid_ok(s), s)
 
 # trait sur une face sélectionnée (mode Édition) = PushPull
@@ -132,7 +132,7 @@ def run_face():
     pick(b,lambda f: f.normal.x>0.9)
     pull('CUT',X,[('drag',-1.0,0)]); bpy.ops.object.mode_set(mode='OBJECT')
 clear(); box(); C.view_layer.update()
-undo_redo("trait du Gumball sur une face", run_face)
+undo_redo("trait du Gizmo sur une face", run_face)
 # ---------------- solide + surface libre dans le même objet (face dupliquée restée dans le maillage) ----------------
 import numpy as _np
 def _mixed():
@@ -158,4 +158,26 @@ clear(); me=bpy.data.meshes.new("S"); me.from_pydata([(-2,-2,0),(2,-2,0),(2,2,0)
 o=bpy.data.objects.new("Open",me); C.scene.collection.objects.link(o); C.view_layer.update(); v0=len(o.data.polygons)
 r=_cutc([(-4,-0.5,1),(-4,0.5,1),(-4,0.5,2),(-4,-0.5,2)],(3.5,0,0))
 chk("boîte ouverte (sans dessus) : refus avec un message qui nomme l'objet, rien n'est modifié", r[1:]==(0,0) and "Open" in r[0] and "closed" in r[0] and len(o.data.polygons)==v0, r)
+# ---------------- extrusion en mode Édition : faces neuves jamais noires (normales à jour pendant le glisser) ----------------
+def _zero_normals(b):
+    bm = bmesh.from_edit_mesh(b.data)
+    return sum(1 for f in bm.faces if f.normal.length < 0.5)
+for label, op_cls in (("Extrude du Gizmo", m.DESSIN_OT_gumball_extrude),):
+    clear(); b=box(); sel(b); bpy.ops.object.mode_set(mode='EDIT')
+    pick(b, lambda f: f.normal.x > 0.9)
+    o = make(op_cls)
+    piv, _t = m.gumball_selection(C)
+    sx, sy = scr(piv.x, piv.y)
+    with contextlib.redirect_stdout(io.StringIO()):
+        r = type(o).invoke(o, ctx, ev('LEFTMOUSE', 'PRESS', sx, sy))
+        mid = []
+        for k in range(1, 5):
+            type(o).modal(o, ctx, ev('MOUSEMOVE', 'NOTHING', *scr(piv.x + 0.5 * k, piv.y)))
+            mid.append(_zero_normals(b))
+        r = type(o).modal(o, ctx, ev('LEFTMOUSE', 'RELEASE', *scr(piv.x + 2.0, piv.y)))
+    after = _zero_normals(b)
+    _bm = bmesh.from_edit_mesh(b.data); nf = len(_bm.faces); xmax = max(v.co.x for v in _bm.verts)
+    chk(f"{label} en mode Édition : aucune face à normale nulle (noire) pendant le glisser ni après", nf >= 6 and xmax > 1.5 and not any(mid[1:]) and after == 0, (r, mid, after, nf, xmax))
+    # (au tout premier mouvement, sous le seuil de glisser, les faces de côté n'ont pas encore de surface : pas de normale possible)
+    bpy.ops.object.mode_set(mode='OBJECT')
 print("RESULTAT",sum(res),"/",len(res))

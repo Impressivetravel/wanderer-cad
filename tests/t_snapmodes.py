@@ -73,7 +73,7 @@ ptr = area.as_pointer()
 SEC = "barre"
 keys = [k for k, _l, _t in m.MODE_BUTTONS]
 chk("Grid Snap est juste avant Ortho dans la barre de modes", keys.index("grid_snap") + 1 == keys.index("ortho"), keys)
-chk("OSnap et Grid Snap ont une flèche (menu déroulant), comme Polar et Gumball",
+chk("OSnap et Grid Snap ont une flèche (menu déroulant), comme Polar et Gizmo",
     m.MODE_ARROWS.get("osnap_enable") == "osnapmenu" and m.MODE_ARROWS.get("grid_snap") == "gridsnapmenu"
     and m.MODE_ARROWS.get("polar") == "polarmenu" and m.MODE_ARROWS.get("gumball") == "gumballmenu", m.MODE_ARROWS)
 try:

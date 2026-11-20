@@ -16,7 +16,7 @@ rec(SEC,"chaque préréglage ne touche que des réglages qui existent, avec des 
 rec(SEC,"réglages d'origine : c'est la façon de travailler de Blender",m.workflow_preset_of(P)=='BLENDER',m.workflow_preset_of(P))
 ch=m.apply_workflow_preset(P,'RHINO')
 rec(SEC,"Rhino : navigation Rhino, curseur Rhino, zoom vers le curseur ; Quick Type reste éteint (Espace ouvre la ligne de commande)",
-    P.nav_style=='RHINO' and P.cursor_style=='RHINO' and P.nav_zoom_cursor and not P.cmd_type and P.cmd_line and P.rclick_enter and set(ch)=={"nav_style","cursor_style","nav_zoom_cursor"},ch)
+    P.nav_style=='RHINO' and P.cursor_style=='RHINO' and P.nav_zoom_cursor and not P.cmd_type and P.cmd_line and P.rclick_enter and set(ch)=={"nav_style","cursor_style","nav_zoom_cursor","view_persp_mods"},ch)
 m._update_nav_style(P,None)
 rec(SEC,"... le style Rhino met l'orbite sur le bouton droit et le menu sur un clic droit bref",P.mouse_orbit=='RIGHT' and P.mouse_menu=='RIGHT_CLICK',(P.mouse_orbit,P.mouse_menu))
 rec(SEC,"le préréglage en place est reconnu (Rhino), et l'appliquer de nouveau ne change rien",m.workflow_preset_of(P)=='RHINO' and m.apply_workflow_preset(P,'RHINO')==[])
@@ -47,4 +47,8 @@ rec(SEC,"chaque bouton explique ce qu'il règle (infobulle)","right button orbit
 rec(SEC,"... les infobulles Rhino, AutoCAD et 3ds Max disent que Quick Type reste éteint, et comment l'allumer",all("Quick Type stays off" in m.PRESET_TIPS[s] and "Shift+Q" in m.PRESET_TIPS[s] for s in ('RHINO','AUTOCAD','MAX')))
 rec(SEC,"plus d'apparence (thèmes retirés) : les préréglages ne touchent pas aux couleurs de Blender",not hasattr(m,"LOOK_PRESETS") and not hasattr(m,"apply_look_preset"))
 rec(SEC,"l'opérateur est enregistré",hasattr(bpy.ops.dessin,"apply_preset"))
+m.apply_workflow_preset(P,'RHINO'); r1=P.view_persp_mods
+m.apply_workflow_preset(P,'AUTOCAD'); r2=P.view_persp_mods
+m.apply_workflow_preset(P,'BLENDER'); r3=P.view_persp_mods
+rec(SEC,"orbite hors d'une vue de côté : Ctrl + Maj (Rhino), Alt (AutoCAD, Blender)",(r1,r2,r3)==('CTRL_SHIFT','ALT','ALT'),(r1,r2,r3))
 summary()

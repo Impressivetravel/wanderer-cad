@@ -91,7 +91,7 @@ giz = [c.__name__ for c in (LAY.DESSIN_GGT_viewport_grips, LAY.DESSIN_GT_vp_grip
 GH = _sys.modules[_PKG + ".gumball_handles"]
 gb = [c.__name__ for c in (GH.DESSIN_GGT_gumball, GH.DESSIN_GT_gb_arc, GH.DESSIN_GT_gb_plane, GH.DESSIN_GT_gb_dot, GH.DESSIN_GT_gb_bar) if not registered(c)]
 kinds = [i.identifier for i in bpy.ops.dessin.gumball.get_rna_type().properties["kind"].enum_items]
-chk("Gumball : le groupe de poignées, l'arc de rotation, le carré de déplacement plan, la sphère et le trait sont enregistrés ; l'opération connaît le déplacement plan", not gb and 'PLANE' in kinds, (gb, kinds))
+chk("Gizmo : le groupe de poignées, l'arc de rotation, le carré de déplacement plan, la sphère et le trait sont enregistrés ; l'opération connaît le déplacement plan", not gb and 'PLANE' in kinds, (gb, kinds))
 ops_ = [n for n in ("DESSIN_MT_viewport_scale", "DESSIN_OT_viewport_grip", "DESSIN_OT_viewport_paper", "DESSIN_OT_export_cad") if not hasattr(bpy.types, n)]
 chk("poignées des fenêtres : le groupe de poignées, ses deux formes, la commande et le menu d'échelle sont enregistrés dans Blender", not giz and not ops_, (giz, ops_))
 G = LAY.DESSIN_GGT_viewport_grips

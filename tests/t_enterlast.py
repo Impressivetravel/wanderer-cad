@@ -87,7 +87,7 @@ chk("PushPull : distance tapée 1,5 (volume 64+24)", abs(s["vol"]-88)<1e-4 and s
 r,b=pp([('c',0,0),('RET',)]); s=stats(b)
 chk("PushPull suivant : Entrée reprend 1,5", abs(s["vol"]-88)<1e-4 and solid_ok(s), (r,s))
 
-# ---------------- Gumball : clic sur une flèche, puis Entrée ----------------
+# ---------------- Gizmo : clic sur une flèche, puis Entrée ----------------
 st=C.scene.dessin
 def gb(evs):
     clear(); b=box(size=2,loc=(0,0,1)); sel(b)
@@ -105,11 +105,11 @@ def gb(evs):
     return r,b
 try:
     r,b=gb([('rel',),('t','2'),('RET',)])
-    chk("Gumball : clic sur la flèche X, 2 tapé", abs(b.location.x-2)<1e-6, (r,tuple(b.location)))
+    chk("Gizmo : clic sur la flèche X, 2 tapé", abs(b.location.x-2)<1e-6, (r,tuple(b.location)))
     r,b=gb([('rel',),('RET',)])
-    chk("Gumball suivant : clic sur la flèche puis Entrée reprend 2", abs(b.location.x-2)<1e-6, (r,tuple(b.location)))
+    chk("Gizmo suivant : clic sur la flèche puis Entrée reprend 2", abs(b.location.x-2)<1e-6, (r,tuple(b.location)))
 except Exception as ex:
-    chk("Gumball : saisie", False, repr(ex))
+    chk("Gizmo : saisie", False, repr(ex))
 
 # ---------------- Annuler / Rétablir ----------------
 clear(); C.view_layer.update()

@@ -65,14 +65,14 @@ for lab, (alias, tid) in ELEVEN.items():
     chk(f"« {alias} » : une seule suggestion, l'outil {lab}", len(sg) >= 1 and sg[0]["key"] == "tool:" + tid and sum(1 for e in sg if e["label"] == lab) == 1, [(e["label"], e["key"]) for e in sg[:3]])
     sg = m.cmd_suggest(lab)
     chk(f"« {lab} » (nom complet) : même outil en tête", bool(sg) and sg[0]["key"] == "tool:" + tid, [(e["label"], e["key"]) for e in sg[:2]])
-for word, tid in (("int", "dessin.intersect_tool"), ("sec", "dessin.section_tool"), ("unroll", "dessin.unroll_tool"), ("mergeallcoplanarfaces", "dessin.merge_faces_tool"), ("orient", "dessin.orient_tool"), ("orient3pt", "dessin.orient3pt_tool"), ("o3pt", "dessin.orient3pt_tool"), ("pipe", "dessin.pipe_tool")):
+for word, tid in (("int", "dessin.intersect_tool"), ("sec", "dessin.section_tool"), ("unroll", "dessin.unroll_tool"), ("mergeallcoplanarfaces", "dessin.merge_faces_tool"), ("orient", "dessin.orient_tool"), ("orient3pt", "dessin.orient3pt_tool"), ("o3pt", "dessin.orient3pt_tool"), ("slice", "dessin.slice_tool"), ("quickslice", "dessin.slice_tool"), ("pipe", "dessin.pipe_tool")):
     sg = m.cmd_suggest(word)
     chk(f"alias « {word} »", bool(sg) and sg[0]["key"] == "tool:" + tid, [(e["label"], e["key"]) for e in sg[:2]])
 real_lang = m.lang
 m.lang = lambda: 'FR'
 try:
     for word, tid in (("dupliquerbord", "dessin.dup_border_tool"), ("tuyau", "dessin.pipe_tool"), ("developper", "dessin.unroll_tool"), ("fusionnerfaces", "dessin.merge_faces_tool"),
-                      ("reconstruiresrf", "dessin.rebuild_srf_tool"), ("intersectionobjets", "dessin.intersect_tool"), ("coupe", "dessin.section_tool"), ("orienter", "dessin.orient_tool"), ("orienter3pts", "dessin.orient3pt_tool"),
+                      ("reconstruiresrf", "dessin.rebuild_srf_tool"), ("intersectionobjets", "dessin.intersect_tool"), ("coupe", "dessin.section_tool"), ("orienter", "dessin.orient_tool"), ("orienter3pts", "dessin.orient3pt_tool"), ("trancher", "dessin.slice_tool"),
                       ("extrairesrf", "dessin.extract_srf_tool"), ("dupliquerarete", "dessin.dup_edge_tool"), ("contours", "dessin.contour_tool")):
         sg = m.cmd_suggest(word)
         chk(f"français : alias « {word} »", bool(sg) and sg[0]["key"] == "tool:" + tid, [(e["label"], e["key"]) for e in sg[:2]])

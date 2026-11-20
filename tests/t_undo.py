@@ -76,7 +76,7 @@ def run_tool(cls,P):
     except Exception: pass
     return r
 stats=dict(tested=0,noop=0,undo_bad=0,redo_bad=0,follow=0,exc=0,noundo=0)
-STEPWISE={'DESSIN_OT_point'}
+STEPWISE={'DESSIN_OT_point','DESSIN_OT_boundary','DESSIN_OT_break_crv','DESSIN_OT_match_props'}   # une étape par point / zone / coupure
 for cls in tools:
     for sel,P in (('box',pts),('rect',pts2),('both',pts2)):
         reset_scene(sel)

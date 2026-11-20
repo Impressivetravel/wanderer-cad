@@ -79,10 +79,12 @@ none(g); r = dbl(-15, 2.5)
 chk("arête du bord : la boucle fait le tour du contour (24 arêtes)", len(sel_edges(g)) == 24 and all(abs(x) == 15 or abs(y) == 15 for x, y in sel_edges(g)), len(sel_edges(g)))
 none(g); r = dbl(2.5, 2.5)
 chk("double-clic au milieu d'une face (aucune arête à moins de 10 px) : rien n'est pris, le clic est rendu à Blender", 'PASS_THROUGH' in r and not sel_edges(g), r)
-keep = m.PREF_DEFAULTS.get("view_button"); m.PREF_DEFAULTS["view_button"] = 'ALT_LEFT'
+inp = bpy.context.preferences.inputs
+keep = (inp.use_mouse_emulate_3_button, inp.mouse_emulate_3_button_modifier)
+inp.use_mouse_emulate_3_button = True; inp.mouse_emulate_3_button_modifier = 'ALT'
 r = dbl(2.5, 0, alt=True)
-chk("préférence « Alt + clic gauche = navigation » : Alt + double-clic est laissé à la navigation", 'PASS_THROUGH' in r and not sel_edges(g), r)
-m.PREF_DEFAULTS["view_button"] = keep
+chk("Blender émule le bouton du milieu avec Alt + clic gauche : Alt + double-clic est laissé à la navigation", 'PASS_THROUGH' in r and not sel_edges(g), r)
+inp.use_mouse_emulate_3_button, inp.mouse_emulate_3_button_modifier = keep
 
 # ================= 2. Faces =================
 SEC = "faces"

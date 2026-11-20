@@ -28,11 +28,17 @@ class FArea:
         self.id_data = None              # son écran
         self.redraws = 0
         self.tools = 0                   # largeur de la barre d'outils (0 : pas de région TOOLS)
+        self.hdr = 0                     # hauteur de l'en-tête (0 : pas de région HEADER)
+        self.uiw = 0                     # largeur du panneau N (0 : pas de région UI)
     @property
     def regions(self):
         rs = [NS(type='WINDOW', x=self.x, y=self.y, width=self.width, height=self.height) for _ in range(4 if self.native else 1)]
         if self.tools:
             rs.append(NS(type='TOOLS', x=self.x, y=self.y, width=self.tools, height=self.height))
+        if self.hdr:
+            rs.append(NS(type='HEADER', x=self.x, y=self.y + self.height - self.hdr, width=self.width, height=self.hdr))
+        if self.uiw:
+            rs.append(NS(type='UI', x=self.x + self.width - self.uiw, y=self.y, width=self.uiw, height=self.height))
         return rs
     def as_pointer(self): return self._p
     def tag_redraw(self): self.redraws += 1
@@ -73,7 +79,7 @@ def f_split(win, screen, a, direction, factor=0.5):
         w0 = (w - 2) // 2 if factor == 0.5 else int(round(w * factor))
         r0, r1 = (x, y, w0, h), (x + w0 + 2, y, w - w0 - 2, h)
     else:
-        h0 = (h - 2) // 2
+        h0 = (h - 2) // 2 if factor == 0.5 else int(round(h * factor))
         r0, r1 = (x, y, w, h0), (x, y + h0 + 2, w, h - h0 - 2)
     keep, new = (r0, r1) if FLIP[0] else (r1, r0)
     a.true = keep
@@ -82,7 +88,7 @@ def f_split(win, screen, a, direction, factor=0.5):
     n.spaces.active = NS(**{k: v for k, v in vars(a.spaces.active).items() if k not in ('overlay', 'shading')},
                          overlay=NS(show_text=a.spaces.active.overlay.show_text), shading=NS(type=a.spaces.active.shading.type))
     n.view = a.view
-    n.tools = a.tools
+    n.tools, n.hdr, n.uiw = a.tools, a.hdr, a.uiw
     n.id_data = screen
     screen.areas.append(n)
     return n.as_pointer()
@@ -124,6 +130,22 @@ def f_close(win, screen, a):
     return True
 
 
+def f_join(win, screen, keep, gone):
+    """Comme screen.area_join : `keep` prend la place de `gone` s'ils ont un bord commun entier, sinon rien."""
+    if keep.width <= 0 or gone.width <= 0:
+        LOG.append("fusion d'une zone sans taille")
+        return None
+    x, y, w, h = keep.true
+    gx, gy, gw, gh = gone.true
+    if not ((x == gx and w == gw and (abs(y + h + 2 - gy) <= 3 or abs(gy + gh + 2 - y) <= 3))
+            or (y == gy and h == gh and (abs(x + w + 2 - gx) <= 3 or abs(gx + gw + 2 - x) <= 3))):
+        return None
+    x0, y0 = min(x, gx), min(y, gy)
+    keep.true = (x0, y0, max(x + w, gx + gw) - x0, max(y + h, gy + gh) - y0)
+    screen.areas.remove(gone)
+    return keep.as_pointer()
+
+
 FULL = (2, 100, 1574, 954)
 
 
@@ -141,6 +163,7 @@ WIN, SCR, A0 = fresh()
 m._window_by_ptr = lambda p: WIN if p == 8000 else None
 m._area_split = f_split
 m._area_close = f_close
+m._area_join = f_join
 m._area_set_view = lambda win, screen, a, name: setattr(a, "view", name)
 m._area_view_name = lambda win, screen, a: a.view
 m._redraw_all = lambda s: None
@@ -565,4 +588,206 @@ chk("barre d'outils masquée avant les 4 vues : pas de colonne", col is None and
 job = enter_col(refuse=2)
 chk("Blender refuse la coupe en 4 : la colonne est refermée aussi, on retrouve la vue d'origine à sa place", len(v3()) == 1 and v3()[0].true == FULL and job.error == "split"
     and "fermeture d'une zone sans taille" not in LOG, ([a.true for a in v3()], job.error, LOG))
+# ---------------------------------------------------------------- H. bande de l'en-tête, comme dans Rhino
+SEC = "bande"
+def enter_all(flip=False, hdr=48, uiw=300, tools=60, shared=True):
+    global WIN, SCR, A0
+    WIN, SCR, A0 = fresh()
+    m.quad_reset()
+    A0.tools, A0.hdr, A0.uiw = tools, hdr, uiw
+    A0.spaces.active.show_region_ui = uiw > 0
+    m.PREF_DEFAULTS["quad_shared_bars"] = shared
+    FLIP[0] = flip
+    job = m.QuadJob('enter', WIN, SCR, A0.as_pointer())
+    drive(job)
+    SCR.refresh()
+    FLIP[0] = False
+    m.PREF_DEFAULTS["quad_shared_bars"] = True
+    return job
+def parts():
+    col, P = column()
+    g = {p: a.as_pointer() for p, a in P.items()}
+    return col, P, (m.quad_strip_of(SCR, g) if g else None)
+for flip in (False, True):
+    job = enter_all(flip=flip)
+    col, P, strip = parts()
+    top = max(a.true[1] + a.true[3] for a in P.values())
+    chk(f"4 vues {'(nouvelles zones de l autre côté) ' if flip else ''}: une bande en haut, sur toute la largeur, de la hauteur de l'en-tête",
+        strip is not None and strip.true[0] == 2 and strip.true[2] == 1574 and strip.true[1] + strip.true[3] == 1054 and 48 <= strip.true[3] <= 56
+        and strip.true[1] >= top and not LOG and not job.error, (strip and strip.true, job.error, LOG))
+    chk("... la colonne de la barre d'outils à gauche, sous la bande", col is not None and col.true[0] == 2 and col.true[1] == 100 and abs(col.true[1] + col.true[3] - top) <= 2, col and col.true)
+    chk("... les 4 vues à côté de la colonne, sous la bande (pas de colonne N : le panneau se pose par-dessus sa vue)",
+        len(P) == 4 and len(v3()) == 6 and min(a.true[0] for a in P.values()) > col.true[0] + col.true[2]
+        and max(a.true[0] + a.true[2] for a in P.values()) == 1576, len(v3()))
+ss = strip.spaces.active
+chk("la bande ne montre que l'en-tête et les réglages d'outil : ni barre d'outils, ni panneau, ni grille, ni poignées",
+    ss.show_region_header and ss.show_region_tool_header and not ss.show_region_toolbar and not ss.show_region_ui and not ss.overlay.show_overlays and ss.show_gizmo is False)
+flags = {p: (a.spaces.active.show_region_header, a.spaces.active.show_region_tool_header, a.spaces.active.show_region_toolbar) for p, a in P.items()}
+chk("aucune des 4 vues n'a plus d'en-tête ni de barre d'outils", all(f == (False, False, False) for f in flags.values()), flags)
+chk("le panneau N (ouvert avant) reste celui de la vue en haut à droite, par-dessus elle",
+    P['TR'].spaces.active.show_region_ui and not any(P[k].spaces.active.show_region_ui for k in ('TL', 'BL', 'BR')),
+    {p: a.spaces.active.show_region_ui for p, a in P.items()})
+chk("bande reconnue : pas de barres du bas ni de titre chez elle, elle n'est pas une des 4 vues",
+    m.quad_extra_kind(strip) == 'STRIP' and m.quad_extra_kind(col) == 'COLUMN' and m.quad_is_strip(strip)
+    and m.quad_bars(strip) is None and not any(m.quad_extra_kind(a) for a in P.values())
+    and strip.as_pointer() not in m.quad_peers(P['TR'].as_pointer()))
+chk("vues attribuées comme avant : Top, Perspective, Front, Right", {p: a.view for p, a in P.items()} == {'TL': "Top", 'TR': "Perspective", 'BL': "Front", 'BR': "Right"})
+for pos in ('TL', 'TR', 'BL', 'BR'):
+    enter_all()
+    col, P, strip = parts()
+    keep = P[pos]
+    job = m.QuadJob('exit', WIN, SCR, keep.as_pointer(), keep=keep.as_pointer())
+    drive(job)
+    SCR.refresh()
+    sp = keep.spaces.active
+    chk(f"retour à une vue en gardant {pos} : bande, colonne et 3 vues refermées, la vue reprend toute la place, son en-tête et son panneau N",
+        len(v3()) == 1 and v3()[0] is keep and keep.true == FULL and sp.show_region_header and sp.show_region_ui and sp.show_region_toolbar and not LOG and not job.error,
+        (len(v3()), keep.true, LOG, job.error))
+# si Blender gardait la zone retirée au lieu de sa voisine (sens de screen.area_join inversé), le retour aboutit quand même
+def f_join_rev(win, screen, keep, gone):
+    r = f_join(win, screen, gone, keep)
+    return gone.as_pointer() if r is not None else None
+enter_all()
+col, P, strip = parts()
+m._area_join = f_join_rev
+job = m.QuadJob('exit', WIN, SCR, P['TR'].as_pointer(), keep=P['TR'].as_pointer())
+drive(job); SCR.refresh()
+m._area_join = f_join
+chk("sens de la fusion inversé chez Blender : on revient quand même à une seule vue, sur tout l'espace", len(v3()) == 1 and v3()[0].true == FULL and not job.error and not LOG,
+    (len(v3()), v3()[0].true if v3() else None, job.error, LOG))
+job = enter_all(hdr=0)
+col, P, strip = parts()
+chk("en-tête masqué avant les 4 vues : pas de bande", strip is None and col is not None and len(v3()) == 5, len(v3()))
+job = enter_all(shared=False)
+col, P, strip = parts()
+fl = {p: (a.spaces.active.show_region_header, a.spaces.active.show_region_ui) for p, a in P.items()}
+chk("réglage décoché : pas de bande, l'en-tête en haut à gauche et le panneau N en haut à droite, comme avant",
+    strip is None and col is not None and len(v3()) == 5 and fl['TL'] == (True, False) and fl['TR'] == (False, True), (len(v3()), fl))
+WIN, SCR, A0 = fresh(); m.quad_reset(); A0.tools, A0.hdr, A0.uiw = 60, 48, 300
+REFUSE[0] = 3                      # bande, colonne d'outils, puis Blender refuse la première coupe des 4 vues
+job = m.QuadJob('enter', WIN, SCR, A0.as_pointer()); drive(job); SCR.refresh()
+chk("Blender refuse la coupe en 4 : bande et colonne sont refermées aussi, on retrouve la vue d'origine", len(v3()) == 1 and v3()[0].true == FULL and job.error == "split"
+    and v3()[0].spaces.active.show_region_header and v3()[0].spaces.active.show_region_ui and v3()[0].spaces.active.show_region_toolbar, (len(v3()), v3()[0].true, job.error))
+REFUSE[0] = 0
+
+SEC = "bande : en-tête"
+# l'en-tête de Blender dans la bande : tout jusqu'au second séparateur extensible, rien de la partie droite (affichage)
+class RL:
+    def __init__(self, log, tag="L"): self.log, self.tag = log, tag
+    def separator_spacer(self): self.log.append("spacer")
+    def row(self, **k): self.log.append("row"); return RL(self.log, "R")
+    def popover(self, **k): self.log.append(("popover", k.get("panel"))); return None
+    def prop(self, data, name, **k): self.log.append(("prop", name)); return None
+    def __getattr__(self, n):
+        def f(*a, **k): self.log.append(n); return RL(self.log)
+        return f
+def fake_header(self, context):
+    L = self.layout
+    L.row(align=True).template_header()
+    L.prop(NS(), "mode")
+    L.separator_spacer()
+    L.popover(panel="VIEW3D_PT_snapping")
+    L.separator_spacer()
+    L.popover(panel="VIEW3D_PT_object_type_visibility")
+    r = L.row(align=True); r.active = False; r.prop(NS(), "show_gizmo")
+    L.prop(NS(), "type")
+    L.popover(panel="VIEW3D_PT_shading")
+log = []
+saved_orig, saved_strip = m._HB["orig"], m.quad_is_strip
+m._HB["orig"] = fake_header
+sys_mod = __import__("sys").modules
+qv = next(v for k, v in sys_mod.items() if k.endswith(".quadview") and hasattr(v, "quad_is_strip"))
+qv_saved = qv.quad_is_strip; qv.quad_is_strip = lambda a: True
+m.header_draw(NS(layout=RL(log)), NS(area=NS(), scene=NS(dessin=None)))
+chk("bande : modes, menus et accrochage dessinés ; affichage Solid / Wireframe, superpositions et poignées non",
+    ("popover", "VIEW3D_PT_snapping") in log and ("prop", "mode") in log and ("popover", "VIEW3D_PT_shading") not in log
+    and ("popover", "VIEW3D_PT_object_type_visibility") not in log and ("prop", "type") not in log and ("prop", "show_gizmo") not in log and log.count("spacer") == 2, log)
+qv.quad_is_strip = lambda a: False
+log2 = []
+m.header_draw(NS(layout=RL(log2)), NS(area=NS(), scene=NS(dessin=None)))
+chk("hors de la bande : l'en-tête entier, comme avant", ("popover", "VIEW3D_PT_shading") in log2 and ("prop", "type") in log2, log2)
+qv.quad_is_strip = qv_saved; m.quad_is_strip = saved_strip; m._HB["orig"] = saved_orig
+chk("réglage dans les préférences, coché par défaut", m.PREF_DEFAULTS.get("quad_shared_bars") is True)
+chk("plus de colonne N dédiée (elle prenait trop de place)", not hasattr(m, "quad_side_of"))
+
+SEC = "N"
+# un seul panneau N pour les 4 vues : la touche N, où que soit la souris, ouvre ou ferme celui de la vue en haut à droite
+enter_all(uiw=0)
+col, P, strip = parts()
+for a in SCR.areas: a.redraws = 0
+def nkey(area):
+    o = make(m.DESSIN_OT_quad_sidebar)
+    c = NS(window=WIN, screen=SCR, area=area)
+    return type(o).poll(c), (type(o).execute(o, c) if type(o).poll(c) else None)
+ok, r = nkey(P['BL'])
+chk("N, souris sur la vue Front : le panneau de la vue en haut à droite s'ouvre (aucun autre)",
+    ok and r == {'FINISHED'} and P['TR'].spaces.active.show_region_ui and not any(P[k].spaces.active.show_region_ui for k in ('TL', 'BL', 'BR'))
+    and P['TR'].redraws >= 1, (ok, r, {p: a.spaces.active.show_region_ui for p, a in P.items()}))
+ok, r = nkey(strip)
+chk("N, souris sur la bande : il se referme", ok and r == {'FINISHED'} and not P['TR'].spaces.active.show_region_ui, (ok, r))
+ok, r = nkey(col)
+chk("N, souris sur la colonne d'outils : il se rouvre", ok and r == {'FINISHED'} and P['TR'].spaces.active.show_region_ui, (ok, r))
+ok, r = nkey(P['TR'])
+chk("N dans la vue en haut à droite elle-même : même bascule", ok and r == {'FINISHED'} and not P['TR'].spaces.active.show_region_ui)
+chk("aucune reconstruction des 4 vues (pas de clignotement)", len(v3()) == 6 and not m.quad_busy(), len(v3()))
+m.PREF_DEFAULTS["quad_shared_bars"] = False
+ok, _r = nkey(P['BL'])
+m.PREF_DEFAULTS["quad_shared_bars"] = True
+chk("réglage décoché : la touche N redevient celle de Blender (par vue)", not ok)
+WIN, SCR, A0 = fresh(); m.quad_reset()
+ok, _r = nkey(A0)
+chk("une seule vue : le N de Blender (la commande ne s'en mêle pas)", not ok)
+enter_all(uiw=0)
+col, P, strip = parts()
+P['BL'].spaces.active.show_region_ui = True; P['BR'].spaces.active.show_region_ui = True     # (ouverts par le N de Blender)
+ok, r = nkey(P['TL'])
+chk("N alors que d'autres vues ont leur propre panneau : ils se referment, il n'en reste qu'un, en haut à droite",
+    P['TR'].spaces.active.show_region_ui and not any(P[k].spaces.active.show_region_ui for k in ('TL', 'BL', 'BR')),
+    {p: a.spaces.active.show_region_ui for p, a in P.items()})
+wm = bpy.context.window_manager
+m.unregister_quad_keymap(); m.register_quad_keymap()
+where = sorted({km.name for km in wm.keyconfigs.addon.keymaps for it in km.keymap_items if it.idname == "dessin.quad_sidebar" and it.type == 'N'})
+chk("N posé dans « 3D View Generic », là où est le N de Blender (lu avant « 3D View ») : c'est le nôtre qui part", "3D View Generic" in where, where)
+m.unregister_quad_keymap()
+gone = [km.name for km in wm.keyconfigs.addon.keymaps for it in km.keymap_items if it.idname == "dessin.quad_sidebar"]
+chk("... et retiré à la désinstallation", not gone, gone)
+m.register_quad_keymap()
+SEC = "garde"
+# comme dans Rhino : on ne fusionne ni ne recoupe les 4 vues ; si c'est fait à la main, elles sont refaites
+def repair_now():
+    job = m.QuadJob('repair', WIN, SCR, v3()[0].as_pointer())
+    drive(job); SCR.refresh()
+    m.quad_guard(SCR)                      # (le dessin suivant retient les 4 vues refaites)
+    return job
+def healthy():
+    col, P, strip = parts()
+    return col is not None and strip is not None and len(P) == 4 and len(v3()) == 6
+enter_all(uiw=0)
+col, P, strip = parts()
+chk("4 vues intactes : rien à refaire (et elles sont retenues)", m.quad_guard(SCR) is False and SCR.as_pointer() in m._QUAD["set"], m._QUAD["set"].keys())
+chk("... la garde ne bouge rien tant qu'on ne fait que redimensionner", m.quad_guard(SCR) is False)
+f_join(WIN, SCR, P['TR'], P['TL']); SCR.refresh()                     # l'utilisateur fond la vue Top dans la Perspective
+chk("deux vues fusionnées à la main : la garde le voit", m.quad_guard(SCR) is True, len(v3()))
+job = repair_now()
+chk("... les 4 vues sont refaites (bande, colonne d'outils, Top / Perspective / Front / Right)", healthy() and not LOG and not job.error,
+    (len(v3()), LOG, job.error, [a.true for a in v3()]))
+col, P, strip = parts()
+chk("... avec leurs vues", {p: a.view for p, a in P.items()} == {'TL': "Top", 'TR': "Perspective", 'BL': "Front", 'BR': "Right"}, {p: a.view for p, a in P.items()})
+f_split(WIN, SCR, P['BR'], 'VERTICAL'); SCR.refresh()                 # une vue recoupée en deux (ou des 4 vues dedans)
+chk("une vue recoupée : la garde le voit", m.quad_guard(SCR) is True)
+job = repair_now()
+chk("... les 4 vues sont refaites", healthy() and not LOG and not job.error, (len(v3()), LOG, job.error))
+col, P, strip = parts()
+f_join(WIN, SCR, P['BL'], P['BR']); SCR.refresh()
+f_join(WIN, SCR, P['TL'], P['TR']); SCR.refresh()                     # deux fusions de suite (3 puis 2 vues)
+job = repair_now()
+chk("deux fusions de suite : les 4 vues sont refaites", healthy() and not LOG and not job.error, (len(v3()), LOG, job.error))
+col, P, strip = parts()
+keep = P['TR']
+job = m.QuadJob('exit', WIN, SCR, keep.as_pointer(), keep=keep.as_pointer()); drive(job); SCR.refresh()
+chk("retour voulu à une vue (bouton, double-clic) : la garde ne refait rien", len(v3()) == 1 and m.quad_guard(SCR) is False
+    and SCR.as_pointer() not in m._QUAD["set"], len(v3()))
+WIN, SCR, A0 = fresh(); m.quad_reset()
+a2 = SCR.areas[1]
+chk("une vue 3D seule, coupée à la main : rien à voir avec les 4 vues", m.quad_guard(SCR) is False)
 summary()

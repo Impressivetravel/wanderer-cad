@@ -355,15 +355,96 @@ o,r=start(m.DESSIN_OT_orient3pt); r=E(o,'C',('c',0,0),('c',2,0),('c',0,2),('c',1
 cp=[q for q in bpy.data.objects if q is not b]
 chk("Orient3Pt + C (copie) : l'original reste, une copie est orientée", len(cp)==1 and (b.matrix_world.translation-Vector((-20,-20,1))).length<1e-6
     and (cp[0].matrix_world.translation-Vector((30,-20,1))).length<1e-4, len(bpy.data.objects))
+# D : mise à l'échelle uniforme (référence 1 -> 2 : 2 ; cible 1 -> 2 : 5, donc ×2,5)
+clear(); b=box(size=2,loc=(-20,-20,1)); sel(b)
+o,r=start(m.DESSIN_OT_orient3pt); r=E(o,'D',('c',0,0),('c',2,0),('c',0,2),('c',10,0),('c',10,5),('c',5,0)); C.view_layer.update()
+M=b.matrix_world; sc=M.to_scale()
+chk("Orient3Pt + D : mise à l'échelle uniforme ×2,5 (longueur cible / longueur de référence), comme Orient",
+    'FINISHED' in r and all(abs(s-2.5)<1e-4 for s in sc) and abs(M.to_3x3().determinant()-2.5**3)<1e-3, tuple(sc))
+# centre (-20,-20,1) vu depuis la référence 1 (0,0,0) : tourné de 90° (X -> Y), ×2,5, posé sur la cible 1 (10,0,0)
+chk("... la boîte est tournée, agrandie autour de la référence 1 et posée sur la cible 1 : centre en (60, -50, 2,5)",
+    (M.translation-Vector((60,-50,2.5))).length<1e-4, tuple(M.translation))
+clear(); b=box(size=2,loc=(-20,-20,1)); sel(b)
+o,r=start(m.DESSIN_OT_orient3pt); r=E(o,('c',0,0),('c',2,0),('c',0,2),('c',10,0),('c',10,5),('c',5,0)); C.view_layer.update()
+chk("Orient3Pt sans D : taille gardée", all(abs(s-1)<1e-5 for s in b.matrix_world.to_scale()), tuple(b.matrix_world.to_scale()))
+chk("l'invite montre l'option D", "D: keep the size" in m.DESSIN_OT_orient3pt.prompt(NS(points=[], center=False, mode=0, MODES=m.DESSIN_OT_orient3pt.MODES, STEPS=m.DESSIN_OT_orient3pt.STEPS)))
 clear(); box(size=2,loc=(-20,-20,1)); C.view_layer.update()
 def run_o3(): sel(bpy.data.objects["Box"]); o,r=start(m.DESSIN_OT_orient3pt); E(o,('c',0,0),('c',2,0),('c',0,2),('c',10,0),('c',10,5),('c',5,0))
 undo_redo("Orient 3 Points", run_o3)
+# ================= Slice (QuickSlice de 3ds Max) =================
+def mesh_info(o):
+    bm=bmesh.new(); bm.from_mesh(o.data)
+    r=dict(v=len(bm.verts),e=len(bm.edges),f=len(bm.faces),naked=sum(1 for e in bm.edges if len(e.link_faces)==1),
+           cut=sum(1 for v in bm.verts if abs((o.matrix_world@v.co).x)<1e-6), vol=round(abs(bm.calc_volume()),5))
+    bm.free(); return r
+clear(); b=box(size=4,loc=(0,0,2)); sel(b); _me=b.data.name
+o,r=start(m.DESSIN_OT_slice); r=E(o,('c',0,-5),('c',0,5)); C.view_layer.update()
+i=mesh_info(b)
+chk("Slice : un cube tranché par une ligne garde un seul objet, fermé, de même volume, avec 4 arêtes en plus sur le plan",
+    'FINISHED' in r and len(bpy.data.objects)==1 and i["naked"]==0 and i["vol"]==64.0 and (i["v"],i["e"],i["f"])==(12,20,10) and i["cut"]==4, (r,i,o._reports))
+chk("Slice : l'objet n'est ni déplacé ni dupliqué", (b.matrix_world.translation-Vector((0,0,2))).length<1e-9 and b.data.name==_me and b.data.users==1, (b.data.name,b.data.users))
+clear(); b=box(size=4,loc=(0,0,2)); sel(b)
+o,r=start(m.DESSIN_OT_slice); r=E(o,('c',10,-5),('c',10,5)); C.view_layer.update()
+i=mesh_info(b)
+chk("Slice : une ligne à côté de l'objet ne change rien (message)", (i["v"],i["e"],i["f"])==(8,12,6) and any("does not cross" in t for _l,t in o._reports), (i,o._reports))
+clear(); b=box(size=4,loc=(0,0,2)); sel(b)
+o,r=start(m.DESSIN_OT_slice); E(o,('c',0,-5)); r=E(o,'ESC'); C.view_layer.update()
+chk("Slice puis Échap : rien n'est modifié", mesh_info(b)["v"]==8 and 'CANCELLED' in r, r)
+# deux objets sélectionnés : les deux sont tranchés
+clear(); b=box(size=4,loc=(0,0,2)); b2=box(size=2,loc=(0,6,1),name="B2"); sel(b,b2)
+o,r=start(m.DESSIN_OT_slice); r=E(o,('c',0,-5),('c',0,9)); C.view_layer.update()
+chk("Slice : tous les objets sélectionnés sont tranchés", mesh_info(b)["cut"]==4 and mesh_info(b2)["cut"]==4 and len(bpy.data.objects)==2, (mesh_info(b),mesh_info(b2)))
+# plan en biais : objet tourné et mis à l'échelle
+clear(); b=box(size=4,loc=(1,0,2)); b.rotation_euler=(0,0,0.5); b.scale=(1,2,1); C.view_layer.update(); sel(b)
+o,r=start(m.DESSIN_OT_slice); r=E(o,('c',1,-9),('c',1,9)); C.view_layer.update()
+bm=bmesh.new(); bm.from_mesh(b.data); on=sum(1 for v in bm.verts if abs((b.matrix_world@v.co).x-1)<1e-5); bm.free()
+chk("Slice sur un objet tourné et étiré : les nouveaux sommets sont sur le plan de la ligne", on==4 and mesh_info(b)["naked"]==0, on)
+# mode Édition : seules les faces sélectionnées sont tranchées, et on revient en mode Édition
+clear(); b=box(size=4,loc=(0,0,2)); sel(b)
+for p in b.data.polygons: p.select = abs((b.matrix_world.to_3x3()@p.normal).z-1)<1e-6       # la face du dessus seule
+bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_mode(type='FACE')
+o,r=start(m.DESSIN_OT_slice)
+chk("Slice lancée en mode Édition : la commande démarre", 'RUNNING_MODAL' in r and o.edit_objs==[b.name], (r,getattr(o,"edit_objs",None)))
+r=E(o,('c',0,-5),('c',0,5)); C.view_layer.update()
+chk("... et on retrouve le mode Édition après la coupe", C.mode=='EDIT_MESH', C.mode)
+bpy.ops.object.mode_set(mode='OBJECT'); i=mesh_info(b)
+top=[p for p in b.data.polygons if abs(p.normal.z-1)<1e-6]
+chk("mode Édition, face du dessus sélectionnée : elle seule est tranchée (2 faces en haut, 1 arête de coupe)",
+    len(top)==2 and i["e"]==15 and i["v"]==10 and i["cut"]==2 and i["f"]==7 and i["naked"]==0, (len(top),i))
+clear(); b=box(size=4,loc=(0,0,2)); sel(b)
+for p in b.data.polygons: p.select=False
+for e in b.data.edges: e.select=False
+for v in b.data.vertices: v.select=False
+bpy.ops.object.mode_set(mode='EDIT')
+o,r=start(m.DESSIN_OT_slice); r=E(o,('c',0,-5),('c',0,5)); C.view_layer.update()
+md=C.mode; bpy.ops.object.mode_set(mode='OBJECT'); i=mesh_info(b)
+chk("mode Édition, rien de sélectionné : tout le maillage est tranché", md=='EDIT_MESH' and i["cut"]==4 and i["f"]==10, (md,i))
+clear(); b=box(size=4,loc=(0,0,2)); sel(b); bpy.ops.object.mode_set(mode='EDIT')
+o,r=start(m.DESSIN_OT_slice); E(o,('c',0,-5)); r=E(o,'ESC'); C.view_layer.update()
+chk("mode Édition, Échap : on revient en mode Édition, maillage intact", C.mode=='EDIT_MESH' and 'CANCELLED' in r, (C.mode,r))
+bpy.ops.object.mode_set(mode='OBJECT')
+chk("... maillage intact", mesh_info(b)["v"]==8)
+# annulation depuis le mode Édition : on reste en mode Édition, le maillage revient puis repart
+clear(); b=box(size=4,loc=(0,0,2)); sel(b); bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+def _nv():
+    if C.mode=='EDIT_MESH': b.update_from_editmode()
+    return len(b.data.vertices)
+bpy.ops.ed.undo_push(message="avant")
+o,r=start(m.DESSIN_OT_slice); E(o,('c',0,-5),('c',0,5)); C.view_layer.update(); n1=_nv()
+bpy.ops.ed.undo_push(message="Slice"); bpy.ops.ed.undo(); C.view_layer.update(); b=bpy.data.objects["Box"]; n2,m2=_nv(),C.mode
+bpy.ops.ed.redo(); C.view_layer.update(); b=bpy.data.objects["Box"]; n3,m3=_nv(),C.mode
+chk("Undo/Redo Slice en mode Édition", (n1,n2,n3)==(12,8,12) and m2==m3=='EDIT_MESH', (n1,n2,n3,m2,m3))
+bpy.ops.object.mode_set(mode='OBJECT')
+clear(); box(size=4,loc=(0,0,2)); C.view_layer.update()
+def run_slice(): sel(bpy.data.objects["Box"]); o,r=start(m.DESSIN_OT_slice); E(o,('c',0,-5),('c',0,5))
+undo_redo("Slice", run_slice)
+
 # ---------------- boutons de la barre d'outils et icônes des 11 commandes ----------------
 _tt={"pipe":"dessin.pipe","intersect":"dessin.intersect","section":"dessin.section","contour":"dessin.contour","extract_srf":"dessin.extract_srf",
      "dup_border":"dessin.dup_border","dup_edge":"dessin.dup_edge","dup_face_border":"dessin.dup_face_border","merge_faces":"dessin.merge_faces","unroll":"dessin.unroll",
-     "rebuild_srf":"dessin.rebuild_srf","orient":"dessin.orient","orient3pt":"dessin.orient3pt","extend_crv":"dessin.extend_crv"}
-_all=[c for g in m.RHINO_TOOLS.values() for c in g]
-chk("14 boutons, chacun avec son icône dessinée et sa commande", len(_all)==14 and sorted(c.dessin_icon for c in _all)==sorted(_tt)
+     "rebuild_srf":"dessin.rebuild_srf","orient":"dessin.orient","orient3pt":"dessin.orient3pt","slice":"dessin.slice","extend_crv":"dessin.extend_crv"}
+_all=[c for g in m.RHINO_TOOLS.values() for c in g if c.dessin_icon in _tt]     # (les 15 commandes Rhino de la 2.96.124)
+chk("15 boutons, chacun avec son icône dessinée et sa commande", len(_all)==15 and sorted(c.dessin_icon for c in _all)==sorted(_tt)
     and all(m.svg_icon_bytes(c.dessin_icon) for c in _all) and all(any(k[0]==_tt[c.dessin_icon] for k in c.bl_keymap) for c in _all),
     [(c.__name__,c.dessin_icon) for c in _all])
 chk("chaque icône appartient à une famille de couleurs", all(any(k in f for f in m.ICON_FAMILIES) for k in _tt), None)
@@ -377,8 +458,8 @@ def _ids(mode):
             for q in it: walk(q)
     walk(list(_TB._tools[mode])); return out
 _o=_ids('OBJECT'); _e=_ids('EDIT_MESH')
-chk("les 14 boutons sont dans la barre d'outils du mode Objet, une seule fois chacun", "dessin.untrim_tool" in _o and all(_o.count(c.bl_idname)==1 for c in _all), [c.bl_idname for c in _all if _o.count(c.bl_idname)!=1])
-chk("... et dans celle du mode Édition (variante)", sum(1 for c in _all if any(i and i.startswith(c.bl_idname) for i in _e))==14, [i for i in _e if i and ("pipe" in i or "orient" in i)])
+chk("les 15 boutons sont dans la barre d'outils du mode Objet, une seule fois chacun", "dessin.untrim_tool" in _o and all(_o.count(c.bl_idname)==1 for c in _all), [c.bl_idname for c in _all if _o.count(c.bl_idname)!=1])
+chk("... et dans celle du mode Édition (variante)", sum(1 for c in _all if any(i and i.startswith(c.bl_idname) for i in _e))==15, [i for i in _e if i and ("pipe" in i or "orient" in i)])
 m.unregister(); _o2=_ids('OBJECT')
 chk("désactiver l'add-on retire les 11 boutons", not any(c.bl_idname in _o2 for c in _all), [c.bl_idname for c in _all if c.bl_idname in _o2])
 m.register()

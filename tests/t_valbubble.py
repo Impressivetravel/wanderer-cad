@@ -1,6 +1,6 @@
 import os as _os; _HERE = _os.path.dirname(_os.path.abspath(__file__)); _SRC = _os.environ.get('WANDERER_SRC') or _os.path.join(_HERE, '..', 'wanderer_cad', '__init__.py')
 exec(open(_os.path.join(_HERE,'render_bars.py')).read())
-# Bulle de saisie d'une valeur (Gumball) : dessinée dans le style des barres, près de la poignée, sans sortir de la vue
+# Bulle de saisie d'une valeur (Gizmo) : dessinée dans le style des barres, près de la poignée, sans sortir de la vue
 res=[]
 def chk(n,ok,info=""): res.append(bool(ok)); print(("OK  " if ok else "BAD ")+n, info)
 install()

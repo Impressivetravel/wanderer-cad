@@ -196,7 +196,7 @@ rows_y = sorted({round(h[1], 2) for h in mode_hits()})
 chk("420 px libres : les icônes prennent deux rangées, à côté des vues T F P R +", compact == 2 and len(rows_y) == 2 and tab_texts(ops) == ["T", "F", "P", "R", "+"] and same_row(P[1], P[2]) and P[1][2] <= P[2][0],
     [tuple(round(v) for v in p) for p in P])
 top_row = [h[5] for h in mode_hits() if round(h[1], 2) == rows_y[1]]; bot_row = [h[5] for h in mode_hits() if round(h[1], 2) == rows_y[0]]
-chk("... Quick Type (au plus près de la ligne de commande), Grid Snap, Ortho, Polar en haut ; OSnap, SmartTrack, Gumball, Auto CPlane en bas",
+chk("... Quick Type (au plus près de la ligne de commande), Grid Snap, Ortho, Polar en haut ; OSnap, SmartTrack, Gizmo, Auto CPlane en bas",
     [k for k in top_row if k in ("cmd_type", "grid_snap", "ortho", "polar")] == ["cmd_type", "grid_snap", "ortho", "polar"]
     and [k for k in bot_row if k in ("osnap_enable", "smart_tracks", "gumball", "auto_cplane")] == ["osnap_enable", "smart_tracks", "gumball", "auto_cplane"], (top_row, bot_row))
 chk("... la pastille des modes a deux rangées de haut et contient tous ses boutons", abs((P[2][3] - P[2][1]) - m.modes_height(sc, 2)) < 1e-6

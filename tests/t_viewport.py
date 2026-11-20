@@ -121,10 +121,10 @@ chk("tiré au-delà du coin opposé, le cadre se retourne", near(m.grip_rect(R0,
 r_ = m.grip_rect(R0, 2, (50.5, 40.0))
 chk("une fenêtre garde au moins 2 mm de côté", near(r_[2:], (2.0, 2.0)) and near((r_[0] - r_[2] / 2, r_[1] - r_[3] / 2), (50.0, 40.0)), r_)
 lay = m.grip_layout(R0, 0.1, True)
-chk("avec le Gumball : 4 poignées aux coins, pas de poignée au centre (le Gumball déplace), triangle d'échelle à 20 px du centre",
+chk("avec le Gizmo : 4 poignées aux coins, pas de poignée au centre (le Gizmo déplace), triangle d'échelle à 20 px du centre",
     lay["corners"] == m.grip_points(R0) and lay["move"] is None and near(lay["scale"], (152.0, 98.0)), (lay["move"], lay["scale"]))
 lay = m.grip_layout(R0, 0.1, False)
-chk("sans le Gumball : une poignée au centre pour déplacer la fenêtre", lay["move"] == (150.0, 100.0) and near(lay["scale"], (152.0, 98.0)), lay["move"])
+chk("sans le Gizmo : une poignée au centre pour déplacer la fenêtre", lay["move"] == (150.0, 100.0) and near(lay["scale"], (152.0, 98.0)), lay["move"])
 
 # ================= 2. Redimensionner : le modèle ne bouge pas sur la feuille =================
 # (la vue d'essai montre 100 x 100 mm : la feuille fait 100 x 100, la fenêtre 30 x 20 en (20, 18), à 1:100)

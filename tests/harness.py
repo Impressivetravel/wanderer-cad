@@ -5,6 +5,8 @@ SRC=sys.argv[1] if len(sys.argv)>1 and sys.argv[1].endswith('.py') else _SRC
 import os as _hos
 exec(open(_hos.path.join(_HERE,'addon_loader.py')).read())
 bpy.ops.wm.read_factory_settings(use_empty=True); m.register()
+if _hos.environ.get("WANDERER_ALL_DASHED"):
+    m.lt_groups_ensure(); bpy.ops.ed.undo_push(message="linetypes")     # (dans Blender : un minuteur pousse ce pas)
 _MIR={}
 _BUILDING=set()
 def remap(v,new):
@@ -80,7 +82,20 @@ def ev(t,v,x,y,**k):
     d=dict(type=t,value=v,mouse_x=int(x),mouse_y=int(y),mouse_region_x=int(x),mouse_region_y=int(y),mouse_prev_x=int(x),mouse_prev_y=int(y),
            shift=False,ctrl=False,alt=False,oskey=False,is_repeat=False,unicode='',ascii='',pressure=1.0,is_tablet=False)
     d.update(k); return NS(**d)
+def _all_dashed():
+    """WANDERER_ALL_DASHED=1 : toutes les courbes présentes au lancement d'un outil sont en tirets (type de ligne). La
+    suite entière doit donner les mêmes résultats : les tirets ne sont qu'un affichage."""
+    n=0
+    for q in bpy.data.objects:
+        try:
+            if m.lt_eligible(q) and not m.has_lt(q):
+                q["wd_lt"]="DASHED"; m.lt_apply(q); n+=1
+        except Exception: pass
+    if n:
+        try: bpy.context.view_layer.update()
+        except Exception: pass
 def make(cls):
+    if _hos.environ.get("WANDERER_ALL_DASHED"): _all_dashed()
     M=mirror(cls); o=M()
     o.report=lambda lv,msg: o._reports.append((list(lv)[0],msg)); o._reports=[]
     o.bl_idname=cls.bl_idname

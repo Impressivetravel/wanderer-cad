@@ -114,6 +114,26 @@ chk(f"{ne} segments : 1re recherche < 15 ms, suivantes < 0,1 ms (cache), déplac
 E(o,'ESC')
 
 # ---------------- 11. Annuler / Rétablir ----------------
+
+# ---------------- Move : rester sur la ligne de repérage quand une accroche passe à côté ----------------
+clear(); A=poly("A",[(0,0,0),(4,0,0),(4,4,0),(0,4,0)],True); B=poly("B",[(20,0.6,0),(20,8,0)]); C.view_layer.update()
+for q in bpy.data.objects: q.select_set(q.name=="A")
+C.view_layer.objects.active=A
+o,r=start(m.DESSIN_OT_deplacer); E(o,('c',0,0))
+chk("Move : point de base sur le coin (0, 0)", len(o.points)==1 and o.points[0].length<1e-9, o.points)
+E(o,('m',20,0.1)); o.flush_pending(ctx)
+chk("Move : le curseur suit la ligne X du point de base ; le sommet voisin (20, 0.6) donne seulement la position : (20, 0, 0)",
+    (o.cur-Vector((20,0,0))).length<1e-9 and o.track_label=="X ∩ snap" and o.snap_screen is not None, (o.cur,o.track_label))
+E(o,('m',20,0.5)); o.flush_pending(ctx)
+chk("Move : souris plus près du sommet que de la ligne : le sommet (20, 0.6)", (o.cur-Vector((20,0.6,0))).length<1e-9 and o.track_label!="X ∩ snap", (o.cur,o.track_label))
+E(o,'ESC')
+st.ortho=True
+for q in bpy.data.objects: q.select_set(q.name=="A")
+C.view_layer.objects.active=A
+o,r=start(m.DESSIN_OT_deplacer); E(o,('c',0,0),('m',10,3.2)); o.flush_pending(ctx)
+vec=o.delta_vec()
+chk("Move : le bouton Ortho (F8) vaut aussi pour Move (déplacement à plat sur X)", abs(vec.y)<1e-9 and abs(vec.x-10)<1e-6, vec)
+E(o,'ESC'); st.ortho=False
 scene()
 def run():
     o,r=start(m.DESSIN_OT_polyligne); E(o,('c',0,0),('c',8.3,-7.8),'RET')

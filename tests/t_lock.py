@@ -78,7 +78,8 @@ cls = bpy.types.VIEW3D_MT_object_context_menu
 G = m.install_ctx_object_menu.__globals__
 saved_draw, saved_orig = cls.draw, G['_CTX_DRAW']["orig"]
 def fake_orig(self, context):
-    self.layout.operator("object.shade_smooth"); self.layout.operator("view3d.copybuffer")
+    self.layout.operator("object.shade_smooth"); self.layout.operator("object.shade_auto_smooth"); self.layout.operator("object.shade_flat")
+    self.layout.separator(); self.layout.operator("object.join"); self.layout.operator("view3d.copybuffer")
 try:
     G['_CTX_DRAW']["orig"] = None
     cls.draw = fake_orig
@@ -86,27 +87,39 @@ try:
     L = Lay(); sel(B)
     cls.draw(NS(layout=L), BC)
     o = L.order
-    chk("Isolate (une sélection) dans le bloc, après Lock ; Show All seulement s'il y a des objets masqués",
-        "object.hide_view_set" in o and o.index("dessin.lock") < o.index("object.hide_view_set") < o.index("object.shade_smooth")
-        and "object.hide_view_clear" not in o, o)
+    chk("Isolate (une sélection) dans le bloc, après Lock ; pas de Show All ni de Local View ; Unisolate seulement après Isolate",
+        "dessin.isolate" in o and o.index("dessin.lock") < o.index("dessin.isolate") < o.index("view3d.copybuffer")
+        and "object.hide_view_clear" not in o and "dessin.show" not in o and "view3d.localview" not in o and "dessin.unisolate" not in o, o)
     C.hide_set(True); L2 = Lay(); cls.draw(NS(layout=L2), BC); C.hide_set(False)
-    chk("Local View juste sous Isolate (une sélection, pas encore en vue locale)", "view3d.localview" in o
-        and o.index("object.hide_view_set") + 1 == o.index("view3d.localview"), o)
+    chk("un objet masqué par Hide : ni Show ni Unisolate dans le menu", "dessin.unisolate" not in L2.order and "dessin.show" not in L2.order
+        and "object.hide_view_clear" not in L2.order, L2.order)
     class _LT:
         def __init__(s): s.ops = []; s.order = []; s.texts = []
         def operator(s, idname, **k): s.order.append(idname); s.texts.append(k.get("text")); return NS()
         def menu(s, idname, **k): s.order.append(idname)
         def separator(s): pass
-    sp_saved = getattr(BC, "space_data", None)
     L3 = _LT(); fake = NS(mode='OBJECT', scene=BC.scene, view_layer=BC.view_layer, selected_objects=BC.selected_objects,
                          space_data=NS(local_view=object()))
     m.ctx_extra_items(L3, fake)
-    chk("déjà en vue locale : « Quit Local View » (même sans sélection)", "Quit Local View" in L3.texts and "Local View" not in L3.texts, L3.texts)
-    chk("... un objet masqué : Show All apparaît, avant Shade Smooth", "object.hide_view_clear" in L2.order
-        and L2.order.index("object.hide_view_clear") < L2.order.index("object.shade_smooth"), L2.order)
-    chk("clic droit en mode objet : Select, Display As, Material, Lock tout en haut, avant Shade Smooth, une seule fois",
-        o.index("DESSIN_MT_ctx_select") < o.index("DESSIN_MT_ctx_display") < o.index("DESSIN_MT_ctx_material") < o.index("dessin.lock")
-        < o.index("object.shade_smooth") and o.count("DESSIN_MT_ctx_select") == 1, o)
+    chk("en vue locale : plus de « Quit Local View » ni « Local View » dans le menu", "Quit Local View" not in L3.texts and "Local View" not in L3.texts, L3.texts)
+    sel(B); bpy.ops.dessin.isolate(); L4 = Lay(); cls.draw(NS(layout=L4), BC)
+    chk("après Isolate : Unisolate dans le bloc, sous Isolate", "dessin.unisolate" in L4.order
+        and L4.order.index("dessin.isolate") < L4.order.index("dessin.unisolate") < L4.order.index("view3d.copybuffer"), L4.order)
+    sel(); L5 = Lay(); cls.draw(NS(layout=L5), BC)
+    chk("... même sans sélection (Unisolate, pas Isolate)", "dessin.unisolate" in L5.order and "dessin.isolate" not in L5.order, L5.order)
+    bpy.ops.dessin.unisolate()
+    shade = [x for x in o if x.startswith("object.shade_")]
+    chk("clic droit en mode objet : Shade Smooth, Shade Auto Smooth, Shade Flat tout en haut, une seule fois",
+        o[:3] == ["object.shade_smooth", "object.shade_auto_smooth", "object.shade_flat"] and len(shade) == 3, o)
+    chk("... puis Select, Display As, Material, Lock, une seule fois, et le reste du menu de Blender",
+        o.index("object.shade_flat") < o.index("DESSIN_MT_ctx_select") < o.index("DESSIN_MT_ctx_display") < o.index("DESSIN_MT_ctx_material") < o.index("dessin.lock")
+        < o.index("object.join") < o.index("view3d.copybuffer") and o.count("DESSIN_MT_ctx_select") == 1, o)
+    seps = getattr(L, "seps", None)
+    E_ = bpy.data.objects.new("Emp", None); BC.collection.objects.link(E_)
+    sel(E_); BC.view_layer.objects.active = E_
+    L4 = Lay(); cls.draw(NS(layout=L4), BC)
+    chk("objet actif sans lissage (empty) : pas de Shade en haut", not any(x.startswith("object.shade_") for x in L4.order[:3]), L4.order)
+    bpy.data.objects.remove(E_)
 finally:
     m.uninstall_ctx_object_menu()
     cls.draw = saved_draw

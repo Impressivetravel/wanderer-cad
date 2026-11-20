@@ -301,5 +301,30 @@ chk("ordre de l'onglet Layout : Print puis Print by Layer", m.DESSIN_PT_layout_p
 BC.window.scene = model
 new = m.layer_copy_tree(walls, model.collection, BC)
 chk("un calque dupliqué garde ses réglages d'impression", new.dessin_layer.print_width == 'W050' and new.dessin_layer.plot and not new.dessin_layer.use_print_color, new.dessin_layer.print_width)
+# ---------------------------------------------------------------- types de ligne
+SEC = "types de ligne"
+BC.window.scene = model
+for c in (walls, furn, chairs, axes):
+    c.dessin_layer.plot = True
+    c.dessin_layer.use_print_color = False
+axes.dessin_layer.linetype = 'CENTER'
+BC.view_layer.update()
+ents = refresh()
+ax = [e for e in ents if e[0] == 'L' and e[-1] == "Visible" and all(abs(float(np.asarray(p)[:, 1].mean()) - 30.0) < 1e-3 for p, _c in e[1])]
+segs = sorted((float(np.asarray(p)[:, 0].min()), float(np.asarray(p)[:, 0].max())) for e in ax for p, _c in e[1])
+lens = [round(b - a, 3) for a, b in segs]
+chk("calque Axes en Center : l'axe de 60 mm est imprimé en tirets longs (12 mm) et courts (2 mm), à leur vraie taille sur le papier",
+    lens == [12.0, 2.0, 12.0, 2.0, 12.0, 2.0] and abs(segs[0][0] - 20.0) < 1e-3, lens)
+ln = [c for c in kids(d, 'vis') if c.get("wd_layer") == "Axes"]
+chk("... à l'écran, sur la feuille, l'axe est en tirets aussi (type de ligne gardé sur le trait)", ln and ln[0].get("wd_lt") == "CENTER" and len(ln[0].data.splines) == 6,
+    [len(c.data.splines) for c in ln])
+d.dessin_detail.scale = 50.0
+ents = refresh()
+ax = [e for e in ents if e[0] == 'L' and e[-1] == "Visible" and all(abs(float(np.asarray(p)[:, 1].mean()) - np.asarray(e[1][0][0])[:, 1].mean()) < 1e-6 for p, _c in e[1])]
+lens2 = sorted({round(float(np.asarray(p)[:, 0].max() - np.asarray(p)[:, 0].min()), 3) for e in ents if e[0] == 'L' and e[-1] == "Visible"
+                for p, _c in e[1] if abs(np.asarray(p)[:, 1].max() - np.asarray(p)[:, 1].min()) < 1e-6})
+chk("... au 1:50, les tirets gardent leur taille sur le papier (12 et 2 mm), il y en a simplement plus", 12.0 in lens2 and 2.0 in lens2, lens2)
+d.dessin_detail.scale = 100.0
+axes.dessin_layer.linetype = 'CONTINUOUS'
 shutil.rmtree(TMP, ignore_errors=True)
 summary()
