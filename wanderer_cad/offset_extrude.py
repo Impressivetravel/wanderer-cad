@@ -9,7 +9,8 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
-from .core import IDLE_FALLBACK, IDLE_TOOL, fmt_typed, last_typed, pref, unit_info
+from .core import IDLE_FALLBACK, IDLE_TOOL, fmt_typed, last_typed, pref, typed_length, unit_info
+from .units_text import typing_add
 from .drawing import area_over_ui, find_window_region, get_shader, line_px, project_px, px_scale
 from .base import DessinBase
 from .selection import ray_cast_opaque
@@ -434,20 +435,19 @@ class DESSIN_OT_offset_surface(bpy.types.Operator):
         elif et == 'BACK_SPACE':
             self.typed = self.typed[:-1]
             changed = True
-        elif event.unicode and event.unicode in "0123456789.,-" and not (event.ctrl or event.alt):
-            ch = "." if event.unicode == "," else event.unicode
-            if ch == '-':
-                self.sign = -self.sign
-            else:
-                self.typed += ch
+        elif event.unicode and event.unicode == "-" and not self.typed and not (event.ctrl or event.alt):
+            self.sign = -self.sign
+            changed = True
+        elif (event.unicode and not (event.ctrl or event.alt) and event.unicode != "-"
+              and typing_add(self.typed, event.unicode) is not None):
+            self.typed = typing_add(self.typed, event.unicode)       # 12.5, ou 10' 6 1/2" en impérial
             changed = True
         else:
             return {'PASS_THROUGH'}
         if self.typed:
-            try:
-                self.dist = max(float(self.typed) * self.unit_f, 1e-6)
-            except ValueError:
-                pass
+            v = typed_length(self.typed, self.unit_f)
+            if v is not None:
+                self.dist = max(v, 1e-6)
         if changed:
             self.rebuild()
         self.header(context)

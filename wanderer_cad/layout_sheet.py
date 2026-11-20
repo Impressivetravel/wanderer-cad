@@ -18,7 +18,7 @@ from .drawing import draw_px_points, get_shader, line_px, px_scale
 from .layout import (
     COL, GEN, SHEET, Z_IMAGE, _fit_size, _line_width, _local_matrix, _map_uv, _new_curve, _redraw, _remove, _sheet_text,
     _shown, _tr,
-    detail_at, detail_create, detail_dress_refresh, detail_id, detail_map, detail_projector, detail_rebuild, details,
+    detail_at, detail_create, detail_dress_refresh, detail_id, detail_imperial, detail_map, detail_projector, detail_rebuild, details,
     double_click_blocked, dress_signature, frame_rect, is_layout, layout_collection, layouts, paper_label, paper_rebuild,
     paper_size, quiet, title_refresh, title_scale_text,
 )
@@ -1321,7 +1321,7 @@ def sheet_drop_point(context):
 
 
 def sheet_place(context, o, collection='annot'):
-    """Range un objet neuf sur la feuille et le sélectionne seul (le Gumball apparaît dessus)."""
+    """Range un objet neuf sur la feuille et le sélectionne seul (le Gizmo apparaît dessus)."""
     sc = context.scene
     layout_collection(sc, collection).objects.link(o)
     try:
@@ -1364,7 +1364,7 @@ class DESSIN_OT_sheet_image(_LayoutOp, bpy.types.Operator):
                         self.width * max(iw, ih) / float(iw))
         o["wd_image"] = 1
         sheet_place(context, o)
-        self.report({'INFO'}, f"Image placed: {self.width:g} x {self.width * ih / iw:.1f} mm (move and resize it with the Gumball)")
+        self.report({'INFO'}, f"Image placed: {self.width:g} x {self.width * ih / iw:.1f} mm (move and resize it with the Gizmo)")
         return {'FINISHED'}
 
 
@@ -1413,7 +1413,7 @@ def north_arrow_paths(r):
 class DESSIN_OT_sheet_north(_LayoutOp, bpy.types.Operator):
     bl_idname = "dessin.sheet_north"
     bl_label = "North Arrow"
-    bl_description = "Layout: places a north arrow on the sheet. Turn it with the Gumball so that it points to the north of your plan"
+    bl_description = "Layout: places a north arrow on the sheet. Turn it with the Gizmo so that it points to the north of your plan"
 
     size: bpy.props.FloatProperty(name="Diameter (mm)", default=14.0, min=4.0, soft_max=60.0)
 
@@ -1434,7 +1434,8 @@ class DESSIN_OT_sheet_north(_LayoutOp, bpy.types.Operator):
 def callout_scale(den):
     """Échelle d'une vue de détail tirée d'une fenêtre au 1:den : la plus proche échelle normalisée au moins deux fois
     plus grande."""
-    cands = [d for _k, _n, d in le.SCALES if d <= den / 2.0 + 1e-9]
+    pool = le.SCALES_IMPERIAL if any(abs(d - den) <= 1e-9 * d for _k, _n, d in le.SCALES_IMPERIAL) else le.SCALES
+    cands = [d for _k, _n, d in tuple(x for x in le.SCALES if x[2] <= 1.0) + tuple(pool) if d <= den / 2.0 + 1e-9]
     return max(cands) if cands else den / 2.0
 
 
@@ -1526,7 +1527,7 @@ class DESSIN_OT_detail_callout(DessinBase):
             if parent is not None and not parent.dessin_detail.persp:
                 den = callout_scale(parent.dessin_detail.scale)
                 k = parent.dessin_detail.scale / den
-                info = f"Detail view at {le.fmt_scale(den)}"
+                info = f"Detail view at {le.fmt_scale(den, detail_imperial(parent))}"
             else:
                 info = "The part must be inside a viewport"
         except (AttributeError, ReferenceError):
@@ -1561,7 +1562,7 @@ class DESSIN_OT_detail_callout(DessinBase):
         except (RuntimeError, ReferenceError):
             pass
         d = obj.dessin_detail
-        self.report({'INFO'}, f"Detail {d.callout_tag}: {le.fmt_scale(d.scale)} (from {le.fmt_scale(parent.dessin_detail.scale)})")
+        self.report({'INFO'}, f"Detail {d.callout_tag}: {le.fmt_scale(d.scale, detail_imperial(obj))} (from {le.fmt_scale(parent.dessin_detail.scale, detail_imperial(obj))})")
         return obj
 
     def after_finish(self, context):

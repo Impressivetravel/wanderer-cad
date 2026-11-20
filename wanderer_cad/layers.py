@@ -1,10 +1,12 @@
 """Wanderer CAD : Calques (collections de Blender présentées comme dans Rhino)."""
 
 import bpy
+import colorsys
 import json
 import time
 
-from .core import FR_ALIASES
+from .core import FR_ALIASES, object_collections_map
+from .linetypes import LINETYPE_ITEMS, layers_linetype_scan, lt_apply, lt_apply_objects, lt_needs_sync, _touch_layouts, DESSIN_OT_object_linetype, selection_linetype
 from .settings import TOOLBOX_GROUPS
 
 
@@ -84,6 +86,19 @@ def _layer_print_color_update(self, context):
     _layer_print_update(self, context)
 
 
+def _layer_linetype_update(self, context):
+    """Type de ligne du calque changé : ses objets (ceux qui suivent leur calque) changent de tirets."""
+    col = self.id_data
+    try:
+        lt_apply_objects(list(col.objects))
+    except (RuntimeError, ReferenceError, AttributeError):
+        pass
+    try:
+        _touch_layouts(context)
+    except (RuntimeError, AttributeError):
+        pass
+
+
 class DESSIN_PG_layer(bpy.types.PropertyGroup):
     folded: bpy.props.BoolProperty(name="Folded", default=False, description="Hides the sublayers in the list")
     use_color: bpy.props.BoolProperty(name="Layer color", default=False, update=_layer_use_color_update,
@@ -94,6 +109,9 @@ class DESSIN_PG_layer(bpy.types.PropertyGroup):
                                  description="The objects of this layer are printed (PDF, SVG, DXF of the layouts). Off: the layer "
                                              "stays visible on screen, in light gray on the sheets, but is not printed, like "
                                              "Plot / No Plot in AutoCAD. Its sublayers follow")
+    linetype: bpy.props.EnumProperty(name="Linetype", items=LINETYPE_ITEMS, default='CONTINUOUS', update=_layer_linetype_update,
+                                     description="Linetype of the curves and lines of this layer (dashes in the 3D views and "
+                                                 "on the printed layouts), like the linetype of a layer in AutoCAD")
     print_width: bpy.props.EnumProperty(name="Print width", items=PRINT_WIDTH_ITEMS, default='DEFAULT', update=_layer_print_update,
                                         description="Printed line width of the objects of this layer. Default: the line widths of "
                                                     "the layout. A sublayer left on Default follows its parent layer")
@@ -106,14 +124,36 @@ class DESSIN_PG_layer(bpy.types.PropertyGroup):
                                                            "Without it, the layout decides: black, layer colors or grayscale")
 
 
+def layer_color_key(col):
+    """Rangement par couleur : le tour de la roue des couleurs (rouge, orange, jaune, vert, bleu, violet), du plus clair au
+    plus foncé pour une même teinte, puis les gris (du blanc au noir), puis les calques sans couleur."""
+    pg = getattr(col, "dessin_layer", None)
+    if pg is None or not pg.use_color:
+        return (2, 0, 0.0)
+    r, g, b = (float(c) for c in pg.color[:3])
+    h, li, _s = colorsys.rgb_to_hls(r, g, b)
+    if max(r, g, b) - min(r, g, b) < 0.08:
+        return (1, 0, round(-li, 3))                # gris : presque aucune teinte
+    return (0, int(round(h * 24.0)) % 24, round(-li, 3))     # teintes voisines (15°) ensemble ; le rouge fait le tour
+
+
 def layer_rows(context):
     """[(profondeur, layer_collection)] : la scène puis ses calques, dans l'ordre de l'arborescence."""
     out = []
-    alpha = context.scene.dessin.layer_sort_alpha
+    st = context.scene.dessin
+    alpha = st.layer_sort_alpha
+    by_color = getattr(st, "layer_sort_color", False) and not alpha
+
+    def kids(lc):
+        if alpha:
+            return sorted(lc.children, key=lambda x: x.name.lower())
+        if by_color:
+            return sorted(lc.children, key=lambda x: layer_color_key(x.collection))     # même couleur : votre ordre
+        return lc.children
 
     def walk(lc, depth):
         out.append((depth, lc))
-        for ch in (sorted(lc.children, key=lambda x: x.name.lower()) if alpha else lc.children):
+        for ch in kids(lc):
             walk(ch, depth + 1)
 
     walk(context.view_layer.layer_collection, 0)
@@ -141,18 +181,24 @@ def collection_parent(root, target):
 
 
 def layer_sync_new_objects():
-    """Les nouveaux objets (outils de dessin, import) prennent la couleur de leur calque."""
+    """Les nouveaux objets (outils de dessin, import) prennent la couleur et le type de ligne de leur calque."""
     _LAYERCOL["pending"] = False
     try:
         objs = list(bpy.data.objects)
     except (RuntimeError, AttributeError):
         return None
+    cmap = object_collections_map()         # (users_collection objet par objet : des secondes dans un gros fichier)
+    layers_linetype_scan()
     for o in objs:
         try:
-            if o.get("wd_lc") or o.users_collection is None or not len(o.users_collection):
+            cols = cmap.get(o.as_pointer())
+            if not cols:
                 continue
-            c = o.users_collection[0]
-            pg = getattr(c, "dessin_layer", None)
+            if lt_needs_sync(o, cmap):
+                lt_apply(o, cmap)      # nouvel objet sur un calque à tirets (ou copié depuis un autre calque)
+            if o.get("wd_lc"):
+                continue
+            pg = getattr(cols[0], "dessin_layer", None)
             if pg is not None and pg.use_color and tuple(o.color) == (1.0, 1.0, 1.0, 1.0):
                 o.color = (pg.color[0], pg.color[1], pg.color[2], 1.0)
                 o["wd_lc"] = 1
@@ -281,8 +327,9 @@ class DESSIN_OT_layer_current(bpy.types.Operator):
 class DESSIN_OT_layer_click(bpy.types.Operator):
     bl_idname = "dessin.layer_click"
     bl_label = "Layer"
-    bl_description = ("Click: current layer, and selects its objects.  Shift+click: adds or removes a layer from the selection.  "
-                      "Ctrl/Cmd+click: selects the range from the last clicked layer.  Double-click: rename.  Right-click: more actions")
+    bl_description = ("Double-click: makes it the current layer (✓): what you draw or add goes into it.  "
+                      "Click: selects the layer and its objects.  Shift+click: adds or removes a layer from the selection.  "
+                      "Ctrl/Cmd+click: selects the range from the last clicked layer.  Right-click: rename and more actions")
     bl_options = {'INTERNAL', 'UNDO'}     # sélection, calque courant, déplacement de calque : annulables
 
     layer: bpy.props.StringProperty()
@@ -310,8 +357,9 @@ class DESSIN_OT_layer_click(bpy.types.Operator):
         plain = not (event.shift or event.ctrl or event.alt)
         if plain and last_name == name and now - last_t < 0.4:
             _LAYERCOL["last"] = ("", 0.0)
-            context.view_layer.active_layer_collection = lc
-            return bpy.ops.dessin.layer_rename('INVOKE_DEFAULT', layer=name)
+            context.view_layer.active_layer_collection = lc     # double-clic : calque courant, comme dans Rhino
+            self.report({'INFO'}, f"Current layer: {name}")
+            return {'FINISHED'}
         sel = _LAYERCOL["sel"]
         if event.shift:
             if name in sel:
@@ -328,7 +376,7 @@ class DESSIN_OT_layer_click(bpy.types.Operator):
         else:
             _LAYERCOL["sel"] = [name]
             _LAYERCOL["anchor"] = name
-        context.view_layer.active_layer_collection = lc
+        # (un simple clic sélectionne le calque sans en faire le calque courant : c'est le double-clic, comme dans Rhino)
         if context.mode == 'OBJECT' and context.scene.dessin.layer_sync_select:
             first = True
             for n in layer_targets(context):
@@ -366,7 +414,7 @@ def layer_copy_tree(src, parent, context):
     new.dessin_layer.color = src.dessin_layer.color
     new.dessin_layer.use_color = src.dessin_layer.use_color
     new.dessin_layer.print_color = src.dessin_layer.print_color
-    for key in ("plot", "print_width", "use_print_color"):
+    for key in ("plot", "print_width", "use_print_color", "linetype"):
         setattr(new.dessin_layer, key, getattr(src.dessin_layer, key))
     for o in src.objects:
         o2 = o.copy()
@@ -875,6 +923,10 @@ class DESSIN_OT_layer_move_selection(bpy.types.Operator):
             elif o.get("wd_lc"):
                 o.color = (1.0, 1.0, 1.0, 1.0)
                 del o["wd_lc"]
+            try:
+                lt_apply(o)        # type de ligne du nouveau calque
+            except (RuntimeError, ReferenceError, AttributeError):
+                pass
             n += 1
         self.report({'INFO'}, f"{n} object(s) moved to {target.name if target != context.scene.collection else 'the scene'}")
         return {'FINISHED'}
@@ -1004,16 +1056,21 @@ class DESSIN_OT_layer_colors_view(bpy.types.Operator):
 class DESSIN_OT_layer_refresh_colors(bpy.types.Operator):
     bl_idname = "dessin.layer_refresh_colors"
     bl_label = "Apply Layer Colors"
-    bl_description = "Gives every object the color of its layer (after moving objects with Blender's own tools)"
+    bl_description = ("Gives every object the color and the linetype of its layer (after moving objects with Blender's "
+                      "own tools)")
     bl_options = {'REGISTER', 'UNDO'}
 
     def execute(self, context):
         for c in bpy.data.collections:
             layer_apply_color(c)
+        cmap = object_collections_map()
         for o in bpy.data.objects:
-            if len(o.users_collection) and o.users_collection[0] == context.scene.collection and o.get("wd_lc"):
+            cols = cmap.get(o.as_pointer())
+            if o.get("wd_lc") and cols and cols[0] == context.scene.collection:
                 o.color = (1.0, 1.0, 1.0, 1.0)
                 del o["wd_lc"]
+        layers_linetype_scan()
+        lt_apply_objects([o for o in bpy.data.objects if lt_needs_sync(o, cmap)], cmap)
         return {'FINISHED'}
 
 
@@ -1111,9 +1168,10 @@ def tool_families():
         return names[names.index(first):names.index(last) + 1]
 
     return [
-        ("Select", [DESSIN_TT_selection_boite, DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle, DESSIN_TT_selection_lasso]),
+        ("Select", [DESSIN_TT_selection_boite, DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle, DESSIN_TT_selection_lasso]
+         + RHINO_TOOLS.get("nav", [])),
         ("Curves", between(DESSIN_TT_polyligne, DESSIN_TT_arc_3pts) + [DESSIN_TT_project_curve] + RHINO_TOOLS["curves"]),
-        ("Transform", between(DESSIN_TT_deplacer, DESSIN_TT_array_polar) + [DESSIN_TT_align, DESSIN_TT_stretch] + RHINO_TOOLS["transform"]),
+        ("Transform", between(DESSIN_TT_deplacer, DESSIN_TT_array_polar) + [DESSIN_TT_align] + RHINO_TOOLS["transform"] + [DESSIN_TT_stretch]),
         ("Modify", [DESSIN_TT_join, DESSIN_TT_explode, DESSIN_TT_trim, DESSIN_TT_cut, DESSIN_TT_divide, DESSIN_TT_overkill,
                     DESSIN_TT_split_face, DESSIN_TT_fillet_c, DESSIN_TT_chamfer_c] + between(DESSIN_TT_bool_union, DESSIN_TT_chamfer)
          + [DESSIN_TT_offset_surface, DESSIN_TT_offset] + RHINO_TOOLS["modify"]),
@@ -1125,7 +1183,8 @@ def tool_families():
         ("Lights and cameras", [DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun, DESSIN_TT_light_area,
                                 DESSIN_TT_camera, DESSIN_TT_camera_target]),
         ("Annotation", [DESSIN_TT_cotation, DESSIN_TT_cotation_chain, DESSIN_TT_cotation_ordinate, DESSIN_TT_cotation_arc, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_text, DESSIN_TT_center_mark, DESSIN_TT_cotation_edit, DESSIN_TT_hatch, DESSIN_TT_hatch_region,
-                        DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane] + LAYOUT_TOOLS),
+                        DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane]
+                       + RHINO_TOOLS.get("annotation", []) + LAYOUT_TOOLS),
     ]
 
 
@@ -1221,6 +1280,7 @@ class DESSIN_PT_layers_filter(bpy.types.Panel):
         r.prop(st, "layer_col_indirect", text="", icon='INDIRECT_ONLY_ON', toggle=True)
         lay.separator()
         lay.prop(st, "layer_sort_alpha")
+        lay.prop(st, "layer_sort_color")
         lay.prop(st, "layer_sync_select")
         lay.separator()
         lay.label(text="Search")
@@ -1258,6 +1318,245 @@ OBJ_ICONS = {'MESH': 'OUTLINER_OB_MESH', 'CURVE': 'OUTLINER_OB_CURVE', 'EMPTY': 
              'SURFACE': 'OUTLINER_OB_SURFACE', 'LIGHT': 'OUTLINER_OB_LIGHT', 'CAMERA': 'OUTLINER_OB_CAMERA'}
 
 
+# Colonnes de la liste des calques, comme dans Rhino : (clé, titre, icône, réglage qui l'affiche, largeur par défaut)
+LAYER_COLUMNS = (
+    ("name", "Layer", 'NONE', None, 8.0),
+    ("exclude", "Use", 'CHECKBOX_HLT', "layer_col_exclude", 1.0),
+    ("select", "Lock", 'RESTRICT_SELECT_OFF', "layer_col_select", 1.0),
+    ("hide", "On", 'HIDE_OFF', "layer_col_hide", 1.0),
+    ("viewport", "Viewport", 'RESTRICT_VIEW_OFF', "layer_col_viewport", 1.0),
+    ("render", "Render", 'RESTRICT_RENDER_OFF', "layer_col_render", 1.0),
+    ("holdout", "Holdout", 'HOLDOUT_ON', "layer_col_holdout", 1.0),
+    ("indirect", "Indirect", 'INDIRECT_ONLY_ON', "layer_col_indirect", 1.0),
+    ("color", "Color", 'NONE', None, 1.2),
+)
+LAYER_COL_MIN = {"name": 3.0, "color": 0.9}
+LAYER_COL_MAX = 30.0
+
+
+def layer_col_widths(st):
+    try:
+        got = json.loads(st.layer_widths or "{}")
+    except (ValueError, TypeError, AttributeError):
+        got = {}
+    out = {}
+    for key, _t, _i, _p, w in LAYER_COLUMNS:
+        try:
+            out[key] = max(LAYER_COL_MIN.get(key, 0.9), min(LAYER_COL_MAX, float(got.get(key, w))))
+        except (TypeError, ValueError):
+            out[key] = w
+    return out
+
+
+def layer_columns_shown(st):
+    return [c for c in LAYER_COLUMNS if c[3] is None or getattr(st, c[3], False)]
+
+
+def layer_cell(row, widths, key):
+    """Case d'une colonne de largeur fixe (en unités d'interface)."""
+    r = row.row(align=True)
+    r.ui_units_x = widths[key]
+    return r
+
+
+class DESSIN_OT_layer_col_resize(bpy.types.Operator):
+    bl_idname = "dessin.layer_col_resize"
+    bl_label = "Column Width"
+    bl_description = ("Click the title of a column, then move the mouse left or right to make it narrower or wider, "
+                      "and click to set it (Esc or right-click: cancel; Ctrl/Cmd+click: back to the default width)")
+    bl_options = {'INTERNAL'}
+
+    column: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    def invoke(self, context, event):
+        st = context.scene.dessin
+        if self.column not in {c[0] for c in LAYER_COLUMNS}:
+            return {'CANCELLED'}
+        if event.ctrl or event.oskey:
+            w = layer_col_widths(st)
+            w[self.column] = next(c[4] for c in LAYER_COLUMNS if c[0] == self.column)
+            st.layer_widths = json.dumps(w)
+            return {'FINISHED'}
+        self._start = layer_col_widths(st)
+        self._x0 = event.mouse_x
+        self._region = context.region
+        try:
+            self._unit = 20.0 * context.preferences.system.ui_scale or 20.0
+        except AttributeError:
+            self._unit = 20.0
+        context.window.cursor_modal_set('MOVE_X')
+        context.workspace.status_text_set("Column width: move the mouse left or right, click to set  ·  Esc / right-click: cancel")
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def _apply(self, context, x):
+        w = dict(self._start)
+        k = self.column
+        w[k] = max(LAYER_COL_MIN.get(k, 0.9), min(LAYER_COL_MAX, self._start[k] + (x - self._x0) / self._unit))
+        context.scene.dessin.layer_widths = json.dumps({a: round(b, 2) for a, b in w.items()})
+        try:
+            self._region.tag_redraw()
+        except (ReferenceError, AttributeError):
+            pass
+
+    def _end(self, context):
+        try:
+            context.window.cursor_modal_restore()
+            context.workspace.status_text_set(None)
+        except (AttributeError, ReferenceError):
+            pass
+
+    def modal(self, context, event):
+        if event.type == 'MOUSEMOVE':
+            self._apply(context, event.mouse_x)
+        elif event.type in {'LEFTMOUSE', 'RET', 'NUMPAD_ENTER', 'SPACE'} and event.value == 'PRESS':
+            self._apply(context, event.mouse_x)
+            self._end(context)
+            return {'FINISHED'}
+        elif event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+            context.scene.dessin.layer_widths = json.dumps(self._start)
+            try:
+                self._region.tag_redraw()
+            except (ReferenceError, AttributeError):
+                pass
+            self._end(context)
+            return {'CANCELLED'}
+        return {'RUNNING_MODAL'}
+
+
+LAYER_OBJ_ROWS_MAX = 300
+
+
+def layer_list_entries(context, rows=None):
+    """Lignes de la liste des calques telles qu'elles s'affichent (repli, recherche, objets) :
+    [("scene", 0, lc, None) | ("layer", depth, lc, None) | ("object", depth, lc, obj)], et True si les objets ont été
+    coupés à LAYER_OBJ_ROWS_MAX."""
+    st = context.scene.dessin
+    vl = context.view_layer
+    rows = layer_rows(context) if rows is None else rows
+    visible = None
+    if st.layer_search:
+        visible = set()
+        for _d, lc in rows[1:]:
+            if layer_name_match(lc.name, st):
+                visible.add(lc.name)
+                par = collection_parent(vl.layer_collection, lc)
+                while par is not None and par != vl.layer_collection:
+                    visible.add(par.name)
+                    par = collection_parent(vl.layer_collection, par)
+    out, n_obj, cut = [], 0, False
+    hide_below = None
+    for depth, lc in rows:
+        if depth > 0 and visible is None:
+            if hide_below is not None and depth > hide_below:
+                continue
+            hide_below = None
+        if depth == 0:
+            out.append(("scene", 0, lc, None))
+            continue
+        if visible is not None and lc.name not in visible:
+            continue
+        c = lc.collection
+        if lc.children and c.dessin_layer.folded and visible is None:
+            hide_below = depth
+        out.append(("layer", depth, lc, None))
+        if st.layer_show_objects:
+            for o in c.objects:
+                if n_obj >= LAYER_OBJ_ROWS_MAX:
+                    cut = True
+                    break
+                n_obj += 1
+                out.append(("object", depth, lc, o))
+    return out, cut
+
+
+def layer_list_window(st, total):
+    """(début, nombre) des lignes montrées : la liste défile au-delà de « Rows » lignes."""
+    n = max(5, int(st.layer_list_rows))
+    if total <= n:
+        return 0, total
+    start = int(round(max(0.0, min(1.0, st.layer_list_scroll)) * (total - n)))
+    return max(0, min(start, total - n)), n
+
+
+class DESSIN_OT_layer_scroll(bpy.types.Operator):
+    bl_idname = "dessin.layer_scroll"
+    bl_label = "Scroll Layers"
+    bl_description = "Scrolls the layer list"
+    bl_options = {'INTERNAL'}
+
+    rows: bpy.props.IntProperty(default=0, options={'SKIP_SAVE'})
+    to: bpy.props.EnumProperty(items=(('BY', "By", ""), ('TOP', "Top", ""), ('BOTTOM', "Bottom", "")), default='BY',
+                               options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        st = context.scene.dessin
+        total = len(layer_list_entries(context)[0])
+        n = max(5, int(st.layer_list_rows))
+        span = max(1, total - n)
+        if self.to == 'TOP':
+            st.layer_list_scroll = 0.0
+        elif self.to == 'BOTTOM':
+            st.layer_list_scroll = 1.0
+        else:
+            start = layer_list_window(st, total)[0]
+            st.layer_list_scroll = max(0.0, min(1.0, (start + self.rows) / span))
+        return {'FINISHED'}
+
+
+class DESSIN_OT_layer_rows_resize(bpy.types.Operator):
+    bl_idname = "dessin.layer_rows_resize"
+    bl_label = "List Height"
+    bl_description = ("Click, then move the mouse down or up to make the layer list taller or shorter, and click to set it "
+                      "(Esc or right-click: cancel)")
+    bl_options = {'INTERNAL'}
+
+    def invoke(self, context, event):
+        st = context.scene.dessin
+        self._n0 = int(st.layer_list_rows)
+        self._y0 = event.mouse_y
+        self._region = context.region
+        try:
+            self._unit = 20.0 * context.preferences.system.ui_scale or 20.0
+        except AttributeError:
+            self._unit = 20.0
+        try:
+            context.window.cursor_modal_set('MOVE_Y')
+            context.workspace.status_text_set("List height: move the mouse down or up, click to set  ·  Esc / right-click: cancel")
+        except (AttributeError, ReferenceError):
+            pass
+        context.window_manager.modal_handler_add(self)
+        return {'RUNNING_MODAL'}
+
+    def _apply(self, context, y):
+        context.scene.dessin.layer_list_rows = max(5, min(400, self._n0 + int(round((self._y0 - y) / self._unit))))
+        try:
+            self._region.tag_redraw()
+        except (ReferenceError, AttributeError):
+            pass
+
+    def _end(self, context):
+        try:
+            context.window.cursor_modal_restore()
+            context.workspace.status_text_set(None)
+        except (AttributeError, ReferenceError):
+            pass
+
+    def modal(self, context, event):
+        if event.type == 'MOUSEMOVE':
+            self._apply(context, event.mouse_y)
+            return {'RUNNING_MODAL'}
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self._apply(context, event.mouse_y)
+            self._end(context)
+            return {'FINISHED'}
+        if event.type in {'ESC', 'RIGHTMOUSE'} and event.value == 'PRESS':
+            context.scene.dessin.layer_list_rows = self._n0
+            self._end(context)
+            return {'CANCELLED'}
+        return {'RUNNING_MODAL'}
+
+
 class DESSIN_PT_layers(bpy.types.Panel):
     bl_label = "Layers"
     bl_idname = "DESSIN_PT_layers"
@@ -1267,6 +1566,11 @@ class DESSIN_PT_layers(bpy.types.Panel):
 
     def draw_header_preset(self, context):
         st = context.scene.dessin
+        r = self.layout.row(align=True)
+        o = r.operator(DESSIN_OT_layer_fold.bl_idname, text="", icon='TRIA_RIGHT', emboss=False)
+        o.action = 'COLLAPSE_ALL'
+        o = r.operator(DESSIN_OT_layer_fold.bl_idname, text="", icon='TRIA_DOWN', emboss=False)
+        o.action = 'EXPAND_ALL'
         self.layout.popover(panel="DESSIN_PT_layers_filter", text="", icon='FILTER' if not st.layer_search else 'VIEWZOOM')
 
     def draw(self, context):
@@ -1287,26 +1591,18 @@ class DESSIN_PT_layers(bpy.types.Panel):
             cb.label(text="Click the layer where it goes")
             o = cb.operator(DESSIN_OT_layer_carry.bl_idname, text="Cancel", icon='X')
             o.layer = ""
-        rows = layer_rows(context)
-        visible = None
-        if st.layer_search:
-            visible = set()
-            for d, lc in rows[1:]:
-                if layer_name_match(lc.name, st):
-                    up = lc
-                    visible.add(lc.name)
-                    par = collection_parent(vl.layer_collection, lc)
-                    while par is not None and par != vl.layer_collection:
-                        visible.add(par.name)
-                        par = collection_parent(vl.layer_collection, par)
+        entries, cut = layer_list_entries(context)
         box = lay.box()
         col = box.column(align=False)
         col.scale_y = 0.95
-        n_obj_rows = 0
 
-        def tg(row, owner, prop, icon, live=True, op=None):
+        widths = layer_col_widths(st)
+        shown = layer_columns_shown(st)
+
+        def tg(row, owner, prop, icon, live=True, op=None, key=None):
             """Même icône dans les deux états ; grisée quand l'option est désactivée."""
-            r = row.row(align=True)
+            r = layer_cell(row, widths, key)
+            r.alignment = 'CENTER'
             r.active = bool(live)
             if op is not None:
                 o_ = r.operator(DESSIN_OT_layer_object.bl_idname, text="", emboss=False, icon=icon)
@@ -1315,96 +1611,114 @@ class DESSIN_PT_layers(bpy.types.Panel):
             else:
                 r.prop(owner, prop, text="", emboss=False, icon=icon)
 
+        def blank(row, key):
+            layer_cell(row, widths, key).label(text="")
+
         def toggles(row, lc_or_none, c, obj=None):
             if lc_or_none is not None:
                 lc = lc_or_none
                 if st.layer_col_exclude:
-                    tg(row, lc, "exclude", 'CHECKBOX_HLT', not lc.exclude)
+                    tg(row, lc, "exclude", 'CHECKBOX_HLT', not lc.exclude, key="exclude")
                 if st.layer_col_select:
-                    tg(row, c, "hide_select", 'RESTRICT_SELECT_OFF', not c.hide_select)
+                    tg(row, c, "hide_select", 'RESTRICT_SELECT_OFF', not c.hide_select, key="select")
                 if st.layer_col_hide:
-                    tg(row, lc, "hide_viewport", 'HIDE_OFF', not lc.hide_viewport)
+                    tg(row, lc, "hide_viewport", 'HIDE_OFF', not lc.hide_viewport, key="hide")
                 if st.layer_col_viewport:
-                    tg(row, c, "hide_viewport", 'RESTRICT_VIEW_OFF', not c.hide_viewport)
+                    tg(row, c, "hide_viewport", 'RESTRICT_VIEW_OFF', not c.hide_viewport, key="viewport")
                 if st.layer_col_render:
-                    tg(row, c, "hide_render", 'RESTRICT_RENDER_OFF', not c.hide_render)
+                    tg(row, c, "hide_render", 'RESTRICT_RENDER_OFF', not c.hide_render, key="render")
                 if st.layer_col_holdout:
-                    tg(row, lc, "holdout", 'HOLDOUT_ON', lc.holdout)
+                    tg(row, lc, "holdout", 'HOLDOUT_ON', lc.holdout, key="holdout")
                 if st.layer_col_indirect:
-                    tg(row, lc, "indirect_only", 'INDIRECT_ONLY_ON', lc.indirect_only)
+                    tg(row, lc, "indirect_only", 'INDIRECT_ONLY_ON', lc.indirect_only, key="indirect")
+                # couleur du calque à droite, comme dans Rhino
+                sw = layer_cell(row, widths, "color")
+                sw.prop(c.dessin_layer, "color", text="")
             else:
                 if st.layer_col_exclude:
-                    row.label(text="", icon='BLANK1')
+                    blank(row, "exclude")
                 if st.layer_col_select:
-                    tg(row, obj, "hide_select", 'RESTRICT_SELECT_OFF', not obj.hide_select)
+                    tg(row, obj, "hide_select", 'RESTRICT_SELECT_OFF', not obj.hide_select, key="select")
                 if st.layer_col_hide:
-                    tg(row, None, None, 'HIDE_OFF', not obj.hide_get(), op=obj)
+                    tg(row, None, None, 'HIDE_OFF', not obj.hide_get(), op=obj, key="hide")
                 if st.layer_col_viewport:
-                    tg(row, obj, "hide_viewport", 'RESTRICT_VIEW_OFF', not obj.hide_viewport)
+                    tg(row, obj, "hide_viewport", 'RESTRICT_VIEW_OFF', not obj.hide_viewport, key="viewport")
                 if st.layer_col_render:
-                    tg(row, obj, "hide_render", 'RESTRICT_RENDER_OFF', not obj.hide_render)
+                    tg(row, obj, "hide_render", 'RESTRICT_RENDER_OFF', not obj.hide_render, key="render")
                 if st.layer_col_holdout:
-                    row.label(text="", icon='BLANK1')
+                    blank(row, "holdout")
                 if st.layer_col_indirect:
-                    row.label(text="", icon='BLANK1')
+                    blank(row, "indirect")
+                blank(row, "color")
+
+        # en-tête des colonnes : cliquer un titre puis bouger la souris change sa largeur (comme tirer le bord dans Rhino)
+        hdr = col.row(align=False)
+        hdr.alignment = 'LEFT'
+        for key, title, icon, _p, _w in shown:
+            cell = layer_cell(hdr, widths, key)
+            narrow = widths[key] < 2.6 and key != "name"
+            o = cell.operator(DESSIN_OT_layer_col_resize.bl_idname, text="" if narrow and icon != 'NONE' else title,
+                              icon=icon if narrow else 'NONE', emboss=True)
+            o.column = key
 
         sel_cols = set()
         try:
-            for o_ in context.selected_objects:
-                for c_ in o_.users_collection:
+            sel_ = context.selected_objects
+            cmap_ = object_collections_map() if len(sel_) > 12 else None     # (grosse sélection : un seul passage)
+            for o_ in sel_:
+                for c_ in (cmap_.get(o_.as_pointer(), ()) if cmap_ is not None else o_.users_collection):
                     sel_cols.add(c_.name)
         except (AttributeError, ReferenceError, RuntimeError):
             pass
 
-        hide_below = None
-        for depth, lc in rows:
+        total = len(entries)
+        first, count = layer_list_window(st, total)
+        for kind, depth, lc, o in entries[first:first + count]:
             c = lc.collection
             is_cur = lc == cur
-            if depth > 0 and visible is None:
-                if hide_below is not None and depth > hide_below:
-                    continue
-                hide_below = None
-            if depth == 0:
+            if kind == "scene":
                 row = col.row(align=False)
                 op = row.operator(DESSIN_OT_layer_current.bl_idname, text="Scene (top level)", emboss=is_cur)
                 op.name = lc.name
                 op.select = False
                 continue
-            if visible is not None and lc.name not in visible:
+            if kind == "object":
+                orow = col.row(align=False)
+                orow.alignment = 'LEFT'
+                nm = layer_cell(orow, widths, "name")
+                nm.separator(factor=1.2 * depth + 0.8)
+                op = nm.operator(DESSIN_OT_layer_object.bl_idname, text=o.name, emboss=o.select_get(),
+                                 icon=OBJ_ICONS.get(o.type, 'OBJECT_DATA'))
+                op.name = o.name
+                op.action = 'SELECT'
+                toggles(orow, None, c, o)
                 continue
             row = col.row(align=False)
+            row.alignment = 'LEFT'
+            nm = layer_cell(row, widths, "name")
             if depth > 1:
-                row.separator(factor=1.2 * (depth - 1))
+                nm.separator(factor=1.2 * (depth - 1))
             if lc.children:
                 fd = c.dessin_layer.folded
-                row.prop(c.dessin_layer, "folded", text="", emboss=False, icon='TRIA_RIGHT' if fd else 'TRIA_DOWN')
-                if fd and visible is None:
-                    hide_below = depth
+                nm.prop(c.dessin_layer, "folded", text="", emboss=False, icon='TRIA_RIGHT' if fd else 'TRIA_DOWN')
             else:
-                row.label(text="", icon='BLANK1')
-            sw = row.row(align=True)
-            sw.ui_units_x = 0.8
-            sw.prop(c.dessin_layer, "color", text="")
-            row.separator(factor=0.3)
-            op = row.operator(DESSIN_OT_layer_click.bl_idname, text=c.name,
-                              emboss=is_cur or lc.name in sel or c.name in sel_cols, depress=c.name in sel_cols)
+                nm.label(text="", icon='BLANK1')
+            op = nm.operator(DESSIN_OT_layer_click.bl_idname, text=c.name, icon='CHECKMARK' if is_cur else 'NONE',
+                             emboss=is_cur or lc.name in sel or c.name in sel_cols, depress=c.name in sel_cols)
             op.layer = lc.name
             toggles(row, lc, c)
-            if st.layer_show_objects:
-                for o in c.objects:
-                    if n_obj_rows >= 300:
-                        break
-                    n_obj_rows += 1
-                    orow = col.row(align=False)
-                    orow.separator(factor=1.2 * depth + 0.8)
-                    nm = orow.row(align=True)
-                    op = nm.operator(DESSIN_OT_layer_object.bl_idname, text=o.name, emboss=o.select_get(),
-                                     icon=OBJ_ICONS.get(o.type, 'OBJECT_DATA'))
-                    op.name = o.name
-                    op.action = 'SELECT'
-                    toggles(orow, None, c, o)
-        if n_obj_rows >= 300:
-            lay.label(text="Showing the first 300 objects", icon='INFO')
+        if total > count:                 # la liste défile : flèches, position (glisser), lignes montrées
+            sr = box.row(align=True)
+            o = sr.operator(DESSIN_OT_layer_scroll.bl_idname, text="", icon='TRIA_UP')
+            o.rows = -max(1, count - 2)
+            sr.prop(st, "layer_list_scroll", text=f"{first + 1}–{first + count} of {total}", slider=True)
+            o = sr.operator(DESSIN_OT_layer_scroll.bl_idname, text="", icon='TRIA_DOWN')
+            o.rows = max(1, count - 2)
+        grip = box.row(align=True)
+        grip.scale_y = 0.5
+        grip.operator(DESSIN_OT_layer_rows_resize.bl_idname, text="· · · · ·", emboss=False)
+        if cut:
+            lay.label(text=f"Showing the first {LAYER_OBJ_ROWS_MAX} objects", icon='INFO')
         r = lay.row(align=True)
         for d, ic in (('UP', 'TRIA_UP'), ('DOWN', 'TRIA_DOWN'), ('IN', 'TRIA_RIGHT'), ('OUT', 'TRIA_LEFT')):
             o = r.operator(DESSIN_OT_layer_move.bl_idname, text="", icon=ic)
@@ -1484,6 +1798,9 @@ def draw_layer_print_table(layout, root, limit=250):
             wd = row.row(align=True)
             wd.ui_units_x = 4.4
             wd.prop(pg, "print_width", text="")
+            lt = row.row(align=True)
+            lt.ui_units_x = 4.4
+            lt.prop(pg, "linetype", text="")
             walk(ch, depth + 1, on)
 
     walk(root, 0, True)
@@ -1511,6 +1828,7 @@ def draw_object_print_width(layout, context):
     row.enabled = bool(getattr(context, "selected_objects", None))
     row.label(text="Selected objects")
     row.operator_menu_enum(DESSIN_OT_object_print_width.bl_idname, "width", text=selection_print_width(context))
+    row.operator_menu_enum(DESSIN_OT_object_linetype.bl_idname, "linetype", text=selection_linetype(context))
 
 
 class DESSIN_OT_object_print_width(bpy.types.Operator):
@@ -1561,9 +1879,10 @@ class DESSIN_PT_layers_print(bpy.types.Panel):
 
     def draw(self, context):
         lay = self.layout
-        lay.label(text="Printed, print color and line width of each layer:")
+        lay.label(text="Printed, print color, line width and linetype of each layer:")
         draw_layer_print_table(lay, context.scene.collection)
         draw_object_print_width(lay, context)
+        lay.prop(context.scene.dessin, "linetype_scale", text="Linetype scale in the views (1:N)")
         lay.label(text="Used by the PDF, SVG and DXF of the layouts", icon='INFO')
 
 

@@ -11,8 +11,9 @@ from .core import (
     AXES3, IDLE_FALLBACK, IDLE_TOOL, SNAP_NAMES, TAU, TRACK_DWELL, TRACK_MAX, TRACK_RADIUS, _LAST_TYPED, arc_samples,
     build_bezier_arc, build_polyline, build_shape_mesh, drawing_axis, edit_add_geometry, grid_snap_len, grid_snap_point,
     grid_snap_step, idle_tool, last_typed, oneshot_clear, oneshot_keys, osnap, plane_axes, plane_origin, pref, shape_output,
-    unit_info,
+    scene_imperial, scene_m_per_unit, typed_length, unit_info,
 )
+from .units_text import typing_add
 from .snapping import collect_snap_points
 from .drawing import (
     _HOVER, draw_pixel_cb, draw_view_cb, find_snap_in, find_window_region, main_window_region, over_nav_gizmo,
@@ -43,15 +44,24 @@ def view_height(base, o, n, ro, rv, rv3d):
     return (res[0] - o).dot(n) if res else None
 
 
-def parse_coord(text, unit_f=1.0):
+def parse_coord(text, unit_f=1.0, m_per_unit=None, imperial=False):
     """Saisie de coordonnées style Rhino/AutoCAD.
     '#x,y[,z]' ou 'x;y' : absolu (repère du plan) ; '@x,y[,z]' : relatif au dernier point ;
     'd<a' ou '@d<a' : polaire relatif (distance d, angle a en degrés depuis l'axe X du plan) ; '#d<a' : polaire absolu.
     Avec ';' comme séparateur, la virgule redevient décimale. Retourne (absolu, (x, y, z)) ou None si incomplet."""
+    from .units_text import parse_length
+    if m_per_unit is None:
+        m_per_unit = unit_f
     s = text.strip().replace(' ', '')
     if not s:
         return None
     absolute = True
+
+    def length(t):                              # 12.5, 10'6", 6-1/2"... (pieds / pouces acceptés)
+        v = parse_length(t, unit_f, m_per_unit, imperial)
+        if v is None:
+            raise ValueError(t)
+        return v
     if s[0] == '#':
         s = s[1:]
     elif s[0] == '@':
@@ -65,15 +75,15 @@ def parse_coord(text, unit_f=1.0):
     try:
         if '<' in s:
             d, a = s.split('<', 1)
-            d, a = float(d), math.radians(float(a))
-            return absolute, (d * math.cos(a) * unit_f, d * math.sin(a) * unit_f, 0.0)
-        parts = [float(x) for x in s.split(sep)]
-    except ValueError:
+            d, a = length(d), math.radians(float(a))
+            return absolute, (d * math.cos(a), d * math.sin(a), 0.0)
+        parts = [length(x) for x in s.split(sep)]
+    except (ValueError, ZeroDivisionError):
         return None
     if not 2 <= len(parts) <= 3:
         return None
     parts += [0.0] * (3 - len(parts))
-    return absolute, tuple(x * unit_f for x in parts)
+    return absolute, tuple(parts)
 
 
 class DessinBase(bpy.types.Operator):
@@ -400,6 +410,8 @@ class DessinBase(bpy.types.Operator):
             if osnap("project") or (self.points and self.PLANAR):
                 p = p - n * (p - origin).dot(n)     # Project : on reste dans le plan de construction
             self.cur = p
+            if self.points and self.snap_on and self.lock is None and pref("smart_tracks"):
+                self.track_snap(region, rv3d, mx, my, p)
         else:
             self.snap_screen = None
             self.snap_kind = None
@@ -537,7 +549,12 @@ class DessinBase(bpy.types.Operator):
             ro = region_2d_to_origin_3d(region, rv3d, coord)
             rv = region_2d_to_vector_3d(region, rv3d, coord)
             res = geometry.intersect_line_line(O, O + a, ro, ro + rv)
-            p = res[0] if res else self.cur
+            if res and abs(rv.normalized().dot(a)) < 0.9999:
+                p = res[0]
+            else:
+                # la vue regarde le long de l'axe (Z verrouillé en vue de dessus) : la souris ne peut pas donner la
+                # hauteur. Le point reste sur l'axe, à la base ; une distance tapée part le long de l'axe (voir Move).
+                p = O.copy()
         self.cur = p
         self.track_lines = [(O, k)]
         self.track_label = "XYZ"[k] + " locked"
@@ -620,6 +637,40 @@ class DessinBase(bpy.types.Operator):
                     break
         cache[key] = (edges, out)
         return out
+
+    def track_snap(self, region, rv3d, mx, my, p):
+        """Le curseur suit une ligne de repérage X / Y / Z d'un point posé (ou acquis) et une accroche se présente à côté :
+        le point reste sur la ligne, à hauteur de l'accroche (sa projection), comme SmartTrack de Rhino. Sans cela, en
+        montant un objet le long de son propre tube, chaque sommet survolé arrachait le curseur de la ligne."""
+        origins = list(self.points) + list(self.track_pts)
+        found = track_lines_near(origins, self.track_dirs(), rv3d, region, mx, my)
+        if not found or self.snap_screen is None:
+            return False
+        # la souris est plus près de la ligne que de l'accroche : c'est la ligne qu'on suit (sinon l'accroche gagne)
+        sd = (Vector(self.snap_screen) - Vector((mx, my))).length
+        found = [f for f in found if f[0] < sd]
+        if not found:
+            return False
+        # plusieurs lignes peuvent passer sous le curseur (vue inclinée : Y et Z se confondent à l'écran) : on prend celle
+        # qui passe le plus près de l'accroche dans l'espace ; si l'accroche est déjà dessus, rien ne change
+        best = None
+        for _dist, O, k in found:
+            d = AXES3[k]
+            q = O + d * (p - O).dot(d)
+            gap = (q - p).length
+            if best is None or gap < best[0]:
+                best = (gap, O, k, q)
+        gap, O, k, q = best
+        if gap < 1e-7 * max(1.0, p.length):
+            return False            # l'accroche est déjà sur une ligne : rien à changer
+        sq = project_px(rv3d, region, q)
+        if sq is None:
+            return False
+        self.cur = q
+        self.track_lines = [(O, k)]
+        self.track_label = "XYZ"[k] + " ∩ snap"
+        self.track_screen = (sq.x, sq.y)
+        return True
 
     def track_cursor(self, region, rv3d, mx, my, ray_o, ray_v, origin, n):
         """Accroche le curseur aux lignes alignées (X/Y/Z) issues des points posés et des points acquis, et aux
@@ -763,6 +814,14 @@ class DessinBase(bpy.types.Operator):
             pass
 
     def fmt(self, value):
+        try:
+            sc = bpy.context.scene
+            if scene_imperial(sc) and sc.unit_settings.length_unit in ('FEET', 'INCHES', 'ADAPTIVE'):
+                from .units_text import format_imperial      # pieds et pouces : 10' - 6 1/2"
+                return format_imperial(value * (sc.unit_settings.scale_length or 1.0),
+                                       'INCHES' if sc.unit_settings.length_unit == 'INCHES' else 'FEET', 16)
+        except (AttributeError, ReferenceError):
+            pass
         x = value / self.unit_f
         s = f"{x:.3f}".rstrip('0').rstrip('.')
         return f"{s} {self.unit_label}".strip()
@@ -772,10 +831,7 @@ class DessinBase(bpy.types.Operator):
         s = self.typed[i]
         if s in ('', '-', '.', '-.'):
             return None
-        try:
-            return float(s) * self.unit_f
-        except ValueError:
-            return None
+        return typed_length(s, self.unit_f)        # 12.5 ou, en impérial, 10' 6 1/2", 6-1/2", 1/2"...
 
     def typed_raw(self, i):
         """Valeur saisie sans conversion d'unité (angle en degrés, facteur d'échelle...)."""
@@ -848,7 +904,7 @@ class DessinBase(bpy.types.Operator):
                 w = w - n * w.dot(n)
                 w = w.normalized() if w.length > 1e-9 else u.copy()
                 return fb + w * d
-        r = parse_coord(self.coord, self.unit_f)
+        r = parse_coord(self.coord, self.unit_f, scene_m_per_unit(), scene_imperial())
         if r is None:
             return None
         absolute, (x, y, z) = r
@@ -896,7 +952,7 @@ class DessinBase(bpy.types.Operator):
                 self.coord_update()
                 return True
             return False
-        if ch not in "0123456789.,-;<":
+        if ch not in "0123456789.,-;<'\"/+":
             return False
         self.coord += ch
         self.coord_update()
@@ -944,6 +1000,16 @@ class DessinBase(bpy.types.Operator):
                 self.refresh(context)
             return {'RUNNING_MODAL'}
 
+        if et == 'SPACE' and not (event.ctrl or event.alt or event.oskey) and not self.coord:
+            # 10' 6 1/2" : après des pieds, l'espace fait partie de la longueur tapée (il ne valide pas)
+            try:
+                cur = self.typed[self.field] if self.NUMFIELDS else ""
+            except (AttributeError, IndexError, TypeError):
+                cur = ""
+            if cur and typing_add(cur, " ") is not None:
+                self.typed[self.field] = cur + " "
+                self.refresh(context)
+                return {'RUNNING_MODAL'}
         if self.COORD_OK and self.handle_coord(event):
             self.refresh(context)
             return {'RUNNING_MODAL'}
@@ -976,16 +1042,19 @@ class DessinBase(bpy.types.Operator):
             self.typed[self.field] = self.typed[self.field][:-1]
             return True
         ch = event.unicode
-        if not ch or ch not in "0123456789.,-":
+        if not ch:
             return False
-        if ch == '-':
-            if event.type.startswith('NUMPAD') or self.typed[self.field]:
-                return False
-        if ch == ',':
-            ch = '.'
-        if ch == '.' and '.' in self.typed[self.field]:
-            return True
-        self.typed[self.field] += ch
+        if ch == '-' and event.type.startswith('NUMPAD'):
+            return False
+        cur = self.typed[self.field]
+        if ch in "-+" and cur and "'" not in cur and not scene_imperial():
+            return False                # 12- : le signe moins garde son rôle d'avant (hors pieds / pouces)
+        if ch in ".," and "." in cur and not any(c in cur for c in "'\"/+ "):
+            return True                 # second point décimal : ignoré (comme avant)
+        nxt = typing_add(cur, ch)       # chiffres, point, signe ; pieds ' pouces " fractions / + (10' 6 1/2")
+        if nxt is None:
+            return False
+        self.typed[self.field] = nxt
         return True
 
     # ---- construction ----
@@ -1107,6 +1176,9 @@ class DessinBase(bpy.types.Operator):
             return {'PASS_THROUGH'}
 
         if et in {'LEFT_SHIFT', 'RIGHT_SHIFT'} and self.PROP and self.points:
+            if (find_window_region(self.area, event.mouse_x, event.mouse_y) is None
+                    or self.mouse_over_ui(event)):
+                return {'PASS_THROUGH'}         # souris sur un autre éditeur (Outliner...) : Maj est pour lui
             self.update_cursor(context, event)   # Maj enfoncé / relâché : l'aperçu change tout de suite
             return {'RUNNING_MODAL'}
 

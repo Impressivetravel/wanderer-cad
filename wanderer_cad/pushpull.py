@@ -9,7 +9,8 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector, geometry
 
-from .core import NAV_TYPES, _LAST_TYPED, cp_frame, cp_set, cp_state, last_typed, osnap, unit_info
+from .core import NAV_TYPES, _LAST_TYPED, cp_frame, cp_set, cp_state, last_typed, osnap, scene_imperial, typed_length, unit_info
+from .units_text import typing_add
 from .snapping import collect_snap_points
 from .drawing import (
     _same_region, draw_snap_marker, find_snap_in, find_window_region, get_shader, main_window_region, region_rv3d,
@@ -1330,10 +1331,7 @@ class DESSIN_OT_pushpull(bpy.types.Operator):
         d = self.dist
         t = None
         if self.typed not in ("", "-", ".", "-."):
-            try:
-                t = float(self.typed) * self.unit_f
-            except ValueError:
-                t = None
+            t = typed_length(self.typed, self.unit_f)          # 12.5, ou 10' 6 1/2" en impérial
         if t is not None:
             d = t if (t < 0 or d >= 0) else -t         # une valeur saisie garde le sens de la souris, sauf si on tape un signe
         self.cleanup()
@@ -1377,8 +1375,10 @@ class DESSIN_OT_pushpull(bpy.types.Operator):
                 self.prompt()
                 return {'RUNNING_MODAL'}
             ch = event.unicode
-            if ch and (ch.isdigit() or ch in '.-,'):
-                self.typed += '.' if ch == ',' else ch
+            nxt = typing_add(self.typed, ch) if ch else None
+            if nxt is not None and not (ch in "-+" and self.typed and "'" not in self.typed
+                                        and not scene_imperial()):
+                self.typed = nxt
                 self.prompt()
                 return {'RUNNING_MODAL'}
         if region is None:

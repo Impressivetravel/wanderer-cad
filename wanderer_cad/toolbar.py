@@ -54,21 +54,22 @@ class DESSIN_TT_selection_boite(bpy.types.WorkSpaceTool):
     bl_label = "Select"
     bl_description = ("Click or drag a box to select (left → right: fully inside, right → left: touched; Shift: add, "
                       "Ctrl/Cmd: remove; Ctrl/Cmd+Shift click: a vertex, edge or face, like Rhino). Drag an object to move it freely "
-                      "in the view plane; use the Gumball handles for exact moves")
+                      "in the view plane; use the Gizmo handles for exact moves")
     bl_icon = "ops.generic.select_box"
     bl_widget = None
     bl_keymap = (
         ("dessin.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "any": True}, None),
+        ("dessin.hatch_dblclick", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("dessin.selection_boite", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
         ("dessin.deselect", {"type": 'ESC', "value": 'PRESS'}, None),
-        # Alt maintenu : la poignée du Gumball sous la souris s'éclaire (Blender ne le fait plus avec Alt)
+        # Alt maintenu : la poignée du Gizmo sous la souris s'éclaire (Blender ne le fait plus avec Alt)
         ("dessin.gumball_alt_hover", {"type": 'MOUSEMOVE', "value": 'ANY', "alt": True}, None),
         ("dessin.gumball_alt_hover", {"type": 'LEFT_ALT', "value": 'ANY', "any": True}, None),
         ("dessin.gumball_alt_hover", {"type": 'RIGHT_ALT', "value": 'ANY', "any": True}, None),
     )
 
     def draw_settings(context, layout, tool):
-        layout.label(text="Esc: deselect  ·  Double-click an edge: select the loop (Alt: ring; face mode: row of faces)  ·  Drag an object: move  ·  drag empty space: box (left → right: inside, right → left: touched)  ·  Shift: add  ·  Ctrl/Cmd: remove  ·  Ctrl/Cmd+Shift: vertex / edge / face")
+        layout.label(text="Esc: deselect  ·  Double-click an edge: select the loop (Alt: ring; face mode: row of faces), a hatch or a block: edit it  ·  Drag an object: move  ·  drag empty space: box (left → right: inside, right → left: touched)  ·  Shift: add  ·  Ctrl/Cmd: remove  ·  Ctrl/Cmd+Shift: vertex / edge / face")
 
 
 class DESSIN_TT_selection_lasso(bpy.types.WorkSpaceTool):
@@ -82,6 +83,7 @@ class DESSIN_TT_selection_lasso(bpy.types.WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("dessin.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "any": True}, None),
+        ("dessin.hatch_dblclick", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("dessin.selection_lasso", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
         ("dessin.deselect", {"type": 'ESC', "value": 'PRESS'}, None),
     )
@@ -101,6 +103,7 @@ class DESSIN_TT_selection_rect(bpy.types.WorkSpaceTool):
     bl_widget = None
     bl_keymap = (
         ("dessin.select_loop", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK', "any": True}, None),
+        ("dessin.hatch_dblclick", {"type": 'LEFTMOUSE', "value": 'DOUBLE_CLICK'}, None),
         ("dessin.selection_rect", {"type": 'LEFTMOUSE', "value": 'PRESS', "any": True}, None),
         ("dessin.deselect", {"type": 'ESC', "value": 'PRESS'}, None),
     )
@@ -612,8 +615,9 @@ DESSIN_TT_id_point = _draw_tool_cls(
     "Click a point (snaps work)  ·  coordinates in the command bar and copied to the clipboard")
 DESSIN_TT_mesure_aire = _draw_tool_cls(
     "DESSIN_TT_mesure_aire", "dessin.mesure_aire_tool", "dessin.mesure_aire", "Area / Perimeter",
-    "Quick measure: click the corners of a contour (Enter or first point to close), D: measure the selection. Nothing is created",
-    "Click the corners, Enter to close  ·  D: measure the selection  ·  result copied to the clipboard")
+    "Quick measure: click the corners of a contour (Enter or first point to close). D: Inside (click inside a closed area), "
+    "then Selection. Nothing is created",
+    "Click the corners, Enter to close  ·  D: Inside (click in a closed area), Selection  ·  result copied to the clipboard")
 
 DESSIN_TT_echelle_2d = _draw_tool_cls(
     "DESSIN_TT_echelle_2d", "dessin.echelle_2d_tool", "dessin.echelle_2d", "Scale 2D",
@@ -662,9 +666,13 @@ DESSIN_TT_point = _draw_tool_cls(
 DESSIN_TT_trim = _draw_tool_cls(
     "DESSIN_TT_trim", "dessin.trim_tool", "dessin.trim", "Trim",
     "Trims curves, outlines and surfaces: the selected objects are the cutting curves (nothing selected: all of them), click the part to remove or drag a fence line across several (F: fence, C: crossing box; surfaces: the outline is projected along the view)",
-    "Select the cutting curves first (none: all)  ·  click a part to remove it, or drag a fence line (F) / a crossing box (C) to remove several  ·  Esc / Enter: leave",
+    "Select the cutting curves first (none: all)  ·  click a part to remove it, or drag a fence line (F) / a crossing box (C) to remove several  ·  Esc / Enter / Space: leave",
     hover=False)
+# Entrée / Espace (comme Rhino et AutoCAD) terminent Trim : l'outil repasse à Select. Sans Espace ici, Espace ouvrait la ligne
+# de commande, qui relançait la dernière commande (Trim) : le clic suivant coupait encore.
 DESSIN_TT_trim.bl_keymap += (("dessin.tool_exit", {"type": 'RET', "value": 'PRESS'}, None),
+                             ("dessin.tool_exit", {"type": 'NUMPAD_ENTER', "value": 'PRESS'}, None),
+                             ("dessin.tool_exit", {"type": 'SPACE', "value": 'PRESS'}, None),
                              ("dessin.trim_mode", {"type": 'F', "value": 'PRESS'}, {"properties": [("mode", 'FENCE')]}),
                              ("dessin.trim_mode", {"type": 'C', "value": 'PRESS'}, {"properties": [("mode", 'CROSSING')]}))
 
@@ -746,6 +754,23 @@ DESSIN_TT_sweep2 = _pick_then_run_tool(
     "Click the two rails first, then the cross-sections  ·  Enter / Space: sweep options  ·  Esc: leave")
 def _hatch_settings(context, layout, tool):
     st = context.scene.dessin
+    # hachures sélectionnées (celle qu'on vient de faire, ou une cliquée) : le motif choisi ici les change tout de suite
+    try:
+        from .hatch import is_hatch
+        ob = context.active_object
+        hs = [o for o in context.selected_objects if is_hatch(o)] if context.mode == 'OBJECT' else []
+    except (AttributeError, ReferenceError):
+        hs = []
+    if hs:
+        src = ob if ob in hs else hs[0]
+        pg = src.dessin_hatch
+        layout.label(text=f"Selected hatch{'es' if len(hs) > 1 else ''}:", icon='MOD_LATTICE')
+        layout.template_icon_view(pg, "pattern", show_labels=True, scale=1.0, scale_popup=4.0)
+        layout.prop(pg, "pattern", text="")
+        layout.prop(pg, "scale")
+        layout.prop(pg, "rotation")
+        return
+    layout.template_icon_view(st, "hatch_pattern", show_labels=True, scale=1.0, scale_popup=4.0)
     layout.prop(st, "hatch_pattern", text="")
     layout.prop(st, "hatch_scale")
     layout.prop(st, "hatch_rotation")
@@ -764,6 +789,31 @@ DESSIN_TT_hatch_region = _draw_tool_cls(
     "Click inside a closed area  ·  D: next pattern  ·  Esc: leave")
 DESSIN_TT_hatch_region.draw_settings = _hatch_settings
 DESSIN_TT_hatch_region._in_group = True     # menu déroulant de Hatch
+DESSIN_TT_boundary = _draw_tool_cls(
+    "DESSIN_TT_boundary", "dessin.boundary_tool", "dessin.boundary", "Boundary",
+    "Like BOUNDARY: click inside an area closed by curves or crossing lines to create a closed polyline around it "
+    "(and around the islands inside it)",
+    "Click inside a closed area  ·  D: with / without islands  ·  Esc: leave")
+DESSIN_TT_boundary.dessin_icon = "boundary"
+DESSIN_TT_break = _draw_tool_cls(
+    "DESSIN_TT_break", "dessin.break_crv_tool", "dessin.break_crv", "Break",
+    "Like BREAK: click a curve at the first break point, then the second point: the part between them is removed. "
+    "D: At Point (cuts the curve in two without a gap)",
+    "Click the curve at the first break point, then the second point  ·  Enter: break at the first point  ·  D: At Point  ·  Esc: leave")
+DESSIN_TT_break.dessin_icon = "break"
+DESSIN_TT_match_props = _draw_tool_cls(
+    "DESSIN_TT_match_props", "dessin.match_props_tool", "dessin.match_props", "Match Properties",
+    "Like MATCHPROP: click the source object, then the objects that take its layer, color, linetype, print width, material...",
+    "Click the source object, then the objects to change  ·  Enter / Esc: done", hover=False)
+DESSIN_TT_match_props.dessin_icon = "match_props"
+
+
+def _match_settings(context, layout, tool):
+    from .drafting import draw_match_settings
+    draw_match_settings(layout, context.scene.dessin)
+
+
+DESSIN_TT_match_props.draw_settings = _match_settings
 
 DESSIN_TT_network_srf = _pick_then_run_tool(
     "DESSIN_TT_network_srf", "dessin.network_srf_tool", "dessin.network_srf", "Network Surface",
@@ -882,7 +932,7 @@ DESSIN_TT_chamfer_c = _pick_then_run_tool(
     "Click the polylines (or two lines)  ·  Enter / Space: live preview, wheel or typed distance  ·  Enter / click: validate  ·  Esc: leave")
 DESSIN_TT_clip_plane = _draw_tool_cls(
     "DESSIN_TT_clip_plane", "dessin.clip_plane_tool", "dessin.clip_plane", "Clipping Plane",
-    "Draws a clipping plane: the view hides what is on the side of the arrow (move it with the gumball, flip / switch off in the Wanderer panel)",
+    "Draws a clipping plane: the view hides what is on the side of the arrow (move it with the gizmo, flip / switch off in the Wanderer panel)",
     "First corner then opposite corner (in the active view plane)  ·  the arrow points to the hidden side  ·  C: from center")
 DESSIN_TT_stretch = _draw_tool_cls(
     "DESSIN_TT_stretch", "dessin.stretch_tool", "dessin.stretch", "Stretch",
@@ -1037,9 +1087,22 @@ DESSIN_TT_orient = _draw_tool_cls(
     "Select the objects  ·  2 reference points, then 2 target points  ·  D: scale to the target length  ·  C: copy")
 DESSIN_TT_orient3pt = _draw_tool_cls(
     "DESSIN_TT_orient3pt", "dessin.orient3pt_tool", "dessin.orient3pt", "Orient 3 Points",
-    "Like Orient3Pt: moves and rotates the selection from one plane to another: three reference points (origin, X direction, side of the plane), then three target points. The size does not change (C: copy)",
-    "Select the objects  ·  3 reference points, then 3 target points  ·  C: copy")
-DESSIN_TT_orient3pt._in_group = True  # menu déroulant d'Orient
+    "Like Orient3Pt: moves and rotates the selection from one plane to another: three reference points (origin, X direction, side of the plane), then three target points (D: also scale, C: copy)",
+    "Select the objects  ·  3 reference points, then 3 target points  ·  D: scale to the target length  ·  C: copy")
+DESSIN_TT_orient._in_group = True     # menu déroulant d'Align
+DESSIN_TT_orient3pt._in_group = True  # menu déroulant d'Align
+# Walk : la marche de Blender elle-même (view3d.walk, comme Shift+`) ; vitesse, hauteur d'yeux, gravité, sensibilité
+# de la souris se règlent dans Préférences > Navigation > Walk
+DESSIN_TT_walk = _draw_tool_cls(
+    "DESSIN_TT_walk", "dessin.walk_tool", "view3d.walk", "Walk",
+    "Blender's Walk Navigation (Shift+`): click in the view to walk through the model. Its speed, view height, gravity "
+    "and mouse sensitivity are set in Preferences > Navigation > Walk",
+    "Click in the view to walk  ·  W A S D: move  ·  mouse: look  ·  Q / E: down / up  ·  Shift: faster  ·  "
+    "Alt: slower  ·  wheel: speed  ·  Tab: gravity  ·  click / Enter: confirm  ·  Esc / right click: cancel", hover=False)
+DESSIN_TT_slice = _draw_tool_cls(
+    "DESSIN_TT_slice", "dessin.slice_tool", "dessin.slice", "Slice",
+    "Like QuickSlice in 3ds Max: slices meshes with a plane defined by a line of two points. Only the edges of the cut are added, the object stays in one piece. In Edit mode, only the selected faces are sliced",
+    "Meshes  ·  line of the slicing plane (two points, or click an existing line)  ·  Edit mode: selected faces only")
 DESSIN_TT_extend_crv = _draw_tool_cls(
     "DESSIN_TT_extend_crv", "dessin.extend_crv_tool", "dessin.extend_crv", "Extend Curve",
     "Like Extend: click near the end of a curve, then give its new end: click, type a length, or Enter to stop at the next curve, edge or surface. The curve keeps its shape",
@@ -1048,15 +1111,18 @@ DESSIN_TT_extend_crv.dessin_icon = "extend_crv"
 for _t, _k in ((DESSIN_TT_pipe, "pipe"), (DESSIN_TT_intersect, "intersect"), (DESSIN_TT_section, "section"), (DESSIN_TT_contour, "contour"),
                (DESSIN_TT_extract_srf, "extract_srf"), (DESSIN_TT_dup_border, "dup_border"), (DESSIN_TT_dup_edge, "dup_edge"), (DESSIN_TT_dup_face_border, "dup_face_border"),
                (DESSIN_TT_merge_faces, "merge_faces"), (DESSIN_TT_unroll, "unroll"), (DESSIN_TT_rebuild_srf, "rebuild_srf"),
-               (DESSIN_TT_orient, "orient"), (DESSIN_TT_orient3pt, "orient3pt")):
+               (DESSIN_TT_orient, "orient"), (DESSIN_TT_orient3pt, "orient3pt"), (DESSIN_TT_slice, "slice"),
+               (DESSIN_TT_walk, "walk")):
     _t.dessin_icon = _k
 # famille de la barre d'outils -> boutons ajoutés à la fin de cette famille
 RHINO_TOOLS = {
     "curves": [DESSIN_TT_intersect, DESSIN_TT_section, DESSIN_TT_contour, DESSIN_TT_dup_border, DESSIN_TT_dup_face_border, DESSIN_TT_dup_edge],
-    "transform": [DESSIN_TT_orient, DESSIN_TT_orient3pt],
-    "modify": [DESSIN_TT_extend_crv, DESSIN_TT_merge_faces],
+    "transform": [DESSIN_TT_orient, DESSIN_TT_orient3pt],      # dans le menu déroulant d'Align
+    "nav": [DESSIN_TT_walk],                                  # juste à côté de Select
+    "modify": [DESSIN_TT_extend_crv, DESSIN_TT_break, DESSIN_TT_match_props, DESSIN_TT_merge_faces, DESSIN_TT_slice],
     "srf_edit": [DESSIN_TT_extract_srf, DESSIN_TT_unroll, DESSIN_TT_rebuild_srf],
     "solids": [DESSIN_TT_pipe],
+    "annotation": [DESSIN_TT_boundary],
 }
 
 # ---- mise en page (2.96.125) : Layout = nouvelle feuille, Detail = vue du modèle à l'échelle sur la feuille ----

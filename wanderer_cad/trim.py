@@ -8,7 +8,7 @@ import numpy as np
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector, geometry
 
-from .core import TAU, arc_bezier_data, pref
+from .core import TAU, arc_bezier_data, has_lt, is_lt_mod, own_modifiers, pref
 from .drawing import _HOVER, draw_px_points, get_shader, line_px, px_scale
 from .base import DessinBase
 from .dimensions import fit_circle_points
@@ -41,8 +41,8 @@ def curve_wire_direct(obj):
     """Contour d'une courbe POLY / Bézier sans modificateur, calculé directement depuis ses points (sans passer par le graphe
     d'évaluation) : arcs et cercles échantillonnés finement, bevel et extrusion sans effet. None si la courbe n'est pas de ce type."""
     cu = obj.data
-    if obj.modifiers or any(sp.type not in {'POLY', 'BEZIER'} for sp in cu.splines):
-        return None
+    if own_modifiers(obj) or any(sp.type not in {'POLY', 'BEZIER'} for sp in cu.splines):
+        return None             # (le modificateur du type de ligne ne compte pas : il ne fait que dessiner des tirets)
     mw = np.array(obj.matrix_world, dtype=np.float64)
     flat = cu.dimensions == '2D'
     qf = curve_quality_factor()
@@ -127,7 +127,7 @@ def wire_graph(obj, depsgraph):
             return direct_res
         tmp = None
         try:
-            if cu.bevel_depth != 0.0 or cu.extrude != 0.0 or cu.bevel_object is not None:
+            if cu.bevel_depth != 0.0 or cu.extrude != 0.0 or cu.bevel_object is not None or has_lt(obj):
                 # courbe épaissie (bevel / extrusion) : la version évaluée a déjà la section, la remettre à zéro ne la recalcule pas.
                 # On évalue une copie sans épaisseur : le fil de la courbe, une arête par segment.
                 tmp = obj.copy()
@@ -136,6 +136,8 @@ def wire_graph(obj, depsgraph):
                 tmp.data.extrude = 0.0
                 tmp.data.bevel_object = None
                 tmp.data.taper_object = None
+                for md in [m for m in tmp.modifiers if is_lt_mod(m)]:
+                    tmp.modifiers.remove(md)          # le trait entier, pas ses tirets
                 bpy.context.scene.collection.objects.link(tmp)
                 depsgraph = bpy.context.evaluated_depsgraph_get()
                 src = tmp
@@ -474,6 +476,63 @@ def _point_in_poly2(pt, poly):
     return inside
 
 
+def _weld_ids(bm):
+    """Numéro commun aux sommets posés au même endroit (à la tolérance de soudure près) : liste indexée par v.index."""
+    from mathutils import kdtree
+    n = len(bm.verts)
+    bm.verts.index_update()
+    ids = list(range(n))
+    if n < 2:
+        return ids
+    kd = kdtree.KDTree(n)
+    C = np.empty((n, 3))
+    for v in bm.verts:
+        C[v.index] = v.co
+        kd.insert(v.co, v.index)
+    kd.balance()
+    tol = max(1e-7, 1e-6 * float(np.linalg.norm(C.max(axis=0) - C.min(axis=0))))
+
+    def root(i):
+        while ids[i] != i:
+            ids[i] = ids[ids[i]]
+            i = ids[i]
+        return i
+    for v in bm.verts:
+        for _co, j, _d in kd.find_range(v.co, tol):
+            if j != v.index:
+                a, b = root(v.index), root(j)
+                if a != b:
+                    ids[max(a, b)] = min(a, b)
+    return [root(i) for i in range(n)]
+
+
+def trim_projection(paths, rv3d):
+    """Matrice de projection des contours de coupe sur une surface. Vue parallèle : le long de la vue. Vue en perspective :
+    comme Trim de Rhino, des courbes planes sont projetées perpendiculairement à leur plan (la coupe ne dépend plus du
+    point de vue) ; une droite seule ou des courbes gauches restent projetées le long de la vue."""
+    view = np.array(rv3d.perspective_matrix, dtype=np.float64)
+    if not getattr(rv3d, "is_perspective", False):
+        return view
+    P = np.array([tuple(w) for pts, _closed in paths for w in pts], dtype=np.float64)
+    if len(P) < 3:
+        return view
+    c = P.mean(axis=0)
+    try:
+        _u, sv, vt = np.linalg.svd(P - c)
+    except np.linalg.LinAlgError:
+        return view
+    ext = float(sv[0])
+    if ext < 1e-9 or sv[1] < 1e-5 * ext or sv[2] > 1e-4 * ext:
+        return view                  # points alignés (pas de plan) ou courbe gauche
+    sc = 1.0 / ext
+    out = np.eye(4)
+    for i in range(3):
+        k = sc if i < 2 else 1.0
+        out[i, :3] = vt[i] * k
+        out[i, 3] = -float(vt[i] @ c) * k
+    return out
+
+
 def surface_trim(obj, paths, persp_np, hit_local):
     """Retire de la surface de obj la partie cernée par les contours `paths` ([(points monde, fermé)]) vus depuis la caméra.
     Les contours sont projetés sur la surface le long de la vue (orthogonale ou perspective), la face cliquée (hit_local)
@@ -688,12 +747,19 @@ def surface_trim(obj, paths, persp_np, hit_local):
     for pid, pa, va, pb, vb in pairs:
         p = P2[pid]
         n = len(p["pts"])
-        if pa < pb:
+        same = abs(pa - pb) <= 1e-6
+        if same:
+            # face vue par la tranche (parallèle à la direction de projection) : ses deux croisements tombent au même
+            # endroit du contour. La coupe est droite, aucun sommet du contour n'est à reporter sur la face.
+            ks = []
+        elif pa < pb:
             ks = [k for k in range(n) if pa + 1e-6 < k < pb - 1e-6]
-        else:
+        elif p["closed"]:
             ks = [k for k in range(n) if k > pa + 1e-6 or k < pb - 1e-6]
             ks.sort(key=lambda k: (k <= pa, k))
-        mid_pos = 0.5 * (pa + pb) if pa < pb else ((pa + pb + n) * 0.5) % n
+        else:
+            ks = [k for k in range(n) if pb + 1e-6 < k < pa - 1e-6][::-1]
+        mid_pos = 0.5 * (pa + pb) if (same or pa < pb or not p["closed"]) else ((pa + pb + n) * 0.5) % n
         j0 = int(mid_pos) % n
         j1 = (j0 + 1) % n
         fr = mid_pos - int(mid_pos)
@@ -714,7 +780,8 @@ def surface_trim(obj, paths, persp_np, hit_local):
         for k in ks:
             a_, b_ = unproject(p["pts"][k][0], p["pts"][k][1], -1.0), unproject(p["pts"][k][0], p["pts"][k][1], 1.0)
             hit = geometry.intersect_line_plane(inv @ a_, inv @ b_, face.verts[0].co, face.normal)
-            coords.append(tuple(hit if hit is not None else face.calc_center_median()))
+            if hit is not None:          # face parallèle à la projection : ce sommet du contour n'a pas d'image sur elle
+                coords.append(tuple(hit))
         if not coords and bm.edges.get((va, vb)) is not None:
             barrier.add(bm.edges.get((va, vb)))
             continue
@@ -763,20 +830,36 @@ def surface_trim(obj, paths, persp_np, hit_local):
         return "Click on the surface"
     start = bm.faces[found[2]]
 
+    # Les faces se suivent par leurs arêtes, comparées par position : un maillage dont les faces ne sont pas soudées
+    # (import FBX / OBJ, coques posées l'une contre l'autre) est parcouru comme un maillage soudé.
+    weld = _weld_ids(bm)
+
+    def ekey(e):
+        a, b = weld[e.verts[0].index], weld[e.verts[1].index]
+        return (a, b) if a < b else (b, a)
+    by_key = {}
+    for f in bm.faces:
+        for e in f.edges:
+            k = ekey(e)
+            if k[0] != k[1]:
+                by_key.setdefault(k, []).append(f)
+    barrier_keys = {ekey(e) for e in barrier if e.is_valid}
+
     def flood(block):
         seen = {start}
         stack = [start]
         while stack:
             f = stack.pop()
             for e in f.edges:
-                if e in block:
+                k = ekey(e)
+                if k in block:
                     continue
-                for g in e.link_faces:
+                for g in by_key.get(k, ()):
                     if g not in seen:
                         seen.add(g)
                         stack.append(g)
         return seen
-    region = flood(barrier)
+    region = flood(barrier_keys)
     whole = flood(set())
     if len(region) == len(whole):
         bm.free()

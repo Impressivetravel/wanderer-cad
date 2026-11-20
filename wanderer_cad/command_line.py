@@ -10,7 +10,7 @@ from gpu_extras.batch import batch_for_shader
 
 from .core import (
     FR_ACTION_ALIASES, FR_ALIASES, GRID_SNAP_PRESETS, ONESHOT_KEYS, TAU, _redraw_all_areas, grid_snap_shown, grid_snap_store,
-    lang, mouse_over_statusbar, oneshot_clear, oneshot_hold, oneshot_hold_set, oneshot_keys, oneshot_reset, oneshot_shown,
+    lang, mouse_over_statusbar, oneshot_clear, oneshot_hold, oneshot_hold_set, oneshot_keys, oneshot_reset, oneshot_shown, shift_held, shift_held_set,
     oneshot_toggle, osnap_shown, pref, redraw_bars, tr_label, tr_text, unit_info,
 )
 from .drawing import bars_frame, find_window_region, get_shader
@@ -27,12 +27,12 @@ from .views import CMD_ALIASES, CMD_KEY_ITEMS, DESSIN_MT_named_views, _CMD, curr
 from .layout import bar_tabs, is_layout, layout_zoom_page, tab_click
 from .quadview import (
     _QUAD, _win_region, quad_area_at, quad_bars, quad_click, quad_column_watch, quad_focus, quad_focus_set, quad_grid_of,
-    quad_is_column, quad_peers, quad_title,
+    quad_extra_kind, quad_guard_soon, quad_is_column, quad_peers, quad_title,
 )
 from .cplane import (
     _act_cplane_mode, _act_cplane_named, _act_cplane_redo, _act_cplane_undo, _act_op, _act_origin, _act_region,
     _act_select_linked, _act_select_similar, _act_select_similar_menu, _act_shading, _act_toggle, cmd_clean_label,
-    cmd_log, cmd_notice_clear, cmd_notice_text, cmd_tool_class, cmd_tool_classes, cp_apply_named, cp_current_rv3d,
+    cmd_log, cmd_notice_clear, cmd_notice_style, cmd_notice_text, cmd_tool_class, cmd_tool_classes, cp_apply_named, cp_current_rv3d,
 )
 
 
@@ -114,12 +114,14 @@ CMD_ACTIONS = (
     ("Redo", "redo", "ed.redo", "Redo the last undone action", _act_op("ed.redo")),
     ("Delete", "e del delete erase", "", "Delete the selected objects", _act_delete),
     ("Alias Editor", "aliasedit alias aliases", "", "Create your own command aliases, like AliasEdit in AutoCAD and the aliases of Rhino", _act_invoke("dessin.alias_edit")),
+    ("Import AutoCAD Aliases", "importpgp pgpimport pgp", "", "Add the aliases of an AutoCAD alias file (acad.pgp) to yours, for the commands Wanderer has", _act_invoke("dessin.alias_import_pgp")),
     ("Select All", "sa all selectall", "", "Select every object", _act_op("object.select_all", action='SELECT')),
     ("Select None", "sn none deselect selnone", "", "Deselect everything", _act_op("object.select_all", action='DESELECT')),
     ("Invert Selection", "si invert selinvert", "", "Invert the selection", _act_op("object.select_all", action='INVERT')),
-    ("Hide", "hi hide", "", "Hide the selected objects", _act_op("object.hide_view_set", unselected=False)),
-    ("Isolate", "isolate", "", "Hide everything except the selected objects", _act_op("object.hide_view_set", unselected=True)),
-    ("Show All", "show showall unhide", "", "Show the hidden objects", _act_op("object.hide_view_clear")),
+    ("Hide", "hi hide hideobjects", "", "Hide the selected objects (Show shows them back)", _act_op("dessin.hide")),
+    ("Isolate", "isolate iso isolateobjects", "", "Hide everything except the selected objects (Unisolate shows them back)", _act_op("dessin.isolate")),
+    ("Unisolate", "unisolate uniso unisolateobjects", "", "Show the objects hidden by Isolate (objects hidden with Hide stay hidden)", _act_op("dessin.unisolate")),
+    ("Show", "show showall unhide", "", "Show every hidden object (hidden with Hide or by Isolate)", _act_op("dessin.show")),
     ("Lock", "lock freeze", "", "Lock the selected objects: visible and snappable, but no longer selectable (Freeze in 3ds Max)", _act_op("dessin.lock")),
     ("Unlock All", "unlock unlockall unfreeze unfreezeall", "", "Unlock every locked object (Unfreeze All in 3ds Max)", _act_op("dessin.unlock_all")),
     ("Unlock Selected", "unlockselected", "", "Click the locked objects to unlock, then Enter", _act_invoke("dessin.unlock_selected")),
@@ -175,12 +177,16 @@ CMD_ACTIONS = (
     ("MultiPipe", "multipipe mp", "", "SubD pipes along the selected curves, joined at the nodes", _act_op("dessin.subd", action='MULTIPIPE')),
     ("Group", "g group", "", "Group the selected objects", _act_op("dessin.group")),
     ("Ungroup", "ug ungroup", "", "Ungroup the selected group", _act_op("dessin.ungroup")),
-    ("Block Edit", "blockedit be refedit", "", "Edit the selected block in place (every copy follows); Close Block Edit to finish", _act_op("dessin.block_edit")),
-    ("Close Block Edit", "blockeditclose bclose refclose", "", "Finish Block Edit and save the changes into the block", _act_op("dessin.block_edit_close")),
+    ("Edit Group", "editgroup groupedit", "", "Open the selected group in this view (the rest is hidden here)", _act_op("dessin.group_edit")),
+    ("Close Group", "closegroup groupclose", "", "Close the group open in this view", _act_op("dessin.group_close")),
+    ("Block Edit", "blockedit bedit be refedit", "", "Edit the selected block in place (every copy follows); Close Block Edit to finish", _act_op("dessin.block_edit")),
+    ("Close Block Edit", "blockeditclose bclose bsave refclose", "", "Finish Block Edit and save the changes into the block", _act_op("dessin.block_edit_close")),
     ("Explode Block", "explodeblock xb", "", "Turn the selected block copies back into ordinary objects", _act_op("dessin.block_explode")),
     ("Hatch Base Point", "hatchbase", "", "Select hatches, then click the point their pattern starts from", _act_invoke("dessin.hatch_base")),
     ("Explode Hatch", "explodehatch", "", "Turn the selected hatches into curves (a solid hatch becomes a planar surface)", _act_op("dessin.hatch_explode")),
     ("Hatch Boundary", "hatchboundary", "", "Create curves on the boundary and the holes of the selected hatches", _act_op("dessin.hatch_boundary")),
+    ("Edit Hatch", "hatchedit edithatch he", "", "Change the pattern, scale and rotation of the selected hatches (same as a double-click on a hatch)", _act_invoke("dessin.hatch_edit")),
+    ("Import Hatch Patterns", "importpat hatchimport patimport", "", "Add the hatch patterns of a .pat file (AutoCAD, Rhino, Revit) to the list of patterns", _act_invoke("dessin.hatch_import")),
     ("Match Hatch", "matchhatch", "", "Give the selected hatches the pattern, scale and rotation of the active one (clicked last)", _act_op("dessin.hatch_match")),
     ("4 Views", "4views fourviews quadview 4view", "", "Split the 3D view into four views like Rhino (Top, Perspective, Front, Right), each with its own display; again: back to one view", _act_op("dessin.quad_view")),
     ("Maximize View", "maximizeview maxview singleview", "", "4 views: keep only the view under the mouse (same as a double-click on its title)", _act_op("dessin.quad_view", mode='SINGLE', here=True)),
@@ -665,6 +671,22 @@ def cmd_close():
     return st
 
 
+def view_is_2d(area):
+    """Vue orthogonale (Top, Front, Right... ou perspective coupée) : une vue « 2D » comme dans AutoCAD."""
+    try:
+        rv3d = area.spaces.active.region_3d
+        return rv3d is not None and not rv3d.is_perspective
+    except (AttributeError, ReferenceError):
+        return False
+
+
+def quick_type_on(area):
+    """Quick Type actif dans cette vue : réglé à on, ou « seulement dans les vues 2D » et la vue est orthogonale."""
+    if pref("cmd_type"):
+        return True
+    return bool(pref("cmd_type_ortho")) and area is not None and view_is_2d(area)
+
+
 class DESSIN_OT_command_line(bpy.types.Operator):
     bl_idname = "dessin.command_line"
     bl_label = "Command Line"
@@ -679,6 +701,8 @@ class DESSIN_OT_command_line(bpy.types.Operator):
         return context.area is not None and context.area.type == 'VIEW_3D'
 
     def invoke(self, context, event):
+        if self.char and not quick_type_on(context.area):
+            return {'CANCELLED', 'PASS_THROUGH'}  # vue en perspective : la lettre garde son raccourci Blender
         self.ptr = context.area.as_pointer()
         quad_focus_set(context.area)               # 4 vues : la vue où l'on tape une commande devient la vue active
         _SUGG_MEMO.clear()
@@ -1041,7 +1065,7 @@ def _cmd_bold(on):
         pass
 
 
-# ---- Bulle de saisie d'une valeur (Gumball : clic sur une poignée, puis on tape le nombre), dans le style des barres ----
+# ---- Bulle de saisie d'une valeur (Gizmo : clic sur une poignée, puis on tape le nombre), dans le style des barres ----
 _VBUBBLE = {"handle": None, "area": None, "data": None, "t0": 0.0, "areaobj": None}
 VBUBBLE_SCALE = 0.85     # taille de la bulle par rapport aux barres du bas
 VBUBBLE_POP = 0.14       # durée de la petite animation d'apparition (s), comme la bulle de Rhino
@@ -1397,6 +1421,62 @@ def bars_sync(area, owner, frame):
         pass
 
 
+_WIRE = {}       # pointeur de la vue -> (était en perspective, ombrage d'avant le passage en 2D)
+
+
+def ortho_wire_apply(area, is_2d):
+    """Préférence « Wireframe in 2D views » : vue orthogonale -> Wireframe ; retour en perspective -> ombrage d'avant."""
+    ptr = area.as_pointer()
+    sh = area.spaces.active.shading
+    rec = _WIRE.get(ptr)
+    if rec is None:
+        _WIRE[ptr] = (not is_2d, None)
+        return False
+    was_persp, before = rec
+    if is_2d and was_persp:
+        _WIRE[ptr] = (False, sh.type)
+        if sh.type != 'WIREFRAME':
+            sh.type = 'WIREFRAME'
+            return True
+    elif not is_2d and not was_persp:
+        _WIRE[ptr] = (True, None)
+        if before and before != 'WIREFRAME' and sh.type == 'WIREFRAME':
+            sh.type = before
+            return True
+    return False
+
+
+def ortho_wire_watch(area):
+    """Appelé au dessin de chaque vue : le changement d'ombrage est fait juste après (pas pendant le dessin)."""
+    if not pref("ortho_wire"):
+        _WIRE.clear()
+        return
+    try:
+        is_2d = view_is_2d(area)
+        rec = _WIRE.get(area.as_pointer())
+    except (AttributeError, ReferenceError):
+        return
+    if rec is not None and rec[0] == (not is_2d):
+        return                                  # rien n'a changé
+    win = bpy.context.window
+    scr = bpy.context.screen
+    ptr = area.as_pointer()
+
+    def later():
+        try:
+            for a in scr.areas:
+                if a.as_pointer() == ptr and a.type == 'VIEW_3D':
+                    if ortho_wire_apply(a, view_is_2d(a)):
+                        a.tag_redraw()
+        except (AttributeError, ReferenceError, RuntimeError):
+            pass
+        return None
+    if rec is None:
+        later()                                 # première fois : on note seulement l'état (rien n'est changé)
+    else:
+        bpy.app.timers.register(later, first_interval=0.0)
+
+
 def bars_draw(draw):
     """Dessine une barre du bas dans son cadre. Une vue 3D ordinaire : sa région. Les 4 vues (séparées, ou le Toggle Quad
     View de Blender) : l'ensemble des quatre — chaque vue dessine alors la même barre, décalée, et n'en montre que sa
@@ -1405,9 +1485,13 @@ def bars_draw(draw):
     area, region = context.area, context.region
     if area is None or region is None:
         return
+    quad_guard_soon(context.screen, context.window)    # (4 vues fusionnées ou recoupées à la main : elles sont refaites)
+    ortho_wire_watch(area)
     q = quad_bars(area)
-    if q is None and quad_is_column(area):       # colonne de la barre d'outils des 4 vues : aucune barre
-        quad_column_watch(area, context.window)  # (la barre d'outils a changé de largeur : la colonne la suit)
+    kind = quad_extra_kind(area) if q is None else None
+    if kind is not None:                        # colonne de la barre d'outils, bande de l'en-tête, colonne N : aucune barre
+        if kind == 'COLUMN':
+            quad_column_watch(area, context.window)  # (la barre d'outils a changé de largeur : la colonne la suit)
         return
     if q is not None:                           # 4 vues séparées : les barres de la vue active
         owner, fr, ptrs = q
@@ -1560,7 +1644,7 @@ def cmd_bar_draw(context, area, region):
         cls = cmd_tool_class(tid)
         name = cmd_clean_label(cls.bl_label) if cls is not None else tid
         hint = (getattr(cls, "dessin_hint", "") or (cls.bl_description if cls is not None else ""))
-        note = cmd_notice_text()
+        note = cmd_notice_text() if cmd_notice_style() == 'warn' else None     # (pas le résultat d'une mesure précédente)
         chips_t = [("c", "Esc", "leave", 'key')]
         if tid == "dessin.trim_tool":
             try:
@@ -1577,7 +1661,7 @@ def cmd_bar_draw(context, area, region):
         else:
             lines.append(([("t", name, "acc", True), ("t", hint, "dim")], chips_t))
     elif cmd_notice_text():
-        lines.append(([("t", "›", "dim"), ("t", cmd_notice_text(), "warn", True)], []))
+        lines.append(([("t", "›", "dim"), ("t", cmd_notice_text(), cmd_notice_style(), True)], []))
     else:
         last = cmd_by_key(_CMD["last"]) if _CMD["last"] else None
         key = pref("cmd_key")
@@ -1755,7 +1839,7 @@ MODE_BUTTONS = (("cmd_type", "Quick Type", "Quick Type on / off (Shift+Q): typin
                 ("polar", "Polar", "Polar tracking (F10): the cursor snaps to angle steps (arrow: choose the step)"),
                 ("osnap_enable", "OSnap", "Object snaps on / off (F3): End, Mid, Cen... (arrow: choose the snaps; Shift + click on one: one shot)"),
                 ("smart_tracks", "SmartTrack", "Smart tracks on / off: alignment guides from points you hover"),
-                ("gumball", "Gumball", "Gumball on / off: move / rotate / scale handles on the selection (arrow: Gumball menu, orientation Global / Local / View, Snappy Dragging = object snaps while dragging)"),
+                ("gumball", "Gizmo", "Gizmo on / off: move / rotate / scale handles on the selection (arrow: Gizmo menu, orientation Global / Local / View, Snappy Dragging = object snaps while dragging)"),
                 ("auto_cplane", "Auto CPlane", "Auto CPlane on / off: the construction plane follows the planar object or face you select (arrow: Sticky option, back to the ground plane)"),)
 MODE_ARROWS = {"grid_snap": "gridsnapmenu", "polar": "polarmenu", "osnap_enable": "osnapmenu", "gumball": "gumballmenu",
                "auto_cplane": "autocplanemenu"}
@@ -1793,7 +1877,7 @@ def mode_arrow_tip(context, key):
     except (AttributeError, ReferenceError, KeyError):
         pass
     return {"osnap_enable": "Object snaps: choose which ones are on  ·  Shift + click: one shot, only the snaps clicked this way act for the next point",
-            "gumball": "Gumball menu: relocate, reset, orientation (Global, Local, Normal, View...), Snappy Dragging (object snaps while dragging) or Smooth Dragging, settings",
+            "gumball": "Gizmo menu: relocate, reset, orientation (Global, Local, Normal, View...), Snappy Dragging (object snaps while dragging) or Smooth Dragging, settings",
             "auto_cplane": "Auto CPlane menu: Sticky option, back to the ground plane"}.get(key, "")
 
 
@@ -1820,6 +1904,7 @@ def osnap_hold_event(context, event):
         shift = event.value == 'PRESS'
     else:
         shift = bool(event.shift)
+    shift_held_set(shift)           # la puce Quick Type s'éteint tant que Maj est tenu (Maj + lettre : Blender)
     if not shift:
         return oneshot_hold_set(False) if oneshot_hold() else False
     return oneshot_hold_set(mouse_over_statusbar(context, event) and point_requested(context))
@@ -2036,7 +2121,8 @@ def mode_state(context, key):
         if key == "smart_tracks":
             return bool(pref("smart_tracks"))
         if key == "cmd_type":
-            return bool(pref("cmd_type"))
+            # allumé aussi en vue 2D avec « Quick Type in 2D views » ; éteint tant que Maj est tenu (Maj + lettre : Blender)
+            return quick_type_on(context.area) and not shift_held()
         return bool(getattr(context.scene.dessin, key))
     except (AttributeError, ReferenceError):
         return False
@@ -2069,7 +2155,11 @@ def mode_click(context, key):
             pass
     elif key == "cmd_type":       # même réglage que « Quick Type » des préférences (son update recrée les raccourcis)
         try:
-            context.preferences.addons[__package__].preferences.cmd_type = not pref("cmd_type")
+            prefs = context.preferences.addons[__package__].preferences
+            if not pref("cmd_type") and quick_type_on(getattr(context, "area", None)):
+                prefs.cmd_type_ortho = False    # allumé par « Quick Type in 2D views » : le bouton l'éteint vraiment
+            else:
+                prefs.cmd_type = not pref("cmd_type")
         except (KeyError, AttributeError, ReferenceError):
             pass
     else:
@@ -2252,7 +2342,7 @@ def modes_total_w(context, ptr, sc):
 
 
 def modes_visible(context, ptr):
-    """La pastille des modes est toujours là : tous les boutons avec un outil de dessin, seulement Gumball sinon."""
+    """La pastille des modes est toujours là : tous les boutons avec un outil de dessin, seulement Gizmo sinon."""
     return True
 
 
@@ -2620,18 +2710,113 @@ def register_cmd_keymap():
             _CMD_KEYMAPS.append((kmf, kmi_f))
         except (TypeError, ValueError, RuntimeError):
             pass
-    if pref("cmd_type"):
-        # saisie directe : une lettre ouvre la ligne de commande avec cette lettre (comme dans Rhino / AutoCAD)
+    if pref("cmd_type") or pref("cmd_type_ortho"):
+        # saisie directe (avec « vues 2D seulement », la lettre est rendue à Blender en perspective) : une lettre ouvre la ligne de commande avec cette lettre (comme dans Rhino / AutoCAD)
         for name, space_type in MOUSE_KEYMAPS:
             km = kc.keymaps.new(name=name, space_type=space_type)
             for ch in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
                 kmi = km.keymap_items.new(DESSIN_OT_command_line.bl_idname, ch, 'PRESS')
                 kmi.properties.char = ch.lower()
                 _CMD_KEYMAPS.append((km, kmi))
+                if ch == QUICK_TYPE_KEY:
+                    continue        # Maj + Q reste la bascule de Quick Type (pas le Q de Blender, Quick Favorites)
+                kmi = km.keymap_items.new(DESSIN_OT_blender_key.bl_idname, ch, 'PRESS', shift=True)   # Maj : Blender
+                kmi.properties.char = ch.lower()
+                _CMD_KEYMAPS.append((km, kmi))
     try:
         wm.keyconfigs.update()
     except (AttributeError, RuntimeError):
         pass
+
+
+QUICK_TYPE_KEY = 'Q'      # Maj + Q : allume / éteint Quick Type ; seule lettre que Maj ne donne pas à Blender
+
+
+# Maj + lettre avec Quick Type allumé (#18) : la lettre seule ouvre la ligne de commande de Wanderer, mais on veut parfois le
+# raccourci de Blender (V : type de poignée sur une courbe...). Si Blender a un raccourci Maj + lettre à cet endroit
+# (Maj + A, Maj + D...), c'est lui qui part ; sinon Maj + lettre lance le raccourci de la lettre seule de Blender.
+MODE_KEYMAPS = {
+    'OBJECT': ("Object Mode", "Object Non-modal"), 'EDIT_MESH': ("Mesh",), 'EDIT_CURVE': ("Curve",),
+    'EDIT_CURVES': ("Curves",), 'EDIT_SURFACE': ("Curve",), 'EDIT_TEXT': ("Font",), 'EDIT_ARMATURE': ("Armature",),
+    'EDIT_METABALL': ("Metaball",), 'EDIT_LATTICE': ("Lattice",), 'POSE': ("Pose",), 'SCULPT': ("Sculpt",),
+    'PAINT_VERTEX': ("Vertex Paint",), 'PAINT_WEIGHT': ("Weight Paint",), 'PAINT_TEXTURE': ("Image Paint",),
+    'PARTICLE': ("Particle",), 'EDIT_GREASE_PENCIL': ("Grease Pencil Edit Mode",),
+}
+GENERIC_KEYMAPS = ("3D View", "3D View Generic", "Frames", "Screen", "Window")
+
+
+def blender_key_item(kc, mode, letter, shift):
+    """Raccourci de Blender (hors Wanderer) pour la touche `letter` (Maj ou non) dans ce mode, ou None."""
+    names = MODE_KEYMAPS.get(mode, ()) + GENERIC_KEYMAPS
+    for name in names:
+        km = kc.keymaps.get(name) if kc is not None else None
+        if km is None:
+            continue
+        for it in km.keymap_items:
+            try:
+                if (not it.active or it.type != letter or it.value not in {'PRESS', 'CLICK'} or it.idname.startswith("dessin.")
+                        or bool(it.shift) != shift or it.ctrl or it.alt or it.oskey or it.any or it.key_modifier != 'NONE'):
+                    continue
+            except AttributeError:
+                continue
+            return it
+    return None
+
+
+def run_keymap_item(it):
+    """Lance l'opérateur d'un raccourci de Blender avec ses réglages. True s'il a pu être lancé."""
+    try:
+        mod, fn = it.idname.split(".", 1)
+        op = getattr(getattr(bpy.ops, mod), fn)
+    except (ValueError, AttributeError):
+        return False
+    props = {}
+    p = it.properties
+    if p is not None:
+        for rp in p.bl_rna.properties:
+            k = rp.identifier
+            if k == "rna_type" or rp.is_readonly:
+                continue
+            try:
+                if p.is_property_set(k):
+                    v = getattr(p, k)
+                    props[k] = v[:] if hasattr(v, "__len__") and not isinstance(v, str) else v
+            except (AttributeError, TypeError):
+                continue
+    try:
+        if not op.poll():
+            return False
+        op('INVOKE_DEFAULT', **props)
+        return True
+    except (RuntimeError, TypeError):
+        return False
+
+
+class DESSIN_OT_blender_key(bpy.types.Operator):
+    """Quick Type allumé : Maj + lettre donne la main aux raccourcis de Blender."""
+    bl_idname = "dessin.blender_key"
+    bl_label = "Blender shortcut (Shift + letter with Quick Type)"
+    bl_description = ("With Quick Type on, Shift + a letter runs Blender's shortcut: Blender's own Shift + letter if it "
+                      "has one here (Shift + A, Shift + D...), otherwise the letter's shortcut (V: handle type on a curve...)")
+    bl_options = {'INTERNAL'}
+
+    char: bpy.props.StringProperty(default="", options={'SKIP_SAVE', 'HIDDEN'})
+
+    @classmethod
+    def poll(cls, context):
+        return context.area is not None and context.area.type == 'VIEW_3D'
+
+    def invoke(self, context, event):
+        letter = (self.char or "").upper()
+        if not letter or not quick_type_on(context.area):
+            return {'CANCELLED', 'PASS_THROUGH'}
+        kc = context.window_manager.keyconfigs.user
+        if blender_key_item(kc, context.mode, letter, True) is not None:
+            return {'CANCELLED', 'PASS_THROUGH'}       # Blender a son Maj + lettre ici : il le garde
+        it = blender_key_item(kc, context.mode, letter, False)
+        if it is not None and run_keymap_item(it):
+            return {'FINISHED'}
+        return {'CANCELLED', 'PASS_THROUGH'}
 
 
 class DESSIN_OT_quick_type_toggle(bpy.types.Operator):
@@ -2647,7 +2832,7 @@ class DESSIN_OT_quick_type_toggle(bpy.types.Operator):
 
     def execute(self, context):
         mode_click(context, "cmd_type")
-        on = bool(pref("cmd_type"))
+        on = quick_type_on(context.area)
         msg = "Quick Type " + ("on" if on else "off")
         self.report({'INFO'}, msg)
         return {'FINISHED'}
@@ -2662,12 +2847,52 @@ def register_mouse_track():
     if kc is None:
         return
     km = kc.keymaps.new(name="3D View", space_type='VIEW_3D')
-    kmi = km.keymap_items.new(DESSIN_OT_quick_type_toggle.bl_idname, 'Q', 'PRESS', shift=True)
+    kmi = km.keymap_items.new(DESSIN_OT_quick_type_toggle.bl_idname, QUICK_TYPE_KEY, 'PRESS', shift=True)
     _TRACK_KEYMAPS.append((km, kmi))
     kmi = km.keymap_items.new(DESSIN_OT_mouse_track.bl_idname, 'MOUSEMOVE', 'ANY', any=True)
     _TRACK_KEYMAPS.append((km, kmi))
     kmi = km.keymap_items.new(DESSIN_OT_esc_select.bl_idname, 'ESC', 'PRESS')
     _TRACK_KEYMAPS.append((km, kmi))
+    register_bar_click()
+
+
+# Outils natifs de Blender (en mode Édition surtout : Knife, Loop Cut, Extrude, Select Box...) : leur clic gauche passait
+# avant la barre du bas, dont les boutons (Ortho, Grid Snap, OSnap, Gizmo...) ne répondaient plus. Le clic sur la barre
+# est posé dans le keymap de chaque outil (les entrées d'un add-on passent avant celles de Blender), et dans les keymaps
+# des modes ; partout ailleurs que sur la barre, le clic continue vers l'outil.
+BAR_CLICK_MODE_KEYMAPS = ("Object Mode", "Mesh", "Curve", "Curves", "Armature", "Lattice", "Metaball", "Font", "Pose",
+                          "Grease Pencil", "Point Cloud")
+
+
+def bar_click_keymap_names(default_kc=None):
+    """Keymaps (nom, espace, région) où poser le clic sur la barre : ceux des outils de la vue 3D et ceux des modes."""
+    out = []
+    try:
+        for km in (default_kc or bpy.context.window_manager.keyconfigs.default).keymaps:
+            if km.name.startswith("3D View Tool:") or km.name in BAR_CLICK_MODE_KEYMAPS:
+                out.append((km.name, km.space_type, km.region_type, km.name.startswith("3D View Tool:")))
+    except (AttributeError, ReferenceError):
+        pass
+    have = {n for n, *_r in out}
+    for n in BAR_CLICK_MODE_KEYMAPS:         # (configuration vide, en arrière-plan : au moins les modes)
+        if n not in have:
+            out.append((n, 'EMPTY', 'WINDOW', False))
+    return out
+
+
+def register_bar_click(default_kc=None):
+    wm = bpy.context.window_manager
+    kc = wm.keyconfigs.addon if wm is not None else None
+    if kc is None:
+        return
+    from .join_explode import DESSIN_OT_bar_click
+    for name, space, region, tool in bar_click_keymap_names(default_kc):
+        try:
+            km = kc.keymaps.new(name=name, space_type=space, region_type=region, tool=tool)
+            kmi = km.keymap_items.new(DESSIN_OT_bar_click.bl_idname, 'LEFTMOUSE', 'PRESS', any=True)
+            _TRACK_KEYMAPS.append((km, kmi))
+        except (TypeError, ValueError, RuntimeError):
+            continue
 
 
 def unregister_mouse_track():

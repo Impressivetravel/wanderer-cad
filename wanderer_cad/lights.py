@@ -336,7 +336,7 @@ class DESSIN_OT_camera_target(LightBase):
             context.scene.camera = obj
 
 
-# outils de transformation de Blender : leur gizmo est remplacé par le Gumball (comme le Gumball de Rhino)
+# outils de transformation de Blender : leur gizmo est remplacé par le Gizmo (comme le Gizmo de Rhino)
 GUMBALL_TRANSFORM_TOOLS = ("builtin.move", "builtin.rotate", "builtin.scale", "builtin.scale_cage", "builtin.transform")
 _GUMBALL_TOOLS = ("builtin.select", "builtin.select_box", "builtin.select_circle", "builtin.select_lasso",
                   "dessin.selection_boite_tool", "dessin.selection_lasso_tool",
@@ -357,37 +357,99 @@ def _axis_matrix(origin, axis, scale):
 
 
 _GB_FLAT = {"t": 0.0, "sig": None, "res": frozenset()}
+_GB_REACH = {"t": 0.0, "sig": None, "res": None, "n": 0}
+
+
+def _gumball_points(context, cap=None):
+    """Points (monde, tableau n x 3) qui donnent l'encombrement de la sélection : sommets ou points sélectionnés en mode
+    édition, coins des boîtes englobantes des objets sinon. None si rien. cap : nombre de points gardés au plus."""
+    if context.mode in {'EDIT_MESH', 'EDIT_CURVE'}:
+        sel = edit_selection(context) if context.mode == 'EDIT_MESH' else curve_edit_selection(context)
+        if not sel:
+            return None
+        pts = np.vstack([w for _o, _i, w in sel])
+        if cap and len(pts) > cap:
+            pts = pts[::max(1, len(pts) // cap)]
+        return pts
+    sel = expand_groups(context, context.selected_objects)
+    lst = []
+    for o in sel:
+        if o.type == 'EMPTY' or not o.bound_box:
+            lst.append(tuple(o.matrix_world.translation))
+        else:
+            mw = o.matrix_world
+            lst += [tuple(mw @ Vector(c)) for c in o.bound_box]
+    if not lst:
+        return None
+    return np.array(lst, dtype=float)
+
+
+def _reach_redraw():
+    _GB_REACH["timer"] = False
+    try:
+        for win in bpy.context.window_manager.windows:
+            for area in win.screen.areas:
+                if area.type == 'VIEW_3D':
+                    area.tag_redraw()
+    except (AttributeError, RuntimeError, ReferenceError):
+        pass
+    return None
+
+
+def gumball_reach(context, pivot, axes, live=False):
+    """Poignées d'échelle comme dans Rhino : distance (monde) du centre du Gizmo au bord de la sélection, pour chaque axe,
+    du côté des poignées d'échelle (à l'opposé des flèches). Si le Gizmo a été déplacé (Relocate) au bord ou en dehors de
+    la sélection, c'est la distance au bord opposé : la poignée garde la taille de l'objet. None si elle n'est pas connue.
+    live : une transformation est en cours, la mesure est refaite à chaque dessin (sélections courantes)."""
+    sig = None
+    try:
+        now = time.monotonic()
+        sig = (context.mode, tuple(round(c, 4) for a in axes for c in a), tuple(round(c, 5) for c in pivot))
+        if _GB_REACH["n"] <= 400 and context.mode == 'OBJECT':
+            ttl = 0.0            # sélection courante : mesurée à chaque dessin, la poignée suit l'objet sans retard
+        else:
+            ttl = 0.08 if live else 0.25
+        age = now - _GB_REACH["t"]
+        if sig == _GB_REACH["sig"] and age < ttl:
+            if not _GB_REACH.get("timer"):      # grosse sélection : mesure gardée un instant, puis un dessin la rafraîchit
+                _GB_REACH["timer"] = True
+                try:
+                    bpy.app.timers.register(_reach_redraw, first_interval=max(0.05, ttl - age + 0.01))
+                except (AttributeError, RuntimeError, ValueError):
+                    _GB_REACH["timer"] = False
+            return _GB_REACH["res"]
+        pts = _gumball_points(context)
+        if pts is None:
+            res = None
+        else:
+            _GB_REACH["n"] = len(pts)
+            P = pts - np.array((pivot.x, pivot.y, pivot.z))
+            out = []
+            for a in axes:
+                pr = P @ np.array((a.x, a.y, a.z))
+                lo, hi = float(pr.min()), float(pr.max())
+                if -lo > 1e-9 + 1e-6 * (hi - lo):
+                    out.append(-lo)             # la sélection dépasse du côté de la poignée : jusqu'à ce bord
+                else:
+                    out.append(max(hi, 0.0))    # Gizmo posé au bord ou en dehors (Relocate) : la taille jusqu'au bord opposé
+            res = tuple(out)
+    except (AttributeError, RuntimeError, ReferenceError, TypeError, ValueError):
+        res = None
+    _GB_REACH.update(t=time.monotonic(), sig=sig, res=res)
+    return res
 
 
 def gumball_flat_axes(context, axes):
-    """Indices des axes du Gumball le long desquels la sélection n'a aucune épaisseur (ex. un Plane en Z) : pas d'échelle possible."""
+    """Indices des axes du Gizmo le long desquels la sélection n'a aucune épaisseur (ex. un Plane en Z) : pas d'échelle possible."""
     sig = None
     try:
         now = time.monotonic()
         sig = (context.mode, tuple(round(c, 4) for a in axes for c in a))
         if sig == _GB_FLAT["sig"] and now - _GB_FLAT["t"] < 0.25:
             return _GB_FLAT["res"]
-        pts = []
-        if context.mode in {'EDIT_MESH', 'EDIT_CURVE'}:
-            sel = edit_selection(context) if context.mode == 'EDIT_MESH' else curve_edit_selection(context)
-            if not sel:
-                return frozenset()
-            allp = np.vstack([w for _o, _i, w in sel])
-            if len(allp) > 20000:
-                allp = allp[::max(1, len(allp) // 20000)]
-            pts = allp
-        else:
-            sel = expand_groups(context, context.selected_objects)
-            lst = []
-            for o in sel:
-                if o.type == 'EMPTY' or not o.bound_box:
-                    lst.append(tuple(o.matrix_world.translation))
-                else:
-                    mw = o.matrix_world
-                    lst += [tuple(mw @ Vector(c)) for c in o.bound_box]
-            if not lst:
-                return frozenset()
-            pts = np.array(lst, dtype=float)
+        pts = _gumball_points(context, 20000)
+        if pts is None:
+            return frozenset()
         ext = pts.max(axis=0) - pts.min(axis=0)
         diag = float(np.linalg.norm(ext)) or 1.0
         flat = set()

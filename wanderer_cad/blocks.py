@@ -5,6 +5,7 @@ import bpy
 import numpy as np
 from mathutils import Matrix, Vector
 
+from .linetypes import lt_effective, lt_eligible
 from .core import plane_axes
 from .drawing import px_scale, region_rv3d
 from .base import DessinBase
@@ -71,6 +72,13 @@ def make_block(context, objs, base, name=None):
     defcol.instance_offset = Vector(base)
     top = [o for o in objs if o.parent is None or o.parent not in objs]
     for o in objs:
+        try:        # tirets venus du calque : gardés dans le bloc (l'objet quitte son calque pour la définition du bloc)
+            if lt_eligible(o) and not o.get("wd_lt"):
+                k_lt = lt_effective(o)
+                if k_lt != 'CONTINUOUS':
+                    o["wd_lt"] = k_lt
+        except (AttributeError, ReferenceError, RuntimeError):
+            pass
         for c in list(o.users_collection):
             c.objects.unlink(o)
         defcol.objects.link(o)

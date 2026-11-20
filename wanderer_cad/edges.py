@@ -7,7 +7,8 @@ import numpy as np
 from bpy_extras.view3d_utils import region_2d_to_origin_3d
 from mathutils import Vector
 
-from .core import TAU, _link_object, build_bezier_arc, idle_tool, plane_axes
+from .core import TAU, _link_object, build_bezier_arc, has_lt, idle_tool, plane_axes
+from .linetypes import base_wire_world
 from .drawing import find_window_region, px_scale, region_rv3d
 from .base import DessinBase
 
@@ -607,6 +608,10 @@ OFFSET_STATE = {"dist": 0.05}
 
 def curve_edge_geometry(obj):
     """(sommets monde, arêtes) de la courbe évaluée, ou None."""
+    if has_lt(obj):
+        bw = base_wire_world(obj)           # courbe à tirets : le trait entier
+        if bw is not None:
+            return bw
     try:
         dg = bpy.context.evaluated_depsgraph_get()
         ev = obj.evaluated_get(dg)
@@ -809,6 +814,156 @@ def offset_collapsed(P, closed, Q, d):
     return bool(best.min() < d * (1.0 - 2e-3) - 1e-9)
 
 
+def _plane_basis(n):
+    e1 = n.orthogonal().normalized()
+    return e1, n.cross(e1).normalized()
+
+
+def _signed_area2(X):
+    x, y = X[:, 0], X[:, 1]
+    return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
+
+
+def _self_crossings(X, closed):
+    """Points où la chaîne X (2D) se touche elle-même : croisements francs, mais aussi sommets posés sur un autre segment
+    et segments superposés (cas courant des plans à angles droits : un couloir dont les deux murs décalés se croisent
+    exactement). Renvoie (ids des sommets touchés {indice: id}, {segment: [(t, id, point)]} à l'intérieur des segments) ;
+    un même point porte un même id partout."""
+    m = len(X)
+    cnt = m if closed else m - 1
+    vid, seg = {}, {}
+    if cnt < 3:
+        return vid, seg
+    A = X[:cnt]
+    B = X[(np.arange(cnt) + 1) % m]
+    D = B - A
+    span = float(np.ptp(X, axis=0).max()) if m else 1.0
+    tol = 1e-7 * max(span, 1e-9)
+    ids = {}
+
+    def pid(pt):
+        k = (int(round(pt[0] / tol)), int(round(pt[1] / tol)))
+        for dx in (-1, 0, 1):               # voisins de la grille : un même point calculé deux fois
+            for dy in (-1, 0, 1):
+                hit = ids.get((k[0] + dx, k[1] + dy))
+                if hit is not None:
+                    return hit
+        ids[k] = len(ids)
+        return ids[k]
+
+    def adjacent(i, j):
+        return abs(i - j) <= 1 or (closed and abs(i - j) == cnt - 1)
+
+    L2 = np.einsum('ij,ij->i', D, D)
+    for i0 in range(0, cnt, 256):
+        i1 = min(cnt, i0 + 256)
+        Ai, Di = A[i0:i1, None, :], D[i0:i1, None, :]
+        ii = np.arange(i0, i1)[:, None]
+        jj = np.arange(cnt)[None, :]
+        near = (np.abs(ii - jj) <= 1) | (closed & (np.abs(ii - jj) == cnt - 1))
+        # croisements francs
+        den = Di[..., 0] * D[None, :, 1] - Di[..., 1] * D[None, :, 0]
+        W = A[None, :, :] - Ai
+        with np.errstate(divide='ignore', invalid='ignore'):
+            t = (W[..., 0] * D[None, :, 1] - W[..., 1] * D[None, :, 0]) / den
+            u = (W[..., 0] * Di[..., 1] - W[..., 1] * Di[..., 0]) / den
+        eps = 1e-9
+        ok = (np.abs(den) > 1e-18) & (t > eps) & (t < 1 - eps) & (u > eps) & (u < 1 - eps) & ~near & (jj > ii)
+        for a, b in zip(*np.nonzero(ok)):
+            i, j = int(a) + i0, int(b)
+            pt = A[i] + D[i] * t[a, b]
+            k = pid(pt)
+            seg.setdefault(i, []).append((float(t[a, b]), k, pt))
+            seg.setdefault(j, []).append((float(u[a, b]), k, pt))
+    # sommets posés sur un autre segment (ou sur un autre sommet) : contacts et superpositions
+    for i in range(cnt):
+        if L2[i] < 1e-24:
+            continue
+        w = X - A[i]
+        tt = (w @ D[i]) / L2[i]
+        cr = w[:, 0] * D[i, 1] - w[:, 1] * D[i, 0]
+        dist = np.abs(cr) / math.sqrt(L2[i])
+        on = (dist < tol * 10) & (tt > -1e-9) & (tt < 1 + 1e-9)
+        for k in np.nonzero(on)[0]:
+            k = int(k)
+            if k in (i, (i + 1) % m):
+                continue
+            # le sommet k appartient aux segments k-1 et k : pas de contact avec un segment voisin
+            if adjacent(i, k) or adjacent(i, (k - 1) % cnt if closed or k > 0 else i):
+                continue
+            pt = X[k]
+            idk = pid(pt)
+            vid[k] = idk
+            tk = float(tt[k])
+            if eps < tk < 1 - eps:
+                seg.setdefault(i, []).append((tk, idk, pt.copy()))
+            elif tk <= eps:
+                vid[i] = idk
+            else:
+                vid[(i + 1) % m] = idk
+    return vid, seg
+
+
+def offset_trim(P, closed, n, Q, d):
+    """Décalage qui se recoupe (distance trop grande pour une partie de la forme : pointe d'un croissant, passage étroit) :
+    on coupe Q à ses croisements et on garde les boucles valables, comme un vrai décalage de contour : elles tournent dans
+    le même sens que la forme et restent partout à d de P. Une forme peut ainsi rétrécir, perdre une pointe ou se
+    séparer en plusieurs îlots au lieu d'être refusée. Renvoie [(points, fermée)] ([] : tout s'effondre)."""
+    if len(Q) < 3 or len(Q) > 6000:         # (très longue chaîne : on garde le refus, plutôt que de figer la souris)
+        return []
+    o = Vector(P[0])
+    e1, e2 = _plane_basis(n)
+    X = np.array([((q - o).dot(e1), (q - o).dot(e2)) for q in Q], dtype=np.float64)
+    vid, hits = _self_crossings(X, closed)
+    m = len(X)
+    cnt = m if closed else m - 1
+    seq = []
+    for i in range(m):
+        seq.append((X[i], vid.get(i)))
+        if i < cnt:
+            for _t, xid, pt in sorted(hits.get(i, ()), key=lambda h: h[0]):
+                if seq and seq[-1][1] == xid:
+                    continue                    # même point deux fois de suite
+                seq.append((pt, xid))
+    path, pos, loops = [], {}, []
+    for pt, xid in seq:
+        if xid is not None and xid in pos:
+            k = pos[xid]
+            loops.append([q for q, _x in path[k:]])
+            for _q, x2 in path[k + 1:]:
+                if x2 is not None:
+                    pos.pop(x2, None)
+            path = path[:k + 1]
+        else:
+            if xid is not None:
+                pos[xid] = len(path)
+            path.append((pt, xid))
+    main = [q for q, _x in path]
+
+    def to3(pts):
+        return [o + e1 * float(q[0]) + e2 * float(q[1]) for q in pts]
+
+    out = []
+    if closed:
+        Pn = np.array([((Vector(p) - o).dot(e1), (Vector(p) - o).dot(e2)) for p in P], dtype=np.float64)
+        sgn = 1.0 if _signed_area2(Pn) >= 0 else -1.0
+        tiny = 1e-6 * max(1e-12, abs(_signed_area2(Pn)))
+        for L in loops + [main]:
+            if len(L) < 3:
+                continue
+            a = _signed_area2(np.array(L)) * sgn
+            if a <= tiny:
+                continue                # boucle retournée : la partie effondrée
+            L3 = to3(L)
+            if not offset_collapsed(P, True, L3, d):
+                out.append((L3, True))
+    else:
+        L3 = to3(main)
+        if len(L3) >= 2 and not offset_collapsed(P, False, L3, d):
+            out.append((L3, False))
+    return out
+
+
 def nearest_on_chain(P, closed, q):
     """(indice du segment, point le plus proche) de q sur la chaîne."""
     m = len(P)
@@ -1006,8 +1161,13 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
             if d < 1e-9:
                 continue
             Q = offset_polyline(P, closed, n, side * d)
-            if offset_collapsed(P, closed, Q, d):      # distance trop grande pour la forme : pas de décalage (comme « Cannot offset »)
-                self._collapsed = True
+            if offset_collapsed(P, closed, Q, d):
+                # distance trop grande pour une partie de la forme : on coupe ce qui s'effondre et on garde le reste
+                parts = offset_trim(P, closed, n, Q, d)
+                if not parts:
+                    self._collapsed = True      # tout s'effondre : pas de décalage
+                for Qi, ci in parts:
+                    res.append((name, Qi, ci, d, P))
                 continue
             res.append((name, Q, closed, d, P))
         return res

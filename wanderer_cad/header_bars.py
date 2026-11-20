@@ -51,8 +51,70 @@ class _HBSelf:
         return getattr(self._real, name)
 
 
+class _Sink:
+    """Avale tout ce qu'on lui demande de dessiner (la partie droite de l'en-tête dans la bande des 4 vues)."""
+    __slots__ = ()
+
+    def __getattr__(self, name):
+        return _sink
+
+    def __setattr__(self, name, value):
+        pass
+
+    def __call__(self, *args, **kw):
+        return _SINK
+
+
+_SINK = _Sink()
+
+
+def _sink(*args, **kw):
+    return _SINK
+
+
+class _StripLayout:
+    """En-tête dans la bande des 4 vues : tout passe jusqu'au second séparateur extensible de Blender (modes, menus,
+    orientation, accrochage) ; ce qui suit (affichage Solid / Wireframe, superpositions, poignées) n'est pas dessiné :
+    ces boutons y commanderaient la bande elle-même."""
+    __slots__ = ("_l", "_n")
+
+    def __init__(self, layout):
+        object.__setattr__(self, "_l", layout)
+        object.__setattr__(self, "_n", 0)
+
+    def separator_spacer(self, *args, **kw):
+        object.__setattr__(self, "_n", self._n + 1)
+        if self._n <= 2:
+            return self._l.separator_spacer(*args, **kw)
+        return None
+
+    def __getattr__(self, name):
+        if self._n >= 2:
+            return _sink
+        return getattr(self._l, name)
+
+    def __setattr__(self, name, value):
+        if self._n < 2:
+            setattr(self._l, name, value)
+
+
+def _in_strip(context):
+    try:
+        from .quadview import quad_is_strip
+        return quad_is_strip(context.area)
+    except (ImportError, AttributeError, ReferenceError, RuntimeError):
+        return False
+
+
 def header_draw(self, context):
     orig = _HB["orig"]
+    if orig is not None and _in_strip(context):
+        try:
+            orig(_HBSelf(self, _StripLayout(self.layout)), context)
+        except Exception:
+            pass
+        draw_bars_toggle(self.layout, context)
+        return
     if _HB["fallback"] or orig is None:
         return orig(self, context) if orig is not None else None
     proxy = _HBLayout(self.layout, context)

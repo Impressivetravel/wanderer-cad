@@ -173,6 +173,36 @@ def mesh_object_from_arrays(context, name, V, F, origin, fix_normals):
     return obj
 
 
+# Extrusion de courbes (retour de kalpit3d) : surface propre et lisse dès sa création.
+EXTRUDE_DISSOLVE_DEG = 0.1     # Limited Dissolve : seulement l'aligné / le coplanaire ; à 1° des arcs doux s'aplatissaient déjà
+EXTRUDE_SMOOTH_DEG = 30.0      # Shade Auto Smooth de Blender : au-delà de 30° l'arête reste vive
+
+
+def smooth_and_clean(obj):
+    """Limited Dissolve à 0,1° (points alignés d'un contour, bouchons en triangles : de grandes faces propres), puis
+    lissage par angle (flancs courbes lisses, arêtes à plus de 30° vives), sans modificateur. True si fait."""
+    me = getattr(obj, "data", None)
+    if me is None or getattr(obj, "type", "") != 'MESH' or not me.polygons:
+        return False
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(me)
+        bmesh.ops.dissolve_limit(bm, angle_limit=math.radians(EXTRUDE_DISSOLVE_DEG), use_dissolve_boundaries=False,
+                                 verts=bm.verts[:], edges=bm.edges[:])
+        bm.to_mesh(me)
+    except (ValueError, RuntimeError):
+        return False
+    finally:
+        bm.free()
+    try:
+        me.shade_smooth()
+        me.set_sharp_from_angle(angle=math.radians(EXTRUDE_SMOOTH_DEG))
+    except (AttributeError, RuntimeError, TypeError):
+        pass
+    me.update()
+    return True
+
+
 def deselect_all_objects(context):
     """Désélectionne tout (sans trébucher sur un objet qui vient d'être supprimé)."""
     for ob in list(context.view_layer.objects):
@@ -1331,7 +1361,9 @@ class ExtrudeCrvLogic(DessinTransform):
                     continue
             else:
                 V, F = extrude_surface(paths, vec, cap)
-            made.append(mesh_object_from_arrays(context, "Extrusion", V, F, origin, True))
+            ob = mesh_object_from_arrays(context, "Extrusion", V, F, origin, True)
+            smooth_and_clean(ob)
+            made.append(ob)
         if not made:
             self.report({'WARNING'}, "Extrude works on curves, outlines and flat surfaces")
             self.committed = True

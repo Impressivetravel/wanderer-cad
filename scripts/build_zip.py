@@ -12,7 +12,7 @@ out = os.path.join(root, "dist", f"wanderer-{version}.zip")
 with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
     # le paquet : __init__.py, ses modules (un par famille d'outils) et le manifeste
     for name in sorted(os.listdir(src)):
-        if name.endswith(".py") or name == "blender_manifest.toml":
+        if name.endswith(".py") or name in ("blender_manifest.toml", "THIRD_PARTY_NOTICES.md"):
             z.write(os.path.join(src, name), name)
 print("Built", out)
 
@@ -45,3 +45,24 @@ with zipfile.ZipFile(tout, "w", zipfile.ZIP_DEFLATED) as z:
         if name.endswith(".xml"):
             z.write(os.path.join(tdir, name), name)
 print("Built", tout)
+
+# ... et chaque thème seul, pour extensions.blender.org (une extension par thème)
+THEMES = {
+    "Blueprint": ("Dark", "Dark blue-gray theme for precise CAD work"),
+    "Carbon": ("Dark", "Near-black neutral theme, the most contrast"),
+    "Midnight": ("Dark", "Deep blue night theme with a cyan accent"),
+    "Graphite": ("Light", "Neutral gray panels and a light viewport"),
+    "Vellum": ("Light", "Light and cool paper theme for drawing"),
+    "Ivory": ("Light", "Warm paper and brown ink, soft on the eyes"),
+}
+for name, (tag, tagline) in THEMES.items():
+    tid = "wanderer_theme_" + name.lower()
+    one = manifest.replace('id = "wanderer_themes"', 'id = "%s"' % tid)
+    one = one.replace('name = "Wanderer Themes"', 'name = "Wanderer %s"' % name)
+    one = one.replace('tagline = "Six CAD themes for Blender: three dark, three light"', 'tagline = "%s"' % tagline)
+    one = one.replace('tags = ["Dark", "Light"]', 'tags = ["%s"]' % tag)
+    tout = os.path.join(root, "dist", "%s-%s.zip" % (tid, THEME_VERSION))
+    with zipfile.ZipFile(tout, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("blender_manifest.toml", one)
+        z.write(os.path.join(tdir, "Wanderer_%s.xml" % name), "Wanderer_%s.xml" % name)
+    print("Built", tout)

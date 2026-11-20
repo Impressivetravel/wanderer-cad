@@ -936,7 +936,9 @@ def _apply_dimension_settings():
                 if "wd_dim_v2" not in sc.keys():
                     # une seule fois par scène : cotations en centimètres par défaut (avant : unités de la scène)
                     if st.unite_cote == 'SCENE':
-                        st.unite_cote = 'CENTIMETERS'
+                        us = sc.unit_settings     # scène en pieds / pouces : cotes en architectural, pas en centimètres
+                        st.unite_cote = 'FEET' if us.system == 'IMPERIAL' and us.length_unit != 'INCHES' else (
+                            'INCHES' if us.system == 'IMPERIAL' else 'CENTIMETERS')
                     sc["wd_dim_v2"] = 1
             except (RuntimeError, ReferenceError, AttributeError, TypeError, ValueError, KeyError):
                 pass

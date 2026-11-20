@@ -1,3 +1,224 @@
+# Wanderer CAD 2.96.129 — what's new since 2.96.128
+
+## The Gumball is now the Gizmo
+
+- **The Gumball is renamed Gizmo everywhere** (status bar button, its menu, Relocate / Reset / AutoReset Gizmo, Preferences > Gizmo, the Gizmo panel of the sidebar, tooltips), to match Blender, which calls these handles gizmos. It works exactly as before; your settings are kept.
+
+## Walk
+
+- **Orient** and **Orient 3 Points** are now in the drop-down menu of **Align**.
+
+- **New Walk tool**, in the toolbar right next to Select, in Object and Edit mode (command line `walk`): a shortcut to Blender's own **Walk Navigation** (Shift+`). Click in the view to walk. It is the same function, so its speed, view height, gravity and mouse sensitivity are set in Preferences > Navigation > Walk.
+- Its icon is a walking figure in the colour of the Transform tools (from the "directions_walk" symbol of Google's Material Symbols, Apache 2.0: see THIRD_PARTY_NOTICES.md in the add-on).
+- **A redrawn toolbar icon now shows up as soon as the add-on is updated**: Blender keeps an icon in memory under its file name until it restarts, so each icon file name now carries a fingerprint of its drawing (old versions are removed). Before, a new icon only appeared after restarting Blender.
+- Toolbar icons can now use quadratic curves and plain fills without outline; a closed shape whose last point repeats the first is no longer left partly empty.
+
+## Hide, Isolate, Unisolate, Show (as in Rhino)
+
+- **Unisolate**: shows back only the objects hidden by **Isolate**; objects you had hidden with **Hide** before stay hidden. Two Isolates in a row: Unisolate shows back everything both hid. Command line `unisolate` / `uniso` (and `UNISOLATEOBJECTS` from an AutoCAD alias file).
+- **Show** (formerly Show All): shows every hidden object, hidden with Hide or by Isolate. Command line `show` / `showall`.
+- **Right-click menu**: **Isolate** (with a selection) and **Unisolate** (when Isolate has hidden objects, even with nothing selected). *Show All*, *Local View* and *Quit Local View* are no longer in the menu (Local View stays on the `/` key and the command line).
+
+## Hatch: changing the pattern of a hatched shape
+
+- **Hatching a shape again replaces its hatch.** Select the shape, pick another pattern, Hatch (or click inside it with Hatch Region): the hatch already filling exactly that area takes the new pattern, scale and rotation, and keeps its layer, spacing and base point. Before, a second hatch was stacked over the first one and you had to delete it. Another area (a neighbour, the hole of the shape, the shape without its hole) still gets its own hatch; a hatch moved away from its shape or hidden is left alone.
+- **Tool header of Hatch / Hatch Region**: when a hatch is selected (the one just made, or one clicked), the pattern, scale and rotation shown are those of that hatch, and changing them changes it at once. With curves selected, the header shows the settings of new hatches, as before.
+- The last pattern, scale and rotation chosen on a hatch become those of the next hatches.
+- A closed curve drawn twice at the same place (the outline left by the **Boundary** option, a curve copied in place) counts once: a second click with Hatch Region no longer loses the holes of the shape.
+
+## Drafting commands from AutoCAD
+
+- **Boundary** (`bo`, `boundary`, `bpoly`; Annotation tools, Wanderer menu): click inside an area to create a closed polyline around it, like BOUNDARY. The area may be closed by lines that only **cross each other** (walls drawn as separate lines overlapping at the corners, a partition stopping in the middle of a room): they are cut at their crossings, the loose ends are ignored, and lines lying on top of each other are merged. The islands inside the area (columns, furniture) get their own closed polylines; **D** switches to the outer contour only. The area under the cursor lights up before you click, and the command stays active to pick room after room.
+- Boundary and its relatives hold up on real plans: a partition whose end only touches a wall (T junction) closes the room whatever the rotation of the plan or its distance from the origin, and **areas are exact far from the origin** (a contour measured 50 km away lost up to 0.1 % of its area, in Area / Perimeter too).
+- **Area / Perimeter: Inside.** Press D once: click inside an area (same detection as Boundary) to read its area, islands deducted, and its perimeter, without drawing the contour first. The area lights up and its value follows the cursor; the result is copied to the clipboard. D again: Selection, as before.
+- **Hatch Region also works with crossing lines**: when no single closed curve surrounds the point, the area closed by the crossing lines is hatched (with the islands as holes), like HATCH with a pick point.
+- **Break** (`br`, `break`, `breakatpoint`; Modify tools): click a curve at the first break point, then the second point: the part between them is removed, to open a door or a window in a wall line. On a closed curve (a rectangle, a circle) the shorter part is removed and the curve stays one piece. **D: At Point** cuts a curve in two without a gap, like BREAKATPOINT (on a closed curve: it opens there); **Enter** after the first point does the same. Snaps work (an intersection gives the exact point), circles and arcs stay true arcs, and the second piece keeps the layer, color and linetype. The command stays active; each break can be undone on its own.
+- **Match Properties** (`ma`, `matchprop`; Modify tools): click the source object, then click the objects that should take its layer, color, linetype, print width, material, and text settings (size, font, alignment) or hatch settings (pattern, scale, rotation). With objects already selected, click the source and they all take its properties at once. Which properties are copied is chosen in the tool settings at the top of the view. Clipping planes are never changed. Dimensions keep their own layer.
+
+## Linetypes
+
+- **Each layer has a linetype** (Continuous, Dashed, Hidden, Center, Dash Dot, Phantom, Dot), in *Layers > Print Settings*, next to its print width, and **each curve can have its own** (*By Layer* by default): right-click > **Linetype**, or the button under the table. Curves and lines of the layer are drawn with dashes in the 3D views; solids, dimensions, texts and hatches are not affected.
+- **On the layouts, dashes are printed at their real size on paper** (a Dashed line: 6 mm dashes, 3 mm gaps), whatever the scale of the viewport: a 1:50 viewport simply shows more of them. In the 3D views they are drawn as printed at 1:N, set by *Linetype scale in the views* (50 by default: a 6 mm dash is 30 cm long).
+- Only the display is dashed: snaps, selection (you can click between two dashes), Trim, Offset, Join, Boundary and Hatch Region still use the whole line, and the DXF export writes true linetypes (LTYPE table, linetype of each layer and of the objects that have their own).
+- A very long curve in fine dots or dashes is drawn with at most 6,000 points, so linetypes do not weigh on a large scene. Curves put into a block keep the dashes they had from their layer.
+- Thick curves (bevel, extrusion: pipes, profiles) and filled 2D curves keep their shape: linetypes only apply to plain lines.
+- Objects drawn on a layer, moved to a layer with *Change Object Layer* or *Match Properties*, take its linetype; *Apply Layer Colors* also applies the linetypes after moving objects with Blender's own tools.
+
+## New command
+
+- **Slice** (`slice`, `quickslice`, as QuickSlice in 3ds Max): slices meshes with a plane defined by a line of two points, with snapping and Ortho, or by clicking an existing line. Only the edges of the cut are added: the object stays in one piece, nothing is separated or capped (use **Split** for that). Every selected mesh is sliced. In Edit mode, only the selected faces are sliced (none selected: the whole mesh), and you stay in Edit mode. It is at the end of the Modify tools, in the Wanderer menu and in the command line.
+
+## Hatch patterns
+
+- **Twelve new patterns for materials**, next to the lines, grids and bricks: **Concrete** (aggregate and dots, like AR-CONC), **Earth** (groups of three strokes), **Gravel**, **Sand** (scattered dots, for mortar or plaster), **Grass** (tufts, for vegetation), **Insulation** (zigzag), **Ashlar** (stone courses), **Herringbone** (parquet, pavers, like AR-HBONE), **Honeycomb**, **Dots**, **Cross** and **Water**. The list says which AutoCAD pattern each one matches (Hatch1 is ANSI31, Hatch2 ANSI37, Hatch3 ANSI32).
+- **Patterns shown as pictures.** The Hatch panel and the Hatch tool settings show the pattern as a picture; click it to choose among all the patterns, each drawn small.
+- **Import .pat files** (`importpat`), from AutoCAD, Rhino or Revit: acad.pat, acadiso.pat (millimetres are recognised) or your own patterns. They join the list and are saved with the file. Each hatch keeps a copy of its pattern, so it stays right if the pattern is removed from the list (the cross next to *Import .pat*) or if the hatch is copied into another file. At scale 1 an imported ANSI31 is the same as Hatch1, so the AutoCAD scales keep their meaning.
+- Hatch Region: **D** goes through all the patterns, the imported ones too.
+
+## Edit a hatch afterwards
+
+- **Double-click a hatch** (or right-click > *Edit Hatch*, or `hatchedit`): a small window shows its pattern as a picture, its scale and its rotation, with Base Point, Match, Boundary and Explode. Changes show at once; with several hatches selected they all change. The Hatch panel (N > Wanderer > Hatch) has the same settings.
+
+## Layers: columns as in Rhino
+
+- **The layer color is on the right**, after On / Lock, as in Rhino's layer panel.
+- **The columns have titles** (Layer, then the icons of the shown toggles, then Color). **Click a title and move the mouse to the left or the right** to make the column narrower or wider, then click to set it (Esc: back as it was, Ctrl/Cmd + click: default width). Wide enough, a toggle column shows its name. The objects listed under the layers follow the same columns.
+
+## 2D views like AutoCAD (preferences)
+
+- **Quick Type in 2D views** (Preferences > Command line): Quick Type turns on by itself in the orthographic views (Top, Front, Right...) and off again in perspective, where the letters keep Blender's shortcuts. The Quick Type button lights up in the 2D views; clicking it there (or Shift + Q) turns the option off.
+- **Wireframe in 2D views by default**: going to an orthographic view switches the viewport to Wireframe, like a 2D drawing (you can still change the shading there), and going back to perspective restores the shading you had (unless you changed it in the meantime). It is on by default; Quick Type in 2D views is off by default.
+
+## Orbit out of a side view: Alt by default
+
+- In orthographic side views, where the orbit button pans, **Alt + the orbit button now orbits** out of the view (Alt + middle button; Alt + right button with the Rhino style), like leaving the 2D view. A drop-down in Preferences > Navigation chooses the keys: *Alt*, *Shift*, *Ctrl + Shift* (as before, like Rhino) or *Ctrl + Alt*. With Alt, the orbit starts only when you drag, so Alt + click of the middle button still centres the view on the mouse; Alt + middle drag in perspective still snaps the view to an axis (Blender default). Where Alt is already taken (Alt + left button as orbit button, Maya or 3ds Max navigation), Ctrl + Shift is used, and in Sculpt / paint modes Alt + right button keeps adjusting the brush stencil. The trackpad gesture follows the same choice. The style presets set it too: Rhino uses Ctrl + Shift + right button (Rhino's own gesture), AutoCAD, 3ds Max and Blender use Alt.
+
+## One orbit button for all the views
+
+- **The side views follow the Orbit button chosen in Preferences > Navigation** (middle, right, or Alt + left button). The separate "Orbit button" option of the side views is gone: it was easy to change it instead of the main one, and then the right button opened the context menu instead of panning. In the side views the orbit button pans, as before; perspective views are unchanged.
+- The keys that orbit out of a side view can also be **Shift + the orbit button**.
+
+## Commands and Edit mode
+
+- **Trim no longer starts again after Space.** Space, Enter or Esc leave Trim; before, Space ended it and then repeated the last command, Trim itself.
+- **The status bar buttons work in Edit mode** (Ortho, Grid Snap, Polar, OSnap, SmartTrack, Gizmo...). Blender's own Edit mode tools took the click before the bar.
+- **Shift + a letter while Quick Type is on** gives the letter to Blender again: Shift + A, Shift + D and Blender's other Shift shortcuts work as usual, and where Blender has no Shift shortcut, Shift + the letter runs the letter's own shortcut (Shift + V on a curve opens the V menu), since the plain letter goes to the command line. Shift + Q stays the Quick Type switch (Blender's Quick Favorites: Q, with Quick Type off). **The Quick Type button turns off while Shift is held** and lights up again when Shift is released, so you see when the letters go to Blender.
+- **Import AutoCAD aliases** (Preferences > Command line > Aliases > *Import AutoCAD .pgp*, or `importpgp`): reads an acad.pgp file and adds its aliases (`L, *LINE`) to the commands that match in Wanderer. Aliases already there are kept; the AutoCAD commands with no match are listed.
+
+## Extruded curves: smooth and clean
+
+- **Curves extruded with Extrude or the Gizmo come out smooth and clean.** The rounded sides are shaded smooth and the edges sharper than 30° stay crisp (like Blender's *Shade Auto Smooth*, without a modifier), and a *Limited Dissolve* at 0.1° removes the points in line along a straight side and the triangles of the caps, which become single faces. The angle is kept very small so that gentle arcs keep their facets. With History = Yes the extrusion stays a modifier, unchanged.
+
+## Layers panel with many layers
+
+- **Double-click a layer to make it the current layer**, as in Rhino: what you draw or add then goes into it. The current layer has a ✓ in front of its name. A single click only selects the layer (and its objects, if that option is on), without changing the current layer. Rename: right-click > Rename.
+- **Sort by Color** (in the menu of the layer list, under *Sort Alphabetically*): the layers are listed by color, around the color wheel (red, orange, yellow, green, blue, purple; light before dark for the same hue), then the grays from white to black, then the layers without a color. Layers of the same color keep your own order, sublayers are sorted inside their parent, and changing a color moves the layer in the list. Only one sort at a time: checking one unchecks the other, and unchecking it brings back your order.
+- **Fold All / Unfold All buttons** in the title bar of the Layers panel, next to the filter (they were only in the filter menu).
+- **The list scrolls instead of running off the bottom**: beyond its height (25 rows by default), arrows and a position slider appear under the list; the column titles stay at the top. **Drag the grip under the list** (click, move the mouse down or up, click) to make it taller or shorter.
+
+## Offset
+
+- **Offsetting a shape inwards no longer stops when part of it collapses** (kalpit3d): the parts that would turn inside out (the tips of a crescent, a narrow passage) are cut off and the rest of the offset is kept, so a shape can shrink, lose a tip or split into several islands, like a real contour offset. Only when the whole shape collapses does Offset say the distance is too large. Plans with right angles (two walls of a corridor meeting exactly) are handled too.
+
+## Measurements
+
+- **Distance, ID and Area show their result in the command bar** (for about 20 seconds), where you are looking, and no longer only in Blender's small info bar at the very bottom of the window. The result is still copied to the clipboard and kept in the command history.
+
+## Right-click menu
+
+- **Right-click in the empty viewport (nothing selected): Viewport Shading** at the top of the menu: Wireframe, Solid, Material Preview, Rendered, X-Ray and the shading options. Shade Smooth / Auto Smooth / Flat are shown only when something is selected (they act on the selection).
+- **Linetype** submenu when the selection contains curves or lines.
+
+## Clipping planes
+
+- **A clipping plane now looks like a section mark**, as in Rhino, so it is not mistaken for the curves of the drawing: the line of the cut, a small triangle at each end standing in the plane of the cut (pointing down for a vertical plane), and a square in the middle lying across it. The mark stays visible whole, in front of everything, even where the plane cuts it (in Blender's own color for selected and active objects); a plane switched off in the panel is drawn paler. Flip turns it over, the Gizmo or Move and Rotate place it, and the plane follows.
+- **Display As is no longer offered on a clipping plane** (right-click), and Display As on a selection that includes one leaves the plane as it is. Clipping planes are not taken as contours by Hatch Region, Boundary or PushPull.
+- Clipping planes made with earlier versions keep working as before.
+- **A clipping plane only cuts its own scene**: the sheets of the layouts (and other scenes of the file) are no longer cut by the clipping planes of the model. The section mark is hidden with *Show Overlays* off.
+- A clipping plane of the model is **no longer drawn in the layout viewports** (its square and arrows were printed like any other line, and Fit framed on it).
+
+## Smoother in large scenes
+
+- **No more freeze of several seconds when an object is created in a file with thousands of objects.** After each new object, Wanderer checks that the objects have the color of their layer; that pass asked Blender for the layer of every object one by one, which takes seconds in a large project (about 12 s measured on 5,800 objects). The layers of all objects are now read in a single pass (0.03 s). The same goes for the Layers panel with a large selection, the layouts and the DXF export.
+- **Box selection is faster in large scenes**: the bounding boxes of all the objects are tested in one grouped computation, and only the objects that were selected are deselected.
+- **Boundary, Hatch Region and Area > Inside keep their survey of the closed areas for the whole command**: clicking room after room no longer re-reads the plan after each click, and hovering a plan of thousands of curves only tests the contours near the cursor.
+- **Snappy Dragging with the Gizmo starts at once in a large scene**: it reuses the snap points already collected instead of collecting them again without the moved objects.
+- **Move, Copy, Rotate, Scale, Mirror and Array follow the mouse smoothly.** The objects were updated at most every 22 ms, a pace that falls between two frames of the screen, so they moved in small jerks. When an update is light (the usual case: finding the snap takes about 0.1 ms even among millions of points) every mouse movement is now followed; only a heavy update (dense mesh in Edit Mode, very large selection) is still spaced out to its real cost.
+- **Shift reaches the other editors while you draw.** During a command with a first point placed (Rectangle, Clipping Plane...), pressing Shift with the mouse over the Outliner or another editor was kept by the command, for its preview. It now goes to that editor; in the 3D view it still updates the preview at once.
+- **Clicking to select no longer stalls in scenes with heavy blocks** (trees, chairs, decor): each click in an empty spot, or in a wireframe view, used to read again the meshes of every block instance, up to half a second per click. The geometry of a block definition is now read once (until something changes shape or position), and the blocks far from the click are skipped: such a click now takes about a millisecond.
+- **Layouts on heavy models: viewports are no longer recalculated for nothing.** Redrawing one viewport reads the model, and that reading alone marked the model as modified: every other viewport of the file was then considered out of date. Creating a 4-view layout calculated the views several times over, an export recalculated every viewport even when nothing had changed, and so did Update and reopening a layout. Each viewport is now calculated once and kept until the model really changes (an object moved, edited, added, hidden...). The model is also read once for all the viewports of a sheet that show the same layers (it was read up to nine times for a 4-view layout), and polylines are read directly instead of being converted one by one. On a model of 1,000 solids and 1,500 polylines: a new 4-view layout in 6.5 s instead of 125 s, an export in 0.6 s instead of 30 s, Duplicate Layout in 3 s instead of 59 s. **Update** still rereads the model every time.
+
+## Toolbar
+
+- **The moving tools come first**: Move, Copy, Rotate, Scale, Mirror, Array, Align, Stretch and Orient are now at the top of the toolbar, right under the selection tools, then the curves, the modifying tools and the rest.
+
+## Groups: Edit Group, as in SketchUp
+
+- **Right-click a grouped object > Edit Group** (or `editgroup`): the group opens in this view only, like Blender's local view. The rest of the model is hidden in that view (the other views keep showing everything), the objects of the group are picked and moved one by one (Gizmo, Move, dragging; a group inside it is picked and moved whole, and Edit Group again opens it), and what you draw meanwhile joins the group. A line at the top of the view shows which group is open.
+- **Right-click > Close Group** (or `closegroup`) closes it, one level at a time: the rest of the model comes back, the view stays where you navigated, and the group is selected again. Esc does not close it. Ungroup is refused on an open group.
+- Clicks, box selection and snaps ignore the objects hidden in a local view (they could be picked or snapped to before).
+
+## Gizmo
+
+- **Alt + click an arrow, then type a value: makes a copy**, as in Rhino. Before, the copy was lost when Alt was released before typing. While typing, Alt switches the copy on or off.
+- **Extruding with the Gizmo works like Blender's *Extrude Manifold***: pulling a face into the solid cuts it in, and the sides that continue a neighbouring face are merged with it, so no inner faces or duplicate faces are left.
+- **Snappy Dragging: choose which point lands on the snap** (at the top of the Gizmo menu, right under Smooth / Snappy Dragging, which move there too; inspired by Blender's *Snap Base*):
+  - *Closest Point* (default): the point of the selection nearest to the snapped point lands on it. Drag an arrow to the corner of another box and the two boxes touch, instead of the centre of the moved box landing on the corner. The square handles do the same in their plane (the nearest corner).
+  - *Gizmo*: the centre of the Gizmo lands on it, as in Rhino (with *Relocate Gizmo*, the point you clicked).
+  - *Origin*: the origin of the active object, for furniture or blocks whose origin is on the floor or at a corner.
+  The choice is kept in the file; *Preferences > Gizmo > Snappy Dragging snaps from* sets it for the files where it was not chosen yet. It is greyed out with Smooth Dragging.
+- **Hold Ctrl while dragging the Gizmo to snap** (or to move freely with Snappy Dragging), as in Blender's transforms: it takes effect at once, without moving the mouse. A marker shows the point snapped to.
+- **The tooltip of each Gizmo handle explains it**: what dragging or clicking does, and the keys you can use while dragging (Ctrl, B, the copy key, the free-rotation or uniform-scale key), plus where Snappy Dragging and Snap from are.
+- **Press B while dragging to pick the base point**, as in Blender's *Snap Base*: the selection goes back to its place, you click the point of it that should land on the target (it snaps), then move and click to place it. Esc cancels.
+- **Ctrl, Snappy Dragging and B also work in Edit Mode**, on vertices, edges and faces: the selected vertices land on the snap (another object, or a vertex, an edge or a midpoint of the same mesh that does not move), and B picks one of the moved vertices as base point.
+- **Rotation shows its angle**: while turning with a Gizmo ring, the swept arc is drawn from the start, with an arrow for the direction and the angle in degrees next to it.
+
+## Imperial units: feet, inches and fractions
+
+- **Lengths can be typed in feet and inches**, everywhere a length is typed (Polyline, Move, Copy, PushPull, Offset Surface, Gizmo, coordinates such as `@10'6",2'` or `10'6"<90`): `10' 6 1/2"`, `10'6-1/2"`, `10'6+1/2"`, `10' - 6 1/2"`, `10'`, `6"`, `6-1/2"`, `1/2"`. A plain number stays in the unit of the scene. After the feet, Space is part of the length (it does not validate); Enter validates. In an Imperial scene, `6-1/2"` is also accepted without feet, and **`10+6+1/2` reads `10' 6 1/2"`** (feet + inches + fraction, all on the numeric keypad; `10+6` = `10' 6"`). Feet and inches typed in a metric scene are converted (1" = 25.4 mm).
+- **Dimensions written the architectural way: `10' - 6 1/2"`** (the dash between the feet and the inches). The dimension unit has two new choices, *Feet and inches* and *Inches* (`126 1/2"`), and *Scene default* uses them in an Imperial scene. The resolution sets the fraction: 0 = 1", 1 = 1/2", 2 = 1/4", 3 = 1/8", 4 = 1/16", 5 = 1/32", 6 = 1/64". Imperial scenes opened for the first time get feet and inches instead of centimetres. The lengths shown while drawing are written the same way.
+- **Layouts in feet and inches: architectural scales.** When the model is in imperial units, the scale list of a viewport (its triangle grip, the Layout panel, the mouse wheel on a selected viewport) offers the usual architect's and engineer's scales, from 3" = 1'-0" down to 1/16" = 1'-0", then 1" = 10' to 1" = 100', instead of 1:20, 1:50...; **Fit** and New Layout pick one of them, and the viewport label, the drawing title and the title block write the scale that way (`1/4" = 1'-0"`). In **Custom...** you can type `1/4" = 1'-0"`, `1/8"=1'`, `1" = 10'` as well as `1:48`; a metric scale typed on an imperial plan is kept and written `1:50`. Metric models are unchanged.
+
+## SmartTrack and Ortho in Move
+
+- **SmartTrack keeps you on the line.** When the cursor follows an X / Y / Z tracking line from the base point (or from an acquired point) and a snap point comes up next to it, the point stays on the line, level with the snap point (the status shows "Z ∩ snap"). Before, the snap won and pulled the cursor off the line: raising an object along its own tube, every vertex it passed tore it away. More than 10 pixels from the line, the snap point is taken as before; and when the mouse is closer to the snap point than to the line, the snap point wins.
+- **The Ortho button (F8) now also works in Move and Copy**, like holding Shift.
+- **Move / Copy: an axis locked and a typed distance always go along that axis.** In a Top view, `Z` then `0.9` Enter moved the objects sideways (the mouse cannot show a height when the view looks along the axis, so the lock was dropped). The objects now go up 0.9 (`-0.9`: down); with the lock on and nothing typed they stay in place instead of sliding in the plan. In the other views the direction still follows the mouse.
+- **Polyline with OSnap off (F3)**: the cursor no longer jumps to the points already placed in the polyline (only the first point still attracts it, to close the shape).
+- The message of a copy with no displacement was in French in every language.
+
+## Blocks
+
+- **Fixed: a block could not be selected by clicking it** with the Select tool (shaded views): the click went through. A click on a face or a curve of a block now selects the block (the outer one for a block inside a block), and a window or crossing box tests the real outline of the block instead of its insertion point.
+- **Double-click a block to edit it in place** (Block Edit), as in AutoCAD and Rhino. **BEDIT** and **BSAVE** now work in the command line (with `blockedit`, `be`, `bclose`).
+
+## Add menu
+
+- **Wanderer is at the top of the Add menu (Shift + A)**, with the W of the logo as its icon (in the color of the menu text of your theme).
+- **The Wanderer menu is sorted into submenus** (Curves, Curve Tools, Surfaces, Solids, Transform, Dimensions and Hatches, Lights and Cameras, Layout). It was a single list of more than a hundred commands, taller than the screen, which Blender made scroll when Shift + A was pressed low in the view. Hatch, Block and Insert are now in it too.
+
+## Trim on surfaces and solids
+
+- **Fixed: Trim left V-shaped notches and thin sliver faces on a solid.** When a wall or a solid was trimmed by a curve from a side view, the faces seen edge-on (parallel to the view) were cut in a V down to their center instead of straight along the curve, and thin faces were left at the corners. The cut is now straight on every face.
+- **Fence and Crossing now trim surfaces too.** Dragging a fence line or a crossing box across the part of a surface or of a solid to remove now removes it, as it already did for curves. Before, dragging only worked on curves and reported "Nothing to trim".
+- **Perspective view: planar cutting curves are projected square to their plane**, as Trim does in Rhino. A curve drawn in the Left view cuts a wall the same way whether you click in the Left view or in the perspective view. Before, the curve was projected along the perspective view, which gave slanted, view-dependent cuts. A single straight line (no plane) and non-planar curves are still projected along the view.
+- **Meshes whose faces are not welded** (many FBX / OBJ imports) are trimmed as a whole: the part you click is removed across all its faces, not only the face under the mouse.
+
+## Four views: one header above the views
+
+- **As in Rhino, the header is above the four views.** Blender's header (Object Mode, View, Select, Add, Object, orientation, snapping, Options) and the tool settings bar now sit once, in a strip across the full width above the four views, instead of inside the top-left view. The four views have no header any more.
+- The display buttons of Blender's header (Solid / Wireframe, overlays, gizmos) are left out of the strip: there they would only act on the strip itself. Each view keeps its display in the menu of its title, with its XYZ axis and its zoom / pan buttons.
+- The strip is created with the four views and closed with them. *Preferences > Navigation > 4 views: one header above the views* turns this off (header in the top-left view, as before).
+- **One sidebar (N) for the four views**: wherever the mouse is in the four views, N shows or hides a single sidebar laid over their right edge (it belongs to the top-right view, so it takes no space from the other views).
+- When leaving the four views, each view is now joined to its exact neighbour, so the view you keep always takes the whole space.
+- **The four views can no longer be merged or split by hand**, as in Rhino. If two of them are joined (dragging an area corner) or one is split, the four views are rebuilt at once; this also prevents opening four views inside one of the four views.
+
+## Gizmo: scale handles as in Rhino
+
+- **The scale handles reach the edge of the object.** Each one is now a dotted line from the center of the Gizmo to the edge of the selection, ended by a small hollow square, as in Rhino: the handles show the width, the depth and the height of what is selected. Drag the square and the edge of the object follows the mouse. The dotted line itself is not grabbed, so it never gets in the way of a selection. On a thin object the handle keeps a minimum length to stay easy to grab.
+- The Gizmo sits at the center of the shape, not on the origin of the object, so the handles are right even when the origin is in a corner or far away. After **Relocate Gizmo**, a handle goes to the edge of the object on its side; if the Gizmo is on an edge or outside the object, the handle keeps the size of the object (distance to the far edge).
+- *Preferences > Gizmo > Scale handles reach the edge of the object* turns it off and brings back the short handles of a fixed length.
+
+## Gizmo on lights and cameras
+
+- **Blender's own handles win where they overlap the Gizmo.** On a light, a camera or an empty, Blender shows its own handles: the direction point at the end of the Sun's stem, the Spot cone, the Area size, the camera lens. When one of them sat under a Gizmo handle, only the Gizmo could be grabbed. Now the Blender handle is grabbed; everywhere else the Gizmo works as before, and nothing changes on other objects.
+- **No scale handles on a Sun.** Scaling a Sun does nothing, and the scale handle sat right on its direction point.
+
+## Orient 3 Points: scale option
+
+- **D: scale to the target length**, as in Orient (2 points). The selection is scaled uniformly so that the distance between the first two reference points matches the distance between the first two target points; the prompt and the toolbar help show the option. Without D the size is kept, as before.
+
+## Right-click menu
+
+- **Shade Smooth, Shade Auto Smooth and Shade Flat come first** in the object right-click menu, before Select, Display As, Material and Lock (and they are no longer repeated lower down).
+
+## Fixed
+
+- **Extruded faces were black in Edit mode.** With the Gizmo's Extrude (and Shift + drag in the 3ds Max preset), the new faces had no normal while dragging and after, so Blender drew them black. Their normals are now updated as you drag.
+- **Mouse cursor missing after a mode change.** After *Add Curve as Bevel* (which switches to Edit mode) followed by Esc, or any change of mode or of tool from a menu or a key, the Select tool was active but the cursor of the previous drawing tool stayed hidden until the mouse left the view. The cursor now follows the active tool as soon as the mouse moves.
+- **Rhino navigation: the right button did not orbit in Sculpt mode.** In Sculpt, Vertex / Weight / Texture Paint, the Grease Pencil modes, Particle Edit, Lattice, Metaball, Text and Curves (hair), a right-button drag opened Blender's brush panel or the menu of the mode instead of orbiting. It now orbits in every mode (Shift pans, Ctrl zooms), and a short right-click still opens the brush panel or the menu of the mode. Only the right button is set in these modes: brush shortcuts, the wheel and letters are untouched. With a Stencil texture brush, the right button still moves the stencil.
+- **Right-click > Select raised a Python error** in Object mode ("enum MODIFIERS not found"): the *Same Modifiers* entry does not exist in Blender and is removed.
+
 # Wanderer CAD 2.96.128 — what's new since 2.96.127
 
 ## New command

@@ -1,13 +1,18 @@
 """Wanderer CAD : Plans de coupe d'affichage et filtres de sélection."""
 
+import math
+
 import bmesh
 import bpy
-from mathutils import Vector
+import gpu
+from gpu_extras.batch import batch_for_shader
+from mathutils import Matrix, Vector
 
 from .core import _link_object, _redraw_all_areas, idle_tool, plane_axes, tr_label
+from .drawing import _HOVER
 from .base import DessinBase
 from .tools_draw import DESSIN_OT_rectangle
-from .objects import DESSIN_OT_group, DESSIN_OT_ungroup, _GROUP_SEL, group_members, group_root
+from .objects import DESSIN_OT_group, DESSIN_OT_ungroup, _GROUP_SEL, group_members, group_root, open_groups_all
 from .curve_edit import _idle_later
 
 
@@ -19,14 +24,26 @@ CLIP_MAX = 6
 _CLIP = {"touched": set(), "pending": False, "alive": False, "error": ""}
 
 
+CLIP_VER = 2       # plan de coupe dessiné comme un repère de coupe : son repère local porte le plan (Z = côté masqué)
+CLIP_SYMBOL = 3    # version du dessin du repère (3 : triangles dans le plan de coupe, comme Rhino)
+
+
 def clip_plane_coeffs(o):
     """Équation (a, b, c, d) du plan de coupe porté par l'objet : le côté visible est celui où a·x + b·y + c·z + d >= 0.
-    La flèche de l'objet pointe vers le côté coupé (masqué)."""
+    Repère de coupe (version 2) : le plan est le plan XY local de l'objet, son Z local pointe vers le côté masqué.
+    Anciens plans (un rectangle) : la première face, la flèche pointe vers le côté coupé."""
+    mw = o.matrix_world
+    if o.get("cad_clip_v", 1) >= CLIP_VER:
+        n = mw.to_3x3().inverted_safe().transposed() @ Vector((0.0, 0.0, 1.0))
+        if n.length < 1e-12:
+            return None
+        n.normalize()
+        p = mw.translation
+        return (-n.x, -n.y, -n.z, n.dot(p))
     me = o.data
     if o.type != 'MESH' or not len(me.polygons):
         return None
     poly = me.polygons[0]
-    mw = o.matrix_world
     p = mw @ me.vertices[poly.vertices[0]].co
     n = (mw.to_3x3().inverted_safe().transposed() @ poly.normal)
     if n.length < 1e-12:
@@ -35,16 +52,90 @@ def clip_plane_coeffs(o):
     return (-n.x, -n.y, -n.z, n.dot(p))
 
 
-def clip_objects(only_active=True):
+def clip_symbol_geometry(half):
+    """Repère de coupe (comme dans Rhino), en coordonnées locales : la trace du plan (X local), un carré au centre couché
+    en travers du plan (plan XZ local) et un triangle à chaque bout, dans le plan de coupe lui-même (plan XY local),
+    pointé vers +Y local : vers le bas pour un plan vertical, comme les triangles de Rhino."""
+    L = max(float(half), 1e-3)
+    t = 0.12 * L            # taille des triangles
+    q = 0.2 * L             # demi-côté du carré
+    V = [(-L, 0.0, 0.0), (L, 0.0, 0.0),
+         (-q, 0.0, -q), (q, 0.0, -q), (q, 0.0, q), (-q, 0.0, q)]
+    E = [(0, 1), (2, 3), (3, 4), (4, 5), (5, 2)]
+    for sgn in (-1.0, 1.0):
+        i = len(V)
+        V += [(sgn * L, 0.0, 0.0), (sgn * (L - t), 0.0, 0.0), (sgn * (L - 0.5 * t), t, 0.0)]
+        E += [(i, i + 1), (i + 1, i + 2), (i + 2, i)]
+    return V, E
+
+
+def clip_symbol_upgrade(o):
+    """Repère dessiné par une version précédente (triangles couchés comme le carré) : redessiné, même taille."""
+    try:
+        if o.get("cad_clip_v", 1) < CLIP_VER or o.get("cad_clip_sym", 2) >= CLIP_SYMBOL or o.type != 'MESH':
+            return False
+        me = o.data
+        half = max((abs(v.co.x) for v in me.vertices), default=1.0)
+        V, E = clip_symbol_geometry(half)
+        me.clear_geometry()
+        me.from_pydata(V, E, [])
+        me.update()
+        o["cad_clip_sym"] = CLIP_SYMBOL
+        return True
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return False
+
+
+def clip_frame(normal, width_hint=None):
+    """Repère (w, h, n) d'un plan de coupe : w horizontal dans le plan quand c'est possible (la trace vue de dessus)."""
+    n = Vector(normal).normalized()
+    w = n.cross(Vector((0.0, 0.0, 1.0)))
+    if w.length < 1e-6:          # plan horizontal : la trace suit X (ou la direction donnée)
+        w = Vector(width_hint) if width_hint is not None else Vector((1.0, 0.0, 0.0))
+        w = w - n * w.dot(n)
+        if w.length < 1e-9:
+            w = Vector((1.0, 0.0, 0.0))
+    w.normalize()
+    h = n.cross(w).normalized()
+    return w, h, n
+
+
+_CLIP_LIST = {"key": None, "names": ()}
+
+
+def clip_objects(only_active=True, scene=None):
+    """Plans de coupe du fichier (de `scene` seulement si elle est donnée), par nom. La liste est gardée tant que rien
+    ne change : elle est demandée à chaque image (repère dessiné par-dessus) et un gros fichier a des milliers d'objets."""
+    try:
+        key = (len(bpy.data.objects), _HOVER["version"])
+    except (AttributeError, RuntimeError):
+        key = None
+    if key is None or _CLIP_LIST["key"] != key:
+        names = []
+        for o in bpy.data.objects:
+            try:
+                if o.type == 'MESH' and o.get("cad_clip"):
+                    names.append(o.name)
+            except ReferenceError:
+                continue
+        names.sort()
+        _CLIP_LIST["key"], _CLIP_LIST["names"] = key, tuple(names)
     out = []
-    for o in bpy.data.objects:
+    for n in _CLIP_LIST["names"]:
+        o = bpy.data.objects.get(n)
         try:
-            if o.type == 'MESH' and o.get("cad_clip"):
-                out.append(o)
-        except ReferenceError:
+            if o is None or not o.get("cad_clip"):
+                continue
+            if scene is not None and scene.objects.get(n) != o:
+                continue                # plan de coupe d'une autre scène (une mise en page, un autre modèle)
+        except (ReferenceError, AttributeError):
             continue
-    out.sort(key=lambda o: o.name)
+        out.append(o)
     return out
+
+
+def clip_list_reset():
+    _CLIP_LIST["key"] = None
 
 
 def _ensure_clip_box(win, area, rv):
@@ -65,23 +156,36 @@ def _ensure_clip_box(win, area, rv):
         _CLIP["error"] = str(e)
 
 
+def scene_clip_planes(scene):
+    """Équations des plans de coupe actifs d'une scène (6 au maximum)."""
+    planes = []
+    for o in clip_objects(scene=scene):
+        clip_symbol_upgrade(o)
+        if not o.get("cad_clip_on", 1) or o.hide_viewport:
+            continue
+        c = clip_plane_coeffs(o)
+        if c is not None:
+            planes.append(c)
+        if len(planes) >= CLIP_MAX:
+            break
+    return planes
+
+
 def update_clip_planes(*_args):
-    """Pose les plans de coupe actifs sur toutes les vues 3D (6 au maximum) ; retire ceux qu'on avait posés si plus aucun."""
+    """Pose les plans de coupe actifs de chaque scène sur les vues 3D qui la montrent (6 au maximum) ; retire ceux qu'on
+    avait posés quand il n'y en a plus. Un plan de coupe ne coupe que sa scène (pas les feuilles des mises en page)."""
     try:
-        planes = []
-        for o in clip_objects():
-            if not o.get("cad_clip_on", 1) or o.hide_viewport:
-                continue
-            c = clip_plane_coeffs(o)
-            if c is not None:
-                planes.append(c)
-            if len(planes) >= CLIP_MAX:
-                break
-        if not planes and not _CLIP["touched"]:
+        if not clip_objects() and not _CLIP["touched"]:
             return
-        pad = planes + [(0.0, 0.0, 1.0, 1.0e9)] * (CLIP_MAX - len(planes))
+        per_scene = {}
         for wm in bpy.data.window_managers:
             for win in wm.windows:
+                sc = win.scene
+                skey = sc.as_pointer() if sc is not None else 0
+                if skey not in per_scene:
+                    per_scene[skey] = scene_clip_planes(sc) if sc is not None else []
+                planes = per_scene[skey]
+                pad = planes + [(0.0, 0.0, 1.0, 1.0e9)] * (CLIP_MAX - len(planes))
                 for area in win.screen.areas:
                     if area.type != 'VIEW_3D':
                         continue
@@ -108,8 +212,6 @@ def update_clip_planes(*_args):
                                 rv.use_clip_planes = False
                                 _CLIP["touched"].discard(key)
                                 area.tag_redraw()
-        if not planes:
-            _CLIP["touched"].clear()
     except (RuntimeError, ReferenceError, AttributeError, TypeError, ValueError):
         pass
 
@@ -146,7 +248,7 @@ class DESSIN_OT_clip_plane(DessinBase):
     bl_idname = "dessin.clip_plane"
     bl_label = "Clipping Plane"
     bl_description = ("Draws a clipping plane (first corner, opposite corner, in the active view plane): the view hides everything "
-                      "on the side the arrow points to (move it with the gumball; flip it or switch it off in the Wanderer panel). Works in Solid and Wireframe shading only")
+                      "on the side the arrow points to (move it with the gizmo; flip it or switch it off in the Wanderer panel). Works in Solid and Wireframe shading only")
 
     TITLE = "Clipping Plane"
     CORNER_STAGES = (1,)
@@ -171,23 +273,31 @@ class DESSIN_OT_clip_plane(DessinBase):
     def build(self, context, spec):
         corners = list(spec[1])
         normal = plane_axes(self.axis)[2].copy()
-        o = self.points[0].copy()
         center = sum(corners, Vector()) / 4.0
-        size = max(min((corners[1] - corners[0]).length, (corners[2] - corners[1]).length) * 0.25, 1e-3)
-        face = [0, 1, 2, 3]
         if (corners[1] - corners[0]).cross(corners[2] - corners[1]).dot(normal) < 0:
-            face.reverse()
-        verts = [tuple(c - o) for c in corners] + [tuple(center - o), tuple(center - o + normal * size)]
+            normal = -normal
+        w, h, n = clip_frame(normal, corners[1] - corners[0])
+        half = max(abs((c - center).dot(w)) for c in corners)
+        if half < 1e-6:
+            half = max((c - center).length for c in corners)
+        V, E = clip_symbol_geometry(half)
         me = bpy.data.meshes.new("Clipping Plane")
-        me.from_pydata(verts, [(4, 5)], [face])
+        me.from_pydata(V, E, [])
         me.update()
         obj = _link_object(context, "Clipping Plane", me)
-        obj.location = o
+        obj.matrix_world = Matrix((
+            (w.x, h.x, n.x, center.x),
+            (w.y, h.y, n.y, center.y),
+            (w.z, h.z, n.z, center.z),
+            (0.0, 0.0, 0.0, 1.0)))
         obj.display_type = 'WIRE'
         obj.show_in_front = True
         obj.hide_render = True
         obj["cad_clip"] = 1
         obj["cad_clip_on"] = 1
+        obj["cad_clip_v"] = CLIP_VER
+        obj["cad_clip_sym"] = CLIP_SYMBOL
+        clip_list_reset()
         try:
             context.view_layer.update()      # la matrice de l'objet doit être à jour avant de calculer le plan
         except (RuntimeError, AttributeError):
@@ -226,11 +336,15 @@ class DESSIN_OT_clip_edit(bpy.types.Operator):
         o = bpy.data.objects.get(self.name)
         if o is None or o.type != 'MESH':
             return {'CANCELLED'}
+        clip_list_reset()
         if self.action == 'TOGGLE':
             o["cad_clip_on"] = 0 if o.get("cad_clip_on", 1) else 1
         elif self.action == 'FLIP':
             me = o.data
-            if len(me.vertices) >= 6:
+            if o.get("cad_clip_v", 1) >= CLIP_VER:
+                # demi-tour autour de l'axe vertical du repère : l'autre côté, les triangles restent vers le bas
+                o.matrix_world = o.matrix_world @ Matrix.Rotation(math.pi, 4, 'Y')
+            elif len(me.vertices) >= 6:
                 me.flip_normals()
                 c, t = me.vertices[4].co.copy(), me.vertices[5].co.copy()
                 me.vertices[5].co = 2.0 * c - t
@@ -252,6 +366,90 @@ class DESSIN_OT_clip_edit(bpy.types.Operator):
         return {'FINISHED'}
 
 
+_CLIP_DRAW = []
+
+
+def clip_symbol_segments(o):
+    """Segments monde (2 points par segment) du repère de coupe d'un objet."""
+    me = o.data
+    mw = o.matrix_world
+    W = [mw @ v.co for v in me.vertices]
+    out = []
+    for e in me.edges:
+        a, b = e.vertices
+        out.append(tuple(W[a]))
+        out.append(tuple(W[b]))
+    return out
+
+
+def _clip_symbol_draw():
+    """Le repère de coupe en entier, par-dessus tout : Blender coupe aussi l'objet lui-même (sa moitié côté masqué
+    disparaîtrait), alors on le redessine ici, hors coupe, avec la couleur de Blender (sélectionné, actif ou non)."""
+    ctx = bpy.context
+    space = getattr(ctx, "space_data", None)
+    objs = []
+    try:
+        if space is not None and not space.overlay.show_overlays:
+            return                      # « Show Overlays » éteint : vue nue, comme pour les autres repères
+        for o in clip_objects(scene=ctx.scene):
+            if o.get("cad_clip_v", 1) < CLIP_VER or o.type != 'MESH':
+                continue
+            try:
+                if not o.visible_get(viewport=space):
+                    continue
+            except (TypeError, RuntimeError):
+                try:
+                    if not o.visible_get():
+                        continue
+                except RuntimeError:
+                    continue
+            objs.append(o)
+    except (ReferenceError, AttributeError, RuntimeError):
+        return
+    if not objs:
+        return
+    try:
+        th = ctx.preferences.themes[0].view_3d
+        col_act, col_sel, col_wire = tuple(th.object_active), tuple(th.object_selected), tuple(th.wire)
+        ui = ctx.preferences.system.ui_scale
+    except (AttributeError, IndexError):
+        col_act, col_sel, col_wire, ui = (1.0, 0.63, 0.16), (0.93, 0.34, 0.0), (0.0, 0.0, 0.0), 1.0
+    active = getattr(ctx, "active_object", None)
+    gpu.state.blend_set('ALPHA')
+    gpu.state.depth_test_set('NONE')
+    try:
+        sh = gpu.shader.from_builtin('POLYLINE_UNIFORM_COLOR')
+        sh.bind()
+        sh.uniform_float("viewportSize", gpu.state.viewport_get()[2:])
+        sh.uniform_float("lineWidth", 1.5 * ui)
+        for o in objs:
+            pts = clip_symbol_segments(o)
+            if not pts:
+                continue
+            rgb = col_act if (o.select_get() and o == active) else (col_sel if o.select_get() else col_wire)
+            alpha = 1.0 if o.get("cad_clip_on", 1) else 0.4        # plan éteint : plus pâle
+            sh.uniform_float("color", (rgb[0], rgb[1], rgb[2], alpha))
+            batch_for_shader(sh, 'LINES', {"pos": pts}).draw(sh)
+    except (ValueError, AttributeError, TypeError, SystemError, ReferenceError, RuntimeError):
+        pass
+    finally:
+        gpu.state.depth_test_set('LESS_EQUAL')
+        gpu.state.blend_set('NONE')
+
+
+def register_clip_draw():
+    if not _CLIP_DRAW:
+        _CLIP_DRAW.append(bpy.types.SpaceView3D.draw_handler_add(_clip_symbol_draw, (), 'WINDOW', 'POST_VIEW'))
+
+
+def unregister_clip_draw():
+    while _CLIP_DRAW:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_CLIP_DRAW.pop(), 'WINDOW')
+        except (ValueError, RuntimeError):
+            pass
+
+
 class DESSIN_PT_clip(bpy.types.Panel):
     bl_label = "Clipping Planes"
     bl_idname = "DESSIN_PT_clip"
@@ -261,7 +459,7 @@ class DESSIN_PT_clip(bpy.types.Panel):
 
     def draw(self, context):
         col = self.layout.column(align=True)
-        objs = clip_objects()
+        objs = clip_objects(scene=context.scene)
         if objs and clip_blocked_shading(context.space_data):
             box = col.box()
             box.label(text="Not applied in Material Preview / Rendered", icon='ERROR')
@@ -678,9 +876,10 @@ def _group_select_tick():
             sel = {o.name for o in ctx.selected_objects}
             new = sel - _GROUP_SEL["last"]
             extra = set()
+            opened = open_groups_all(ctx) or None if new else None      # Edit Group : pas au-delà du groupe ouvert
             for n in new:
                 o = bpy.data.objects.get(n)
-                root = group_root(o) if o is not None else None
+                root = group_root(o, stop=opened) if o is not None else None
                 if root is not None:
                     extra |= {m.name for m in group_members(root)}
             extra -= sel

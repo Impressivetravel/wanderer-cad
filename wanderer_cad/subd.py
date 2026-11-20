@@ -8,6 +8,7 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector, geometry
 
 from .core import copy_shift, edit_add_geometry, plane_axes
+from .linetypes import lt_resume, lt_suspend
 from .drawing import get_shader
 from .tools_draw import _PlanBody
 from .solids import (
@@ -480,6 +481,7 @@ class DESSIN_OT_subd(bpy.types.Operator):
         if context.mode != 'OBJECT':
             bpy.ops.object.mode_set(mode='OBJECT')
         srcs = [o for o in context.selected_objects if o.type in {'CURVE', 'MESH'}]
+        _lt = lt_suspend(context, srcs)                     # courbes à tirets : les tubes suivent le trait entier
         dg = context.evaluated_depsgraph_get()
         P, chains = [], []          # points monde, et pour chaque courbe la liste ordonnée de ses arêtes
         for src in srcs:
@@ -497,6 +499,7 @@ class DESSIN_OT_subd(bpy.types.Operator):
                 chains.append([(base + e.vertices[0], base + e.vertices[1]) for e in me.edges])
             finally:
                 ev.to_mesh_clear()
+        lt_resume(_lt)
         if not chains:
             self.report({'WARNING'}, "MultiPipe: select curves or wire meshes (edges without faces) first")
             return {'CANCELLED'}
@@ -750,6 +753,7 @@ def expand_groups(context, objs):
     except AttributeError:
         return list(objs)
     out, seen = [], set()
+    stop = group_stop(context)          # groupe ouvert (Edit Group) : ses objets bougent un par un
 
     def add(o):
         if o.name not in seen:
@@ -757,7 +761,7 @@ def expand_groups(context, objs):
             out.append(o)
     for o in objs:
         add(o)
-        root = group_root(o)
+        root = group_root(o, stop=stop)
         if root is not None:
             for m in group_members(root):
                 try:
@@ -949,6 +953,7 @@ def copy_moved_edit(items):
         for g in ret['geom']:
             g.select_set(True)
         bm.select_flush_mode()
+        bm.normal_update()
         bmesh.update_edit_mesh(obj.data, loop_triangles=True, destructive=True)
 
 
@@ -985,11 +990,12 @@ def extrude_moved_edit(items):
             if g.is_valid:
                 g.select_set(True)
         bm.select_flush_mode()
+        bm.normal_update()                  # (faces neuves : sans normales, elles s'affichent noires)
         bmesh.update_edit_mesh(obj.data, loop_triangles=True, destructive=True)
 
 
 def drag_copy_commit(context, items, edit, ctrl=False):
-    """Fin d'un glisser avec la touche de copie (objet, sous-objets, poignée du Gumball).
+    """Fin d'un glisser avec la touche de copie (objet, sous-objets, poignée du Gizmo).
     Alt (Rhino) : une copie. Maj (3ds Max) : en mode objet, la fenêtre Clone Options (copie ou instance, nombre, nom) ;
     en mode édition, une extrusion (Ctrl + Maj : une copie détachée)."""
     if edit:
@@ -1120,6 +1126,6 @@ class DESSIN_OT_clone_options(bpy.types.Operator):
 
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
-    global cmd_log, group_members, group_root
-    from .objects import group_members, group_root
+    global cmd_log, group_members, group_root, group_stop
+    from .objects import group_members, group_root, group_stop
     from .cplane import cmd_log

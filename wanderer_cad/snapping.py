@@ -8,6 +8,7 @@ import time
 from mathutils import Matrix, Vector
 
 from .core import (
+    is_lt_mod, local_view_token, obj_visible, own_modifiers,
     DETAIL_EDGE_CAP, DETAIL_SNAP_VERTS, EDGE_CAP, HEAVY_SNAP_VERTS, HEAVY_SNAP_VERTS_EDIT, SNAP_BIAS_LUT, pref,
 )
 
@@ -306,8 +307,8 @@ def curve_snap_key(obj, mw):
     """Signature d'une courbe pour le cache des accroches (points, poignées, réglages, position) ; None si illisible."""
     import zlib
     try:
-        if len(obj.modifiers):
-            return None            # forme évaluée qui dépend des modificateurs : pas de cache
+        if own_modifiers(obj):
+            return None            # forme évaluée qui dépend des modificateurs : pas de cache (les tirets ne comptent pas)
         cu = obj.data
         h = zlib.crc32(mw.tobytes())
         meta = [cu.as_pointer(), cu.resolution_u, cu.dimensions, repr(obj.get("dessin_centre")), len(cu.splines),
@@ -368,7 +369,7 @@ def _instance_proxies(context, limit=3000):
                 out.append(_InstProxy(o, W, prefix + o.name))
     try:
         for e in context.view_layer.objects:
-            if e.type == 'EMPTY' and e.instance_type == 'COLLECTION' and e.instance_collection is not None and e.visible_get():
+            if e.type == 'EMPTY' and e.instance_type == 'COLLECTION' and e.instance_collection is not None and obj_visible(e, getattr(context, "space_data", None)):
                 c = e.instance_collection
                 walk(c, e.matrix_world @ Matrix.Translation(-Vector(c.instance_offset)), e.name + ">", 0)
     except (ReferenceError, AttributeError, RuntimeError):
@@ -578,7 +579,7 @@ def collect_snap_points(context, exclude=None, only=None, detail=False):
     try:
         gkey = (_HOVER["version"], context.mode, context.scene.as_pointer(), context.view_layer.as_pointer(),
                 frozenset(exclude) if exclude else None, frozenset(only) if only is not None else None,
-                len(context.view_layer.objects))
+                len(context.view_layer.objects), local_view_token(getattr(context, "space_data", None)))
     except (AttributeError, ReferenceError, RuntimeError, TypeError):
         gkey = None
     last = _SNAP_LAST["data"]
@@ -626,9 +627,9 @@ def collect_snap_points(context, exclude=None, only=None, detail=False):
 
     if detail and only is not None:
         objs_all = [o for o in (context.view_layer.objects.get(n_) for n_ in only)
-                    if o is not None and o.visible_get() and "dessin_hatch" not in o.keys() and "wd_nosnap" not in o.keys()]
+                    if o is not None and obj_visible(o, getattr(context, "space_data", None)) and "dessin_hatch" not in o.keys() and "wd_nosnap" not in o.keys()]
     else:
-        objs_all = [o for o in context.view_layer.objects if o.visible_get() and not (exclude and o.name in exclude)
+        objs_all = [o for o in context.view_layer.objects if obj_visible(o, getattr(context, "space_data", None)) and not (exclude and o.name in exclude)
                     and (only is None or o.name in only) and "dessin_hatch" not in o.keys() and "wd_nosnap" not in o.keys()]
     box_tier = _snap_box_tier(objs_all) if (only is None and not detail) else None
     edge_cap = DETAIL_EDGE_CAP if detail else EDGE_CAP
@@ -804,7 +805,12 @@ def collect_snap_points(context, exclude=None, only=None, detail=False):
                     nurbs_pending = True
             if locals().get("nurbs_pending"):
                 nurbs_pending = False
+                _ltm = [md_ for md_ in obj.modifiers if is_lt_mod(md_) and md_.show_viewport]
                 try:
+                    if _ltm:                    # NURBS à tirets : la courbe entière (pas les bouts de tirets)
+                        for md_ in _ltm:
+                            md_.show_viewport = False
+                        context.view_layer.update()
                     ev = obj.evaluated_get(context.evaluated_depsgraph_get())
                     me_ev = ev.to_mesh()
                     try:
@@ -846,6 +852,9 @@ def collect_snap_points(context, exclude=None, only=None, detail=False):
                         ev.to_mesh_clear()
                 except (RuntimeError, AttributeError, ReferenceError, ValueError, TypeError):
                     pass
+                finally:
+                    for md_ in _ltm:
+                        md_.show_viewport = True
 
         c = obj.get("dessin_centre")
         cw = None

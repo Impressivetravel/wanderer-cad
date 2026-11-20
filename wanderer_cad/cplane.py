@@ -39,11 +39,15 @@ def _notice_redraw():
     return None
 
 
-def cmd_notice(txt, seconds=NOTICE_SECONDS):
+RESULT_SECONDS = 20.0       # durée d'affichage d'un résultat de mesure (Distance, ID, Area) dans la barre de commande
+
+
+def cmd_notice(txt, seconds=NOTICE_SECONDS, style="warn"):
     """Message bref dans la barre de commande : une commande qui n'a rien pu faire le dit là où l'on regarde (le rapport
-    de Blender, en bas de la fenêtre, passe inaperçu). Il s'efface seul au bout de quelques secondes."""
+    de Blender, en bas de la fenêtre, passe inaperçu). Il s'efface seul au bout de quelques secondes.
+    style : 'warn' (orangé, rien n'a été fait) ou 'fg' (résultat d'une mesure, en clair)."""
     cmd_log(txt)
-    _CMD["notice"] = (txt, time.monotonic() + seconds)
+    _CMD["notice"] = (txt, time.monotonic() + seconds, style)
     _notice_redraw()
     try:
         bpy.app.timers.register(_notice_redraw, first_interval=seconds + 0.05)
@@ -64,6 +68,17 @@ def cmd_notice_text():
 
 def cmd_notice_clear():
     _CMD["notice"] = None
+
+
+def cmd_notice_style():
+    n = _CMD.get("notice")
+    return n[2] if n and len(n) > 2 else "warn"
+
+
+def cmd_result(txt):
+    """Résultat d'une mesure (Distance, ID, Area) : écrit dans la barre de commande, là où l'on regarde (avant, il n'était
+    que dans la barre d'infos de Blender, tout en bas), et gardé un moment ; aussi dans l'historique."""
+    cmd_notice(txt, RESULT_SECONDS, "fg")
 
 
 def nothing_done(op, msg):

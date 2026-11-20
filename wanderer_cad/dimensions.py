@@ -8,12 +8,29 @@ from mathutils import Matrix, Vector
 
 from .core import AXES3, TAU, UNIT_LABEL, UNIT_TO_M, plane_axes, plane_origin
 from .drawing import _HOVER, find_window_region, project_px, px_scale, region_rv3d
+from .linetypes import lt_resume, lt_suspend
 from .base import DessinBase
 from .selection import _project_region
 from .settings import (
     _dim_replay_spec, _op_plane, arrow_extra, build_cotation, dim_owner, dim_store_def, dimension_objects,
     dimstyle_snapshot, ensure_dim_styles, rebuild_dimension,
 )
+
+
+def imperial_dim_unit(scene):
+    """'FEET' / 'INCHES' quand les cotes s'écrivent en pieds et pouces (réglage de la cote, ou unités de la scène
+    impériales avec « Scene default »), sinon None."""
+    try:
+        st = scene.dessin
+        if st.unite_cote in ('FEET', 'INCHES'):
+            return st.unite_cote
+        if st.unite_cote == 'SCENE':
+            us = scene.unit_settings
+            if us.system == 'IMPERIAL' and us.length_unit in ('FEET', 'INCHES', 'ADAPTIVE'):
+                return 'INCHES' if us.length_unit == 'INCHES' else 'FEET'
+    except (AttributeError, ReferenceError):
+        pass
+    return None
 
 
 class DESSIN_OT_cotation(DessinBase):
@@ -98,8 +115,15 @@ class DESSIN_OT_cotation(DessinBase):
 
     def text_for(self, length):
         st = bpy.context.scene.dessin
-        factor, label = self.unit_for_text()
         length = length * layout_dim_factor(self)      # mise en page : cote posée sur un détail = longueur du modèle
+        arch = imperial_dim_unit(bpy.context.scene)
+        if arch is not None:
+            # pieds et pouces (architectural) : 10' - 6 1/2", fractions au 1/2^décimales de pouce
+            from .units_text import denom_for_precision, format_imperial
+            sc = bpy.context.scene
+            metres = length * (sc.unit_settings.scale_length or 1.0)
+            return st.prefixe + format_imperial(metres, arch, denom_for_precision(st.decimales)) + st.suffixe
+        factor, label = self.unit_for_text()
         txt = f"{length / factor:.{st.decimales}f}"
         if st.supprimer_zeros and "." in txt:
             txt = txt.rstrip("0").rstrip(".")
@@ -1724,7 +1748,7 @@ class DESSIN_OT_dist(DessinBase):
             context.window_manager.clipboard = f"{L / self.unit_f:.6g}"
         except (AttributeError, RuntimeError):
             pass
-        cmd_log(msg)
+        cmd_result(msg)                     # dans la barre de commande (et la barre d'infos de Blender)
         self.report({'INFO'}, msg)
         self.finished = True
 
@@ -1772,7 +1796,7 @@ class DESSIN_OT_id_point(DessinBase):
             context.window_manager.clipboard = f"{p.x / f:.6g}, {p.y / f:.6g}, {p.z / f:.6g}"
         except (AttributeError, RuntimeError):
             pass
-        cmd_log("ID: " + msg)
+        cmd_result("ID: " + msg)
         self.report({'INFO'}, "ID: " + msg)
         self.finished = True
 
@@ -1839,14 +1863,19 @@ class DESSIN_UL_dimstyles(bpy.types.UIList):
 
 
 def loop_area(pts):
-    """Aire d'un contour fermé (méthode de Newell : fonctionne aussi dans un plan quelconque)."""
-    n = Vector((0.0, 0.0, 0.0))
-    for i in range(len(pts)):
-        a, b = pts[i], pts[(i + 1) % len(pts)]
-        n.x += (a.y - b.y) * (a.z + b.z)
-        n.y += (a.z - b.z) * (a.x + b.x)
-        n.z += (a.x - b.x) * (a.y + b.y)
-    return 0.5 * n.length
+    """Aire d'un contour fermé (méthode de Newell : fonctionne aussi dans un plan quelconque). Calculée autour du premier
+    point, en double précision : loin de l'origine (plan géoréférencé), les produits perdaient des chiffres."""
+    if not pts:
+        return 0.0
+    ox, oy, oz = (float(c) for c in pts[0][:3])
+    P = [(float(p[0]) - ox, float(p[1]) - oy, float(p[2]) - oz) for p in pts]
+    nx = ny = nz = 0.0
+    for i in range(len(P)):
+        a, b = P[i], P[(i + 1) % len(P)]
+        nx += (a[1] - b[1]) * (a[2] + b[2])
+        ny += (a[2] - b[2]) * (a[0] + b[0])
+        nz += (a[0] - b[0]) * (a[1] + b[1])
+    return 0.5 * math.sqrt(nx * nx + ny * ny + nz * nz)
 
 
 def measure_edge_loops(edges, coords):
@@ -1891,19 +1920,23 @@ def selection_measure(context):
         sources = [(o, bmesh.from_edit_mesh(o.data), True, False) for o in context.objects_in_mode_unique_data
                    if o.type == 'MESH']
     else:
+        _lt = lt_suspend(context, context.selected_objects)       # courbes à tirets : leur trait entier
         dg = context.evaluated_depsgraph_get()
         sources = []
-        for o in context.selected_objects:
-            if o.type not in {'MESH', 'CURVE'}:
-                continue
-            try:
-                me = o.evaluated_get(dg).to_mesh()
-            except RuntimeError:
-                continue
-            bm = bmesh.new()
-            bm.from_mesh(me)
-            o.evaluated_get(dg).to_mesh_clear()
-            sources.append((o, bm, False, True))
+        try:
+            for o in context.selected_objects:
+                if o.type not in {'MESH', 'CURVE'}:
+                    continue
+                try:
+                    me = o.evaluated_get(dg).to_mesh()
+                except RuntimeError:
+                    continue
+                bm = bmesh.new()
+                bm.from_mesh(me)
+                o.evaluated_get(dg).to_mesh_clear()
+                sources.append((o, bm, False, True))
+        finally:
+            lt_resume(_lt)
     for o, bm, only_sel, free in sources:
         mw = o.matrix_world
         faces = [f for f in bm.faces if f.select or not only_sel]
@@ -1940,12 +1973,13 @@ class DESSIN_OT_mesure_aire(DessinBase):
     bl_idname = "dessin.mesure_aire"
     bl_label = "Area / Perimeter"
     bl_description = ("Quick measure (nothing is added to the scene): click the corners of a contour to read its area and "
-                      "perimeter. D: measure the selection instead. The result is copied to the clipboard")
+                      "perimeter. D: Inside (click inside an area closed by curves or crossing lines: the islands are "
+                      "deducted), then Selection. The result is copied to the clipboard")
 
     TITLE = "Area / Perimeter"
     NEEDED = 1000
     HAS_MODE = True
-    MODES = ("Points", "Selection")
+    MODES = ("Points", "Inside", "Selection")
     mode = 0
     PLANAR = False
     LOCK_OK = True
@@ -1954,15 +1988,42 @@ class DESSIN_OT_mesure_aire(DessinBase):
         self.dim_label = None
         self.last = None
         self._sel = (-1, None)
+        self._mouse = None
+        self.hilite = []
+        self._rf = None
         return super().invoke(context, event)
 
+    def kind(self):
+        return self.MODES[self.mode % len(self.MODES)]
+
     def prompt(self):
-        if self.mode == 1:
+        if self.kind() == "Selection":
             return "area and perimeter of the selection   [D: Points]"
+        if self.kind() == "Inside":
+            return "click inside a closed area   [D: Selection]"
         n = len(self.points)
         if n < 2:
-            return "click the corners of the contour   [D: Selection]"
-        return "next corner   [click the first point, or Enter: close and measure]   [D: Selection]"
+            return "click the corners of the contour   [D: Inside]"
+        return "next corner   [click the first point, or Enter: close and measure]   [D: Inside]"
+
+    def update_cursor(self, context, event):
+        region = find_window_region(self.area, event.mouse_x, event.mouse_y)
+        self._mouse = (event.mouse_x - region.x, event.mouse_y - region.y) if region is not None else None
+        super().update_cursor(context, event)
+
+    def inside_region(self):
+        try:
+            return region_under_mouse(self, bpy.context, self._mouse, islands=True)
+        except (ValueError, RuntimeError, ReferenceError, AttributeError):
+            return None
+
+    def inside_text(self, rg):
+        area, outer, total, cen = region_measure(rg)
+        text = self.result_text(area, outer)
+        if len(rg[4]) > 1:
+            n = len(rg[4]) - 1
+            text += f"   ({n} island{'s' if n > 1 else ''} deducted)"
+        return text, cen
 
     def area_text(self, a):
         k = self.unit_f * self.unit_f
@@ -1986,7 +2047,18 @@ class DESSIN_OT_mesure_aire(DessinBase):
 
     def compute(self):
         self.dim_label = None
-        if self.mode == 1:
+        self.hilite = []
+        if self.kind() == "Inside":
+            if self.last is not None:
+                self.dim_label = (self.last[1], self.last[0])
+            rg = self.inside_region()
+            if rg is None:
+                return [], [], (self.last[0] if self.last else "No closed area under the cursor"), None
+            self.hilite = region_hilite(rg)
+            text, cen = self.inside_text(rg)
+            self.dim_label = (cen, text)
+            return [], [], text, None
+        if self.kind() == "Selection":
             res = self.selection_result(bpy.context)
             if res is None:
                 return [], [], "Nothing selected (faces, closed curves or edge loops)", None
@@ -2022,13 +2094,30 @@ class DESSIN_OT_mesure_aire(DessinBase):
             context.window_manager.clipboard = text
         except (AttributeError, RuntimeError):
             pass
+        cmd_result("Area / Perimeter: " + text + "   (copied)")
         self.report({'INFO'}, text + "   (copied)")
         self.reset_state()
         self.refresh(context)
         return True
 
     def click(self, context):
-        if self.mode == 1:
+        if self.kind() == "Selection":
+            return
+        if self.kind() == "Inside":
+            rg = self.inside_region()
+            if rg is None:
+                self.report({'INFO'}, "Click inside an area closed by curves")
+                return
+            text, cen = self.inside_text(rg)
+            self.last = (text, cen)
+            try:
+                context.window_manager.clipboard = text
+            except (AttributeError, RuntimeError):
+                pass
+            cmd_result("Area / Perimeter: " + text + "   (copied)")
+            self.report({'INFO'}, text + "   (copied)")
+            self.reset_state()
+            self.refresh(context)
             return
         if len(self.points) >= 3 and (self.cur - self.points[0]).length <= 1e-6 * max(1.0, self.points[0].length):
             self.close_contour(context)
@@ -2038,7 +2127,7 @@ class DESSIN_OT_mesure_aire(DessinBase):
         self.refresh(context)
 
     def modal(self, context, event):
-        if (event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS' and self.mode == 0
+        if (event.type in {'RET', 'NUMPAD_ENTER'} and event.value == 'PRESS' and self.kind() == "Points"
                 and len(self.points) >= 3 and self.area is not None
                 and find_window_region(self.area, event.mouse_x, event.mouse_y) is not None
                 and not self.mouse_over_ui(event)):
@@ -2048,6 +2137,7 @@ class DESSIN_OT_mesure_aire(DessinBase):
 
     def cleanup(self, context):
         self.dim_label = None
+        self.hilite = []
         super().cleanup(context)
 
 
@@ -2148,22 +2238,19 @@ class DESSIN_PT_hatch(bpy.types.Panel):
             src = ob if is_hatch(ob) else hs[0]
             box = lay.box()
             box.label(text=f"Selected hatch{'es' if len(hs) > 1 else ''} ({len(hs)})", icon='MOD_LATTICE')
-            col = box.column(align=True)
-            col.prop(src.dessin_hatch, "pattern", text="")
-            col.prop(src.dessin_hatch, "scale")
-            col.prop(src.dessin_hatch, "rotation")
-            row = box.row(align=True)
-            row.operator(DESSIN_OT_hatch_base.bl_idname, text="Base Point")
-            row.operator(DESSIN_OT_hatch_match.bl_idname, text="Match")
-            row = box.row(align=True)
-            row.operator(DESSIN_OT_hatch_boundary.bl_idname, text="Boundary")
-            row.operator(DESSIN_OT_hatch_explode.bl_idname, text="Explode")
+            draw_hatch_editor(box, context, src)
         lay.label(text="New hatches")
-        col = lay.column(align=True)
+        row = lay.row()
+        row.template_icon_view(st, "hatch_pattern", show_labels=True, scale=5.0, scale_popup=4.0)
+        col = row.column(align=True)
         col.prop(st, "hatch_pattern", text="")
         col.prop(st, "hatch_scale")
         col.prop(st, "hatch_rotation")
         col.prop(st, "hatch_spacing")
+        row = lay.row(align=True)
+        row.operator("dessin.hatch_import", text="Import .pat", icon='IMPORT')
+        if st.hatch_pattern.startswith("PAT"):
+            row.operator("dessin.hatch_pattern_remove", text="", icon='X')
         lay.prop(st, "hatch_boundary")
         row = lay.row(align=True)
         row.operator(DESSIN_OT_hatch.bl_idname, text="Hatch")
@@ -2173,11 +2260,14 @@ class DESSIN_PT_hatch(bpy.types.Panel):
 def _late_imports():
     """Noms définis dans des modules chargés après celui-ci : ils ne servent qu'à l'exécution des outils."""
     global DESSIN_OT_hatch, DESSIN_OT_hatch_base, DESSIN_OT_hatch_boundary, DESSIN_OT_hatch_explode
-    global DESSIN_OT_hatch_match, DESSIN_OT_hatch_region, cmd_log, is_hatch
+    global region_hilite, region_measure, region_under_mouse
+    from .boundary import region_hilite, region_measure, region_under_mouse
+    global DESSIN_OT_hatch_match, DESSIN_OT_hatch_region, cmd_log, is_hatch, draw_hatch_editor
     from .hatch import (
         DESSIN_OT_hatch, DESSIN_OT_hatch_base, DESSIN_OT_hatch_boundary, DESSIN_OT_hatch_explode,
-    DESSIN_OT_hatch_match, DESSIN_OT_hatch_region, is_hatch,
+    DESSIN_OT_hatch_match, DESSIN_OT_hatch_region, draw_hatch_editor, is_hatch,
     )
-    from .cplane import cmd_log
+    global cmd_result
+    from .cplane import cmd_log, cmd_result
     global layout_dim_factor
     from .layout import layout_dim_factor

@@ -1,4 +1,4 @@
-"""Wanderer CAD : Gumball : poignées d'extrusion et de coupe, affichage."""
+"""Wanderer CAD : Gizmo : poignées d'extrusion et de coupe, affichage."""
 
 import bmesh
 import bpy
@@ -18,13 +18,13 @@ from .gumball import (
     gumball_axes, gumball_frozen, gumball_k, gumball_selection, gumball_selection_cached, gumball_typing,
 )
 from .surfaces import (
-    chain_open_paths, deselect_all_objects, extrude_general, extrude_surface, mesh_object_from_arrays, nest_groups,
+    chain_open_paths, deselect_all_objects, extrude_general, extrude_surface, mesh_object_from_arrays, nest_groups, smooth_and_clean,
     outline_paths,
 )
-from .lights import _GUMBALL_TOOLS, GUMBALL_TRANSFORM_TOOLS, _axis_matrix, _gz_set, gumball_flat_axes
+from .lights import _GUMBALL_TOOLS, GUMBALL_TRANSFORM_TOOLS, _axis_matrix, _gz_set, gumball_flat_axes, gumball_reach
 
 
-# ---------------- Gumball : poignées Extrude (sphère) et Cut (petit trait), comme le Gumball de Rhino 8 ----------------
+# ---------------- Gizmo : poignées Extrude (sphère) et Cut (petit trait), comme le Gizmo de Rhino 8 ----------------
 GB_DOT_POS = 0.50      # position de la sphère d'extrusion le long de la flèche (fraction de sa longueur)
 GB_BAR_POS = 0.34      # position du trait de coupe
 GB_DOT_R = 5.5         # rayon de la sphère (pixels d'interface) : assez grosse pour être attrapée, sans masquer la flèche
@@ -56,7 +56,7 @@ def _gb_box_tris(x, y, z):
 GB_DOT_TRIS = _gb_sphere_tris()
 GB_BAR_TRIS = _gb_box_tris(1.0, 0.2, 0.2)
 
-# ---------------- Gumball : arcs de rotation (quarts de cercle) et carrés de déplacement dans un plan, comme Rhino ----------------
+# ---------------- Gizmo : arcs de rotation (quarts de cercle) et carrés de déplacement dans un plan, comme Rhino ----------------
 # Les rotations étaient trois cercles entiers autour du centre : ils recouvraient la sphère d'extrusion et le trait de coupe
 # posés sur les flèches. Comme dans Rhino, ce sont maintenant des quarts de cercle, du côté opposé aux flèches (entre les deux
 # poignées d'échelle), et un petit carré dans l'angle de deux flèches déplace la sélection dans leur plan.
@@ -99,7 +99,7 @@ def gb_plane_tris():
 
 
 def gb_frame_matrix(origin, x, y, z, scale):
-    """Repère d'une poignée plane : ses axes X et Y sont deux axes du Gumball, Z leur normale."""
+    """Repère d'une poignée plane : ses axes X et Y sont deux axes du Gizmo, Z leur normale."""
     R = Matrix((x, y, z)).transposed().to_4x4()
     return Matrix.Translation(origin) @ R @ Matrix.Scale(scale, 4)
 
@@ -110,7 +110,7 @@ def gb_plane_axes(axes, a):
 
 
 class DESSIN_GT_gb_dot(bpy.types.Gizmo):
-    """Sphère d'extrusion du Gumball (une vraie poignée : Blender la surligne et la détecte lui-même)."""
+    """Sphère d'extrusion du Gizmo (une vraie poignée : Blender la surligne et la détecte lui-même)."""
     bl_idname = "DESSIN_GT_gb_dot"
     __slots__ = ("shape",)
 
@@ -126,7 +126,7 @@ class DESSIN_GT_gb_dot(bpy.types.Gizmo):
 
 
 class DESSIN_GT_gb_bar(bpy.types.Gizmo):
-    """Trait de coupe du Gumball (tirer / pousser de la matière)."""
+    """Trait de coupe du Gizmo (tirer / pousser de la matière)."""
     bl_idname = "DESSIN_GT_gb_bar"
     __slots__ = ("shape",)
 
@@ -142,7 +142,7 @@ class DESSIN_GT_gb_bar(bpy.types.Gizmo):
 
 
 class DESSIN_GT_gb_arc(bpy.types.Gizmo):
-    """Arc de rotation du Gumball : un quart de cercle, avec une zone cliquable un peu plus épaisse que le trait."""
+    """Arc de rotation du Gizmo : un quart de cercle, avec une zone cliquable un peu plus épaisse que le trait."""
     bl_idname = "DESSIN_GT_gb_arc"
     __slots__ = ("shape", "pick", "lw")
 
@@ -166,7 +166,7 @@ class DESSIN_GT_gb_arc(bpy.types.Gizmo):
         self.draw_custom_shape(self.pick, select_id=select_id)
 
 
-# proportions des flèches de Blender (GIZMO_GT_arrow_3d) qu'utilisait le Gumball : tige jusqu'à 1, pointe au-delà
+# proportions des flèches de Blender (GIZMO_GT_arrow_3d) qu'utilisait le Gizmo : tige jusqu'à 1, pointe au-delà
 GB_ARROW_L = 1.25          # bout de la pointe (la tige va jusqu'à 1, la pointe la prolonge, comme chez Blender)
 GB_CONE_H = 0.25           # pointe : hauteur et rayon (mêmes unités)
 GB_CONE_R = 0.06
@@ -194,11 +194,53 @@ def _gb_cone(z0, z1, r, sides=12):
 
 
 def gb_arrow_tris(style, r, grow=1.0):
-    """Flèche du Gumball le long de +Z (longueur 1) : tige de rayon r, puis une pointe (déplacement) ou un cube (échelle)."""
+    """Flèche du Gizmo le long de +Z (longueur 1) : tige de rayon r, puis une pointe (déplacement) ou un cube (échelle)."""
     if style == 'BOX':
         b = GB_BOX_R * grow
         return _gb_tube(0.0, GB_BOX_L - b, r) + [(x, y, z + GB_BOX_L) for x, y, z in _gb_box_tris(b, b, b)]
     return _gb_tube(0.0, GB_ARROW_L - GB_CONE_H, r) + _gb_cone(GB_ARROW_L - GB_CONE_H, GB_ARROW_L, GB_CONE_R * grow)
+
+
+GB_REACH_MIN = 30.0        # poignée d'échelle « jusqu'au bord » : longueur minimale à l'écran (pixels d'interface)
+GB_REACH_MAX = 4000.0      # au-delà, le pointillé n'est plus dessiné (le bout est hors de l'écran)
+GB_REACH_SQ = 4.5          # carré du bout : demi-côté (pixels d'interface)
+GB_REACH_PICK = 8.0        # zone cliquable autour du carré (demi-côté, pixels d'interface)
+GB_DASH = (3.0, 3.0)       # pointillé : trait, vide (pixels d'interface)
+
+
+def gb_reach_tris(reach, right, up, side, lw=1.0):
+    """Poignée d'échelle de Rhino, le long de +Z, en unités « longueur de flèche » : un pointillé du centre jusqu'au
+    bord de l'objet (reach) puis un petit carré vide, tourné vers la vue. right / up : axes de l'écran dans le repère de
+    la poignée ; side : direction de l'épaisseur du trait (perpendiculaire à l'axe, dans le plan de l'écran)."""
+    u = 1.0 / GUMBALL_PX
+    h = GB_REACH_SQ * u
+    t = max(lw, 1.0) * 0.5 * u
+    tris = []
+
+    def quad(a, b, c, d):
+        tris.extend((tuple(a), tuple(b), tuple(c), tuple(a), tuple(c), tuple(d)))
+    z = Vector((0.0, 0.0, 1.0))
+    s = side * t
+    on, off = GB_DASH[0] * u, GB_DASH[1] * u
+    pos = 7.0 * u
+    end = min(reach - h, GB_REACH_MAX * u)
+    while pos < end:
+        e = min(pos + on, end)
+        quad(z * pos - s, z * pos + s, z * e + s, z * e - s)
+        pos = e + off
+    c = z * reach
+    for a, b in ((right, up), (up, right)):          # deux barres le long de a, de part et d'autre, puis les deux autres
+        for sgn in (-1.0, 1.0):
+            o = c + b * (sgn * h)
+            quad(o - a * (h + t) - b * t, o + a * (h + t) - b * t, o + a * (h + t) + b * t, o - a * (h + t) + b * t)
+    return tris
+
+
+def gb_reach_pick_tris(reach):
+    """Zone cliquable de cette poignée : un cube autour du carré du bout (le pointillé, lui, ne se saisit pas : il
+    traverse l'objet et gênerait la sélection)."""
+    b = GB_REACH_PICK / GUMBALL_PX
+    return [(x, y, zz + reach) for x, y, zz in _gb_box_tris(b, b, b)]
 
 
 def gb_pixel_size():
@@ -209,15 +251,25 @@ def gb_pixel_size():
 
 
 class DESSIN_GT_gb_arrow(bpy.types.Gizmo):
-    """Flèche (déplacement) ou poignée à cube (échelle) du Gumball. Dessinée par Wanderer : pendant le glisser elle
+    """Flèche (déplacement) ou poignée à cube (échelle) du Gizmo. Dessinée par Wanderer : pendant le glisser elle
     s'éclaire simplement, sans la copie grise animée que les flèches de Blender laissent à leur place de départ."""
     bl_idname = "DESSIN_GT_gb_arrow"
-    __slots__ = ("shape", "pick", "lw", "style")
+    __slots__ = ("shape", "pick", "lw", "style", "reach")
 
     def shapes(self):
         lw = round(float(pref("gumball_line")), 1)
         style = getattr(self, "style", 'NORMAL')
         ps = gb_pixel_size()
+        reach = getattr(self, "reach", None)
+        if style == 'BOX' and reach is not None:
+            # poignée d'échelle jusqu'au bord de l'objet : refaite quand sa longueur ou l'angle de vue change
+            key = (lw, style, ps, reach[0]) + reach[1]
+            if getattr(self, "lw", None) != key:
+                r, right, up, side = reach[0], Vector(reach[1][0:3]), Vector(reach[1][3:6]), Vector(reach[1][6:9])
+                self.shape = self.new_custom_shape('TRIS', gb_reach_tris(r, right, up, side, 1.5))
+                self.pick = self.new_custom_shape('TRIS', gb_reach_pick_tris(r))
+                self.lw = key
+            return
         if getattr(self, "lw", None) != (lw, style, ps):
             # tige fine, indépendante de l'épaisseur des arcs (comme les flèches d'origine)
             self.shape = self.new_custom_shape('TRIS', gb_arrow_tris(style, GB_SHAFT * 0.5 / GUMBALL_PX))
@@ -237,7 +289,7 @@ class DESSIN_GT_gb_arrow(bpy.types.Gizmo):
 
 
 class DESSIN_GT_gb_plane(bpy.types.Gizmo):
-    """Carré de déplacement dans un plan, dans l'angle de deux flèches du Gumball."""
+    """Carré de déplacement dans un plan, dans l'angle de deux flèches du Gizmo."""
     bl_idname = "DESSIN_GT_gb_plane"
     __slots__ = ("shape",)
 
@@ -301,7 +353,7 @@ def edit_planar_face(context):
 
 
 def gumball_pull_info(context, axes, fresh=False):
-    """Axes du Gumball (indices) où la sphère d'extrusion (« ext ») et le trait de coupe (« cut ») s'affichent.
+    """Axes du Gizmo (indices) où la sphère d'extrusion (« ext ») et le trait de coupe (« cut ») s'affichent.
     - courbe plane : pas de sphère dans les directions de son plan (l'extrusion y serait plate) ; droite : pas le long d'elle
     - surface plane : comme une courbe plane ; solide entier : aucune poignée (on sélectionne une de ses faces)
     - trait de coupe : sur l'axe perpendiculaire à des courbes planes fermées, ou à la face plane sélectionnée."""
@@ -312,7 +364,7 @@ def gumball_pull_info(context, axes, fresh=False):
             tuple((o.name, o.data.total_face_sel, o.data.total_edge_sel, o.data.total_vert_sel) for o in context.objects_in_mode_unique_data)
         sig = (context.mode, names, tuple(round(c, 4) for a in axes for c in a))
         # refait au plus toutes les 0,3 s, et bien moins souvent si le calcul est long (gros maillage) : l'affichage du
-        # Gumball ne doit jamais ralentir la navigation
+        # Gizmo ne doit jamais ralentir la navigation
         if not fresh and sig == _GB_PULL["sig"] and now - _GB_PULL["t"] < max(0.3, 25.0 * _GB_PULL.get("cost", 0.0)):
             return _GB_PULL["res"]
         res = _gumball_pull_compute(context, axes)
@@ -424,7 +476,7 @@ def split_closed_shells(me):
 
 
 def gumball_cut(context, selected, paths, vec, boss):
-    """Trait de coupe du Gumball sur des courbes planes fermées : le prisme balayé par les courbes le long de vec est
+    """Trait de coupe du Gizmo sur des courbes planes fermées : le prisme balayé par les courbes le long de vec est
     retiré des solides qu'il traverse (comme BooleanDifference) ; avec Ctrl (boss), ou quand les courbes sont posées sur
     une face et qu'on tire vers l'extérieur, il leur est ajouté (BooleanUnion). (message d'erreur ou '', nb coupés, nb ajoutés)"""
     from mathutils.bvhtree import BVHTree
@@ -579,8 +631,8 @@ def gumball_cut(context, selected, paths, vec, boss):
 
 class DESSIN_OT_gumball_pull(GumballBase):
     bl_idname = "dessin.gumball_pull"
-    bl_label = "Gumball Extrude / Cut"
-    bl_description = ("Gumball handles like Rhino. Sphere: extrudes the curve, the flat surface or the selected faces along "
+    bl_label = "Gizmo Extrude / Cut"
+    bl_description = ("Gizmo handles like Rhino. Sphere: extrudes the curve, the flat surface or the selected faces along "
                       "the arrow (Shift: both sides). Short line: pushes or pulls material, a closed flat curve cuts the "
                       "solids on its way (Ctrl/Cmd: adds instead), a selected flat face is pushed or pulled like PushPull. "
                       "Drag, or click then type the distance and press Enter")
@@ -695,7 +747,7 @@ class DESSIN_OT_gumball_pull(GumballBase):
         except (RuntimeError, ValueError, ReferenceError, IndexError, np.linalg.LinAlgError) as ex:
             msg = str(ex) or "failed"
         if msg:
-            self.report({'WARNING'}, "Gumball: " + msg)
+            self.report({'WARNING'}, "Gizmo: " + msg)
             return {'CANCELLED'}
         return {'FINISHED'}
 
@@ -738,7 +790,7 @@ class DESSIN_OT_gumball_pull(GumballBase):
             closed = [(P, c) for P, c in self.paths if c]
             msg, ncut, nadd = gumball_cut(context, objs, closed, vec, self.ctrl)
             if not msg:
-                self.report({'INFO'}, f"Gumball: {ncut} solid(s) cut, {nadd} extended")
+                self.report({'INFO'}, f"Gizmo: {ncut} solid(s) cut, {nadd} extended")
             return msg
         groups = [[(P, c) for P, c in self.paths]]
         if any(not c for _P, c in self.paths):
@@ -754,7 +806,7 @@ class DESSIN_OT_gumball_pull(GumballBase):
             else:
                 V, F = extrude_surface(paths, vec, True)
             if len(F):
-                mesh_object_from_arrays(context, "Extrusion", V, F, Vector(paths[0][0][0]), True)
+                smooth_and_clean(mesh_object_from_arrays(context, "Extrusion", V, F, Vector(paths[0][0][0]), True))
                 made += 1
         if made:                                        # comme Rhino : la courbe reste sélectionnée, on peut continuer
             deselect_all_objects(context)
@@ -766,7 +818,7 @@ class DESSIN_OT_gumball_pull(GumballBase):
 
 class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
     bl_idname = "DESSIN_GGT_gumball"
-    bl_label = "Gumball"
+    bl_label = "Gizmo"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'WINDOW'
     bl_options = {'3D', 'PERSISTENT'}
@@ -825,7 +877,7 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
                 self.gz_plane.append(gz)
         except Exception:
             self.gz_plane = []
-        # sphère d'extrusion et trait de coupe (comme le Gumball de Rhino) : créés à part, pour qu'une erreur ici ne retire
+        # sphère d'extrusion et trait de coupe (comme le Gizmo de Rhino) : créés à part, pour qu'une erreur ici ne retire
         # jamais les flèches
         self.gz_ext, self.gz_cut = [], []
         try:
@@ -844,7 +896,7 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
             self.gz_ext, self.gz_cut = [], []
 
     def place(self, context):
-        frozen = gumball_frozen(context)            # transformation en cours : le Gumball suit la sélection (Rhino)
+        frozen = gumball_frozen(context)            # transformation en cours : le Gizmo suit la sélection (Rhino)
         pivot, top = (frozen[0], [True]) if frozen is not None else gumball_selection_cached(context)
         rv3d, region = context.region_data, context.region
         planes = getattr(self, "gz_plane", [])
@@ -859,10 +911,11 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
         px = max(abs(v.w), 1e-6) / (0.5 * region.width * proj)      # unités monde par pixel au centre
         px *= gumball_k(context)
         axes = frozen[1] if frozen is not None else gumball_axes(context)
+        reach = gumball_reach(context, pivot, axes, live=frozen is not None) if pref("gumball_reach") else None
         for a in range(3):
             d = axes[a]
             self.gz_move[a].matrix_basis = _axis_matrix(pivot, d, GUMBALL_PX * px)
-            self.gz_scale[a].matrix_basis = _axis_matrix(pivot, -d, GUMBALL_PX * 0.98 * px)
+            gb_place_scale(self.gz_scale[a], pivot, d, px, reach[a] if reach is not None else None, rv3d)
             bx, by = gb_plane_axes(axes, a)
             # arc de rotation : quart de cercle entre les deux poignées d'échelle (côté opposé aux flèches)
             self.gz_rot[a].matrix_basis = gb_frame_matrix(pivot, bx, by, d, GUMBALL_PX * GB_ARC_R * px)
@@ -870,9 +923,13 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
                 planes[a].matrix_basis = gb_frame_matrix(pivot, bx, by, d, GUMBALL_PX * px)
         for gz in every:
             gz.hide = False
+        gumball_yield_native(self, context, every, pulls)
         flat = gumball_flat_axes(context, axes)
         for a in flat:
             self.gz_scale[a].hide = True
+        if gumball_no_scale(context):   # Sun seul : l'échelle ne lui fait rien, et sa poignée couvrait le point de direction
+            for gz in self.gz_scale:
+                gz.hide = True
         if gumball_typing():            # valeur tapée dans la bulle : seules les flèches de déplacement restent (Rhino)
             for gz in self.gz_scale + self.gz_rot + planes + pulls:
                 gz.hide = True
@@ -918,6 +975,72 @@ class DESSIN_GGT_gumball(bpy.types.GizmoGroup):
             pass
 
 
+def gb_reach_len(reach_world, px):
+    """Longueur à l'écran (unités « longueur de flèche ») d'une poignée d'échelle qui va jusqu'au bord de l'objet."""
+    return max(reach_world / (GUMBALL_PX * px), GB_REACH_MIN / GUMBALL_PX)
+
+
+def gb_place_scale(gz, pivot, d, px, reach_world, rv3d):
+    """Pose une poignée d'échelle à l'opposé de la flèche d. reach_world : distance jusqu'au bord de la sélection
+    (poignée de Rhino : pointillé jusqu'au bord + carré) ; None : poignée courte de longueur fixe."""
+    if reach_world is None:
+        gz.matrix_basis = _axis_matrix(pivot, -d, GUMBALL_PX * 0.98 * px)
+        _gz_set(gz, reach=None)
+        return
+    gz.matrix_basis = _axis_matrix(pivot, -d, GUMBALL_PX * px)
+    inv = Vector((0.0, 0.0, 1.0)).rotation_difference(-d).inverted()
+    q = rv3d.view_rotation
+    right, up, fwd = inv @ (q @ Vector((1.0, 0.0, 0.0))), inv @ (q @ Vector((0.0, 1.0, 0.0))), inv @ (q @ Vector((0.0, 0.0, 1.0)))
+    side = Vector((0.0, 0.0, 1.0)).cross(fwd)
+    side = side.normalized() if side.length > 1e-4 else right.copy()       # poignée vue de bout : n'importe quel côté
+    vecs = tuple(round(c, 2) for v in (right, up, side) for c in v)
+    _gz_set(gz, reach=(round(gb_reach_len(reach_world, px) * GUMBALL_PX * 2.0) / (2.0 * GUMBALL_PX), vecs))
+
+
+GB_NATIVE_TYPES = frozenset({'LIGHT', 'CAMERA', 'EMPTY'})   # objets qui ont leurs propres poignées dans Blender
+GB_YIELD = 1.0e5        # recul du Gizmo pour le clic (unités de profondeur) : plus grand que la profondeur d'une scène
+
+
+def gumball_yields(context):
+    """L'objet actif (sélectionné) a ses propres poignées Blender : elles passent avant celles du Gizmo."""
+    try:
+        if context.mode != 'OBJECT':
+            return False
+        ob = context.view_layer.objects.active
+        return ob is not None and ob.type in GB_NATIVE_TYPES and ob.select_get()
+    except (AttributeError, ReferenceError, RuntimeError):
+        return False
+
+
+def gumball_yield_native(group, context, every, pulls):
+    """Lampe, caméra, empty : Blender y pose ses propres poignées (direction du Sun, cône du Spot, taille de l'Area,
+    focale...). Là où elles se superposent au Gizmo, c'est la poignée de Blender qui est saisie : le Gizmo passe
+    derrière pour le clic (select_bias négatif) ; il reste devant pour tous les autres objets."""
+    try:
+        on = gumball_yields(context)
+        if getattr(group, "_yield", None) == on:
+            return
+        group._yield = on
+        off = -GB_YIELD if on else 0.0
+        for gz in every:
+            _gz_set(gz, select_bias=1.0 + off)
+        for gz in pulls:
+            _gz_set(gz, select_bias=2.0 + off)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+
+
+def gumball_no_scale(context):
+    """La sélection n'est faite que de lampes Sun : leur échelle ne change rien (ni l'éclairage ni le dessin)."""
+    try:
+        if context.mode != 'OBJECT':
+            return False
+        sel = context.selected_objects
+        return bool(sel) and all(o.type == 'LIGHT' and o.data.type == 'SUN' for o in sel)
+    except (AttributeError, ReferenceError, RuntimeError):
+        return False
+
+
 _NATIVE_GIZMOS = {"pending": False}
 _GZ_BASE = {}       # couleur d'origine des poignées éclairées par Wanderer (Alt maintenu)
 
@@ -945,10 +1068,10 @@ def alt_hover_light(group, context):
 
 
 class DESSIN_OT_gumball_alt_hover(bpy.types.Operator):
-    """Suit la souris tant qu'Alt est maintenu, pour éclairer la poignée du Gumball qu'Alt + glisser va copier.
+    """Suit la souris tant qu'Alt est maintenu, pour éclairer la poignée du Gizmo qu'Alt + glisser va copier.
     Laisse toujours passer l'évènement (navigation, autres raccourcis)."""
     bl_idname = "dessin.gumball_alt_hover"
-    bl_label = "Gumball handle under the mouse (Alt)"
+    bl_label = "Gizmo handle under the mouse (Alt)"
     bl_options = {'INTERNAL'}
 
     def invoke(self, context, event):
@@ -979,8 +1102,8 @@ _EDIT_MODES = {'MESH': 'EDIT_MESH', 'CURVE': 'EDIT_CURVE', 'SURFACE': 'EDIT_SURF
 
 
 def tool_gizmo_sync(windows):
-    """Masque le gizmo des outils Move / Rotate / Scale / Transform de Blender quand le Gumball les remplace, et le rend dès
-    qu'on change d'outil ou qu'on éteint le Gumball. Ne touche qu'aux vues qu'il a lui-même modifiées."""
+    """Masque le gizmo des outils Move / Rotate / Scale / Transform de Blender quand le Gizmo les remplace, et le rend dès
+    qu'on change d'outil ou qu'on éteint le Gizmo. Ne touche qu'aux vues qu'il a lui-même modifiées."""
     for win in windows:
         try:
             act = win.view_layer.objects.active
@@ -1034,7 +1157,7 @@ def tool_gizmo_restore():
 
 
 def _native_gizmos_off():
-    """Coupe les gizmos Déplacer / Pivoter / Échelle de Blender (le Gumball les remplace) dans toutes les vues 3D."""
+    """Coupe les gizmos Déplacer / Pivoter / Échelle de Blender (le Gizmo les remplace) dans toutes les vues 3D."""
     _NATIVE_GIZMOS["pending"] = False
     if not native_gizmos_hidden():
         return None
@@ -1054,7 +1177,7 @@ def _native_gizmos_off():
 
 
 def native_gizmos_hidden():
-    """Les gizmos natifs sont masqués (le Gumball les remplace) tant qu'aucun outil Move / Rotate / Scale / Transform de Blender n'est affiché."""
+    """Les gizmos natifs sont masqués (le Gizmo les remplace) tant qu'aucun outil Move / Rotate / Scale / Transform de Blender n'est affiché."""
     return not any(pref(k) for k in ("show_tool_move", "show_tool_rotate", "show_tool_scale", "show_tool_transform"))
 
 
@@ -1076,7 +1199,7 @@ def _update_native_gizmos():
         pass
 
 
-EXT_BALL_ENABLED = False   # poignée d'extrusion orange du Gumball : retirée pour l'instant (clic non fiable)
+EXT_BALL_ENABLED = False   # poignée d'extrusion orange du Gizmo : retirée pour l'instant (clic non fiable)
 EXT_BALL_R = 5.0      # rayon de la boule d'extrusion (pixels, avant échelle de l'interface)
 
 
@@ -1086,15 +1209,15 @@ _EXT_BALL = {"handle": None, "hover": False}
 
 
 # Commandes modales de Blender qui travaillent sur la géométrie (Move, Rotate, Loop Cut, Knife, Bevel...) : pendant qu'elles
-# tournent, le Gumball s'efface. Les autres opérateurs modaux ne comptent pas : certains add-ons en laissent un tourner en
-# permanence (la barre d'assets de BlenderKit, par exemple), et le Gumball ne s'affichait alors plus jamais.
+# tournent, le Gizmo s'efface. Les autres opérateurs modaux ne comptent pas : certains add-ons en laissent un tourner en
+# permanence (la barre d'assets de BlenderKit, par exemple), et le Gizmo ne s'affichait alors plus jamais.
 _EDIT_MODAL_PREFIXES = ("TRANSFORM_OT", "MESH_OT", "CURVE_OT", "OBJECT_OT", "ARMATURE_OT", "SCULPT_OT", "UV_OT",
                         "GPENCIL_OT", "GREASE_PENCIL_OT", "VIEW3D_OT_ruler", "VIEW3D_OT_edit_mesh_extrude", "VIEW3D_OT_select_box")
 
 
 def foreign_modal(context):
     """True si une commande modale de Blender qui modifie la géométrie (Loop Cut, Knife, Bevel, Move...) est en cours : le
-    Gumball s'efface alors et ne touche pas au maillage en édition pendant qu'elle travaille."""
+    Gizmo s'efface alors et ne touche pas au maillage en édition pendant qu'elle travaille."""
     try:
         for op in context.window.modal_operators:
             idn = op.bl_idname
@@ -1109,7 +1232,7 @@ def foreign_modal(context):
 
 def extrude_ball_pos(context, region=None, rv3d=None):
     """Position écran (région, pixels) de la boule d'extrusion, ou None quand elle n'est pas affichée.
-    Elle est sur la flèche du Gumball la plus proche de la normale des faces / arêtes sélectionnées."""
+    Elle est sur la flèche du Gizmo la plus proche de la normale des faces / arêtes sélectionnées."""
     if not EXT_BALL_ENABLED:
         return None
     try:
@@ -1171,7 +1294,7 @@ def extrude_ball_hit(context, mx, my, region=None, rv3d=None):
 
 
 def gumball_handle_at(context, mx, my, region, rv3d):
-    """(type, axe) de la poignée du Gumball sous le point (région, pixels), ou None.
+    """(type, axe) de la poignée du Gizmo sous le point (région, pixels), ou None.
     Sert quand Alt est maintenu : Blender n'active alors pas toujours les poignées lui-même."""
     try:
         if not context.scene.dessin.gumball or foreign_modal(context):
@@ -1199,6 +1322,9 @@ def gumball_handle_at(context, mx, my, region, rv3d):
 
     axes = gumball_axes(context)
     flat = gumball_flat_axes(context, axes)
+    if gumball_no_scale(context):
+        flat = frozenset(range(3))
+    reach = gumball_reach(context, pivot, axes) if pref("gumball_reach") else None
     for a in range(3):
         d = axes[a]
         tip = project_px(rv3d, region, pivot + d * (GUMBALL_PX * px))
@@ -1206,9 +1332,13 @@ def gumball_handle_at(context, mx, my, region, rv3d):
             dist = seg_dist(sp, tip)
             if dist <= 9.0 * sc and dist < best_d:
                 best, best_d = ('MOVE', a), dist
-        tip2 = project_px(rv3d, region, pivot - d * (GUMBALL_PX * 0.98 * px))
+        if reach is not None:               # poignée jusqu'au bord de l'objet : seul le carré du bout se saisit
+            tip2 = project_px(rv3d, region, pivot - d * (gb_reach_len(reach[a], px) * GUMBALL_PX * px))
+            dist = (tip2 - m).length if tip2 is not None else 1e9
+        else:
+            tip2 = project_px(rv3d, region, pivot - d * (GUMBALL_PX * 0.98 * px))
+            dist = seg_dist(sp, tip2) if tip2 is not None else 1e9
         if tip2 is not None and a not in flat:
-            dist = seg_dist(sp, tip2)
             if dist <= 9.0 * sc and dist < best_d:
                 best, best_d = ('SCALE', a), dist
         bu, bv = gb_plane_axes(axes, a)
@@ -1230,7 +1360,7 @@ def gumball_handle_at(context, mx, my, region, rv3d):
 
 
 class DESSIN_PT_gumball(bpy.types.Panel):
-    bl_label = "Gumball"
+    bl_label = "Gizmo"
     bl_idname = "DESSIN_PT_gumball"
     bl_space_type = 'VIEW_3D'
     bl_region_type = 'UI'

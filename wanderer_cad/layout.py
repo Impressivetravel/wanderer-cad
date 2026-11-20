@@ -14,6 +14,7 @@ from mathutils import Euler, Matrix, Quaternion, Vector
 
 from . import layout_engine as le
 from .core import cp_set, cp_state, idle_tool, lang
+from .linetypes import PATTERN as LT_PATTERN, dash_pattern_paths
 from .base import DessinBase
 from .drawing import find_window_region, get_shader, line_px, px_scale
 from .layers import draw_layer_print_table, draw_object_print_width, layer_print_width
@@ -37,7 +38,7 @@ Z_IMAGE = -0.1                   # images (logo, photos) : au-dessus du papier, 
 ISO_TILT = math.acos(1.0 / math.sqrt(3.0))
 ISO_TURN = {'ISO_SE': 45.0, 'ISO_SW': -45.0, 'ISO_NE': 135.0, 'ISO_NW': -135.0}
 
-_STATE = {"busy": False, "views": {}, "model_ver": {}, "built": {}, "cache": {}, "last_model": {}, "paper": set(), "items": None,
+_STATE = {"busy": False, "views": {}, "look": {}, "model_ver": {}, "built": {}, "cache": {}, "last_model": {}, "paper": set(), "items": None,
           "hold": 0.0, "active_vp": None}
 # hold : heure du dernier Annuler / Rétablir. Tant que rien d'autre n'a changé, le minuteur ne retouche pas la mise en page :
 # l'état affiché est celui d'un pas de l'historique, et Annuler / Rétablir continuent de le parcourir normalement
@@ -45,7 +46,9 @@ _STATE = {"busy": False, "views": {}, "model_ver": {}, "built": {}, "cache": {},
 # active_vp : nom de la fenêtre dans laquelle on travaille (double-clic dedans, comme l'espace objet d'AutoCAD) ; None sinon
 
 PAPER_ITEMS = [(k, n, "") for k, n, _w, _h in le.PAPERS] + [('CUSTOM', "Custom", "Width and height typed below")]
-SCALE_ITEMS = [(k, n, "") for k, n, _d in le.SCALES] + [('CUSTOM', "Custom", "Scale typed below")]
+# (les échelles en pieds et pouces viennent après « Custom » : les numéros des anciennes ne bougent pas dans les fichiers)
+SCALE_ITEMS = ([(k, n, "") for k, n, _d in le.SCALES] + [('CUSTOM', "Custom", "Scale typed below")]
+               + [(k, n, "") for k, n, _d in le.SCALES_IMPERIAL])
 VIEW_ITEMS = (
     ('TOP', "Top", ""), ('FRONT', "Front", ""), ('RIGHT', "Right", ""), ('LEFT', "Left", ""), ('BACK', "Back", ""),
     ('BOTTOM', "Bottom", ""),
@@ -170,6 +173,23 @@ def detail_model(obj):
         pass
     sc = obj_scene(obj)
     return layout_model(sc) if sc is not None else None
+
+
+def model_imperial(model):
+    """Le modèle est-il en pieds et pouces ? (échelles écrites 1/4" = 1'-0")"""
+    try:
+        return model is not None and model.unit_settings.system == 'IMPERIAL'
+    except (AttributeError, ReferenceError):
+        return False
+
+
+def detail_imperial(d):
+    """d : réglages d'une fenêtre (ou la fenêtre elle-même)."""
+    try:
+        obj = d if isinstance(d, bpy.types.Object) else d.id_data
+        return model_imperial(detail_model(obj))
+    except (AttributeError, ReferenceError):
+        return False
 
 
 def detail_quat(d):
@@ -633,7 +653,7 @@ def title_scale_text(scene):
     if not dens:
         return ""
     if len(dens) == 1:
-        return le.fmt_scale(dens[0])
+        return le.fmt_scale(dens[0], model_imperial(layout_model(scene)))
     return _tr("As noted")
 
 
@@ -715,6 +735,25 @@ def detail_projector(d):
     return le.Projector(detail_quat(d), d.persp, tuple(d.center), d.cam_dist)
 
 
+ITEMS_FRESH = 1.0        # s : une relecture forcée (Update) vaut pour toutes les fenêtres redessinées dans la foulée
+
+
+def model_items(model, d, fresh=False):
+    """Le modèle lu pour une fenêtre (objets visibles, calques masqués dans cette fenêtre). Gardé tant que le modèle ne
+    change pas : les fenêtres d'une planche qui montrent les mêmes calques le lisent une seule fois. fresh : relu
+    (bouton Update), sauf s'il vient de l'être."""
+    if _look_changed(model):         # couleur, visibilité, type de ligne changés sans que Blender l'ait signalé
+        _STATE["model_ver"][model.name] = _STATE["model_ver"].get(model.name, 0) + 1
+    key = (model.name, model_version(model), d.hidden_layers, bool(d.show_annotations))
+    got = _STATE.get("items")
+    now = time.monotonic()
+    if got is not None and got[0] == key and (not fresh or now - got[2] < ITEMS_FRESH):
+        return got[1]
+    items = le.collect_model(model, detail_hidden(d), d.show_annotations)
+    _STATE["items"] = (key, items, time.monotonic())
+    return items
+
+
 def detail_projection(obj, force=False):
     """(projection du modèle dans la vue du détail, projecteur) ; la projection est gardée tant que rien ne change."""
     d = obj.dessin_detail
@@ -729,13 +768,7 @@ def detail_projection(obj, force=False):
     _wait_cursor(True)                 # gros modèle : la lecture et les lignes cachées prennent quelques secondes
     try:
         # les détails d'une même mise en page lisent le modèle une seule fois (gardé le temps de la série, pas au-delà)
-        key = (model.name, model_version(model), d.hidden_layers, bool(d.show_annotations))
-        got = _STATE.get("items")
-        if got is not None and got[0] == key:
-            items = got[1]
-        else:
-            items = le.collect_model(model, detail_hidden(d), d.show_annotations)
-            _STATE["items"] = (key, items)
+        items = model_items(model, d, force)
         P = le.project_model(items, proj, d.display, math.degrees(d.sharp_angle), d.tangent_edges)
     finally:
         _wait_cursor(False)
@@ -782,7 +815,7 @@ def detail_label_text(d):
     cap = detail_caption(d)
     if d.persp:
         return cap
-    return f"{cap}   {le.fmt_scale(d.scale)}"
+    return f"{cap}   {le.fmt_scale(d.scale, detail_imperial(d))}"
 
 
 DRESS_ROLES = ('label', 'mark')         # habillage d'un détail : étiquette / titre de dessin, échelle graphique, repères
@@ -889,7 +922,7 @@ def detail_dress(obj, L, d):
             r = s * 1.25
             cx, cy = x0 + r, yb - s * 0.7 - r
             cap = detail_caption(d)
-            sct = "" if d.persp else _tr("Scale") + " " + le.fmt_scale(d.scale)
+            sct = "" if d.persp else _tr("Scale") + " " + le.fmt_scale(d.scale, detail_imperial(d))
             tw = max(len(cap) * 0.58 * s * 1.15, len(sct) * 0.58 * s * 0.8, 20.0)
             lx0 = cx + r
             marks.append(([(cx + r * math.cos(t), cy + r * math.sin(t)) for t in np.linspace(0.0, 2.0 * math.pi, 49)[:-1]], True))
@@ -1030,8 +1063,12 @@ def detail_rebuild(obj, force=False):
                     tagged(_child(obj, f"{obj.name} hidden dashes", cu, 'hid_show', shade), 'hid_show', shade, tag)
                     n += 2
                 else:
+                    if role == 'vis' and len(tag) > 2 and tag[2] and LT_PATTERN.get(tag[2]):
+                        paths = dash_pattern_paths(paths, LT_PATTERN[tag[2]])     # type de ligne : tirets en mm de papier
                     cu = _new_curve("Viewport " + role, paths)
-                    tagged(_child(obj, f"{obj.name} {'lines' if role == 'vis' else 'annotations'}", cu, role, col), role, col, tag)
+                    ch_ = tagged(_child(obj, f"{obj.name} {'lines' if role == 'vis' else 'annotations'}", cu, role, col), role, col, tag)
+                    if len(tag) > 2 and tag[2]:
+                        ch_["wd_lt"] = tag[2]
                     n += 1
             if geo["fills"]:
                 loops, counts, colors, flags, lays = [], [], [], [], []
@@ -1099,10 +1136,10 @@ def detail_create(scene, cx, cy, w, h, view='TOP', scale=None, fit=True, name=No
     return obj
 
 
-def fit_scale(extent_w, extent_h, w, h, mm, margin=0.9):
+def fit_scale(extent_w, extent_h, w, h, mm, margin=0.9, imperial=False):
     """Plus grande échelle normalisée où (extent_w x extent_h unités du modèle) tient dans (w x h mm)."""
     need = max(extent_w * mm / max(w * margin, 1e-9), extent_h * mm / max(h * margin, 1e-9), 1e-9)
-    for _k, _n, den in le.SCALES:
+    for _k, _n, den in sorted(le.scale_list(imperial), key=lambda x: x[2]):
         if den >= need * (1.0 - 1e-9):
             return den
     mag = 10.0 ** math.floor(math.log10(need))
@@ -1118,7 +1155,7 @@ def detail_extent(obj):
     model = detail_model(obj)
     if model is None:
         return None, None
-    items = le.collect_model(model, detail_hidden(d), d.show_annotations)
+    items = model_items(model, d)
     proj = le.Projector(detail_quat(d), False)
     ext = le.model_extent(items, proj)
     if ext is None:
@@ -1140,7 +1177,8 @@ def detail_fit(obj, pick_scale=True, rebuild=True):
     with quiet():
         d.center = c
         if pick_scale:
-            den = fit_scale(ext[2] - ext[0], ext[3] - ext[1], d.width, d.height, mm_per_unit(detail_model(obj)))
+            den = fit_scale(ext[2] - ext[0], ext[3] - ext[1], d.width, d.height, mm_per_unit(detail_model(obj)),
+                            imperial=detail_imperial(obj))
             d.scale = den
             d.scale_preset = le.scale_preset(den)
     if rebuild:
@@ -1356,7 +1394,7 @@ def dim_link(scene, o, data=None, det='AUTO'):
 
 
 def _dim_moved(o, data):
-    """Déplacement donné à la main à une cote (gumball, Move) depuis sa dernière construction : (dx, dy) ou None."""
+    """Déplacement donné à la main à une cote (gizmo, Move) depuis sa dernière construction : (dx, dy) ou None."""
     lorg = data.get("lorg")
     if not lorg or (abs(o.location.x - lorg[0]) < 1e-4 and abs(o.location.y - lorg[1]) < 1e-4):
         return None
@@ -1943,6 +1981,47 @@ def _redraw():
 # Suivi : modèle modifié, détails déplacés / redimensionnés / copiés / supprimés
 # --------------------------------------------------------------------------
 
+def _real_update(depsgraph):
+    """Le graphe signale-t-il une vraie modification (géométrie ou position d'un objet) ?"""
+    try:
+        # (les collections et la scène se signalent à chaque réveil du graphe : seuls les objets et leurs données comptent)
+        return any((u.is_updated_geometry or u.is_updated_transform)
+                   and not isinstance(u.id, (bpy.types.Collection, bpy.types.Scene)) for u in depsgraph.updates)
+    except (AttributeError, ReferenceError, TypeError):
+        return True
+
+
+def _look_changed(scene):
+    """Couleurs, visibilité, types de ligne du modèle : ont-ils changé depuis la dernière lecture ? (Une couleur changée
+    depuis une mise en page, par le panneau des calques, n'est signalée par Blender qu'à la lecture suivante.)"""
+    try:
+        h = 0
+        for o in scene.objects:
+            c = o.color
+            h = hash((h, o.name, round(c[0], 4), round(c[1], 4), round(c[2], 4), o.hide_viewport, o.hide_render,
+                      o.get("wd_lt"), o.display_type))
+        for c in bpy.data.collections:
+            pg = getattr(c, "dessin_layer", None)
+            if pg is not None:
+                k = pg.color
+                h = hash((h, c.name, c.hide_viewport, c.hide_render, round(k[0], 4), round(k[1], 4), round(k[2], 4),
+                          bool(pg.use_color), getattr(pg, "linetype", "")))
+        for lc in _layer_cols(scene.view_layers[0].layer_collection):
+            h = hash((h, lc.exclude, lc.hide_viewport))
+    except (AttributeError, ReferenceError, IndexError, TypeError):
+        return True
+    looks = _STATE.setdefault("look", {})
+    old = looks.get(scene.name)
+    looks[scene.name] = h
+    return old is not None and old != h
+
+
+def _layer_cols(lc):
+    yield lc
+    for ch in lc.children:
+        yield from _layer_cols(ch)
+
+
 @persistent
 def layout_on_depsgraph(scene=None, depsgraph=None, *args):
     """Une scène de modèle a changé : ses détails seront redessinés à la prochaine ouverture d'une mise en page."""
@@ -1950,6 +2029,9 @@ def layout_on_depsgraph(scene=None, depsgraph=None, *args):
         if _STATE["hold"] and time.monotonic() - _STATE["hold"] > 0.5:
             _STATE["hold"] = 0.0        # quelque chose a changé depuis le dernier Annuler / Rétablir : l'entretien reprend
         if scene is not None and not is_layout(scene):
+            if le.READING["on"] and not _real_update(depsgraph):
+                return      # la lecture du modèle par une fenêtre réveille son graphe : rien n'a changé, les autres fenêtres
+                            # ne sont pas à redessiner (chaque redessin invalidait toutes les autres, et les exports)
             _STATE["model_ver"][scene.name] = _STATE["model_ver"].get(scene.name, 0) + 1
     except (AttributeError, ReferenceError):
         pass
@@ -1995,7 +2077,7 @@ def layout_after_command(context, op=None):
 
 @persistent
 def layout_on_load(*args):
-    for key in ("views", "model_ver", "built", "cache", "last_model", "paper"):
+    for key in ("views", "model_ver", "built", "cache", "last_model", "paper", "look"):
         _STATE[key].clear()
     _STATE["busy"] = False
     _STATE["items"] = None
@@ -2786,7 +2868,8 @@ class DESSIN_OT_detail_fit(bpy.types.Operator):
 class DESSIN_OT_detail_scale(bpy.types.Operator):
     bl_idname = "dessin.detail_scale"
     bl_label = "Viewport Scale"
-    bl_description = "Sets the scale of the selected viewports: type 1:20, 1/50, 2:1, or just 25 for 1:25"
+    bl_description = ("Sets the scale of the selected viewports: type 1:20, 1/50, 2:1, or just 25 for 1:25; "
+                      "or an architectural scale such as 1/4\" = 1'-0\" or 1\" = 10'")
     bl_options = {'REGISTER', 'UNDO'}
 
     text: bpy.props.StringProperty(name="Scale", default="1:10")
@@ -2800,7 +2883,7 @@ class DESSIN_OT_detail_scale(bpy.types.Operator):
         if not objs:
             self.report({'INFO'}, "Select a viewport first (click its border)")
             return {'CANCELLED'}
-        self.text = le.fmt_scale(objs[0].dessin_detail.scale)
+        self.text = le.fmt_scale(objs[0].dessin_detail.scale, detail_imperial(objs[0]))
         return context.window_manager.invoke_props_dialog(self, width=240)
 
     def draw(self, context):
@@ -2809,7 +2892,7 @@ class DESSIN_OT_detail_scale(bpy.types.Operator):
     def execute(self, context):
         den = le.parse_scale(self.text)
         if den is None:
-            self.report({'WARNING'}, "Type a scale such as 1:20, 2:1 or 25")
+            self.report({'WARNING'}, "Type a scale such as 1:20, 2:1, 25 or 1/4\" = 1'-0\"")
             return {'CANCELLED'}
         n = 0
         for o in selected_details(context):
@@ -3045,7 +3128,7 @@ class DESSIN_OT_detail_pan(bpy.types.Operator):
             d = o.dessin_detail
             if d.locked:
                 return {'RUNNING_MODAL'}
-            dens = [den for _k, _n, den in le.SCALES]
+            dens = [den for _k, _n, den in le.scale_list(detail_imperial(o))]
             if et == 'WHEELUPMOUSE':
                 nxt = max([x for x in dens if x < d.scale * (1 - 1e-9)], default=None)
             else:
@@ -3104,7 +3187,7 @@ class DESSIN_OT_detail_text_match(bpy.types.Operator):
         for d in details(cur):
             if detail_model(d) == model:
                 detail_rebuild(d, force=True)
-        self.report({'INFO'}, f"Model text height: {h:.4g} (prints {self.height:g} mm at {le.fmt_scale(o.dessin_detail.scale)})")
+        self.report({'INFO'}, f"Model text height: {h:.4g} (prints {self.height:g} mm at {le.fmt_scale(o.dessin_detail.scale, detail_imperial(o))})")
         return {'FINISHED'}
 
 
@@ -3244,7 +3327,7 @@ class DESSIN_OT_layout_export_dxf(_LayoutExport, bpy.types.Operator):
 
 # --------------------------------------------------------------------------
 # Poignées d'une fenêtre sélectionnée, comme les grips d'AutoCAD : 4 aux coins pour la redimensionner (le coin opposé ne
-# bouge pas, le modèle reste à sa place sur la feuille), 1 au centre pour la déplacer (quand le Gumball est coupé, sinon
+# bouge pas, le modèle reste à sa place sur la feuille), 1 au centre pour la déplacer (quand le Gizmo est coupé, sinon
 # c'est lui qui la déplace), 1 triangle qui ouvre la liste d'échelles.
 # --------------------------------------------------------------------------
 GRIP_CORNERS = ((-1, -1), (1, -1), (1, 1), (-1, 1))
@@ -3253,7 +3336,7 @@ GRIP_PX = 4.5                     # demi-côté d'une poignée, en pixels d'inte
 GRIP_MIN = 2.0                    # plus petit côté d'une fenêtre (mm)
 GRIP_COLOR = (0.05, 0.36, 0.95)   # bleu des poignées d'AutoCAD
 GRIP_HOT = (1.0, 0.36, 0.26)      # poignée survolée
-GRIP_SCALE_OFFSET = (20.0, -20.0)  # le triangle d'échelle, en pixels depuis le centre (hors des flèches du Gumball)
+GRIP_SCALE_OFFSET = (20.0, -20.0)  # le triangle d'échelle, en pixels depuis le centre (hors des flèches du Gizmo)
 ACTIVE_VP_WIDTH = 4.5             # épaisseur du bord de la fenêtre dans laquelle on travaille
 GRIP_SQUARE = [(-1.0, -1.0, 0.0), (1.0, -1.0, 0.0), (1.0, 1.0, 0.0), (-1.0, -1.0, 0.0), (1.0, 1.0, 0.0), (-1.0, 1.0, 0.0)]
 GRIP_TRIANGLE = [(-1.25, 0.9, 0.0), (1.25, 0.9, 0.0), (0.0, -1.1, 0.0)]
@@ -3473,7 +3556,7 @@ class DESSIN_GT_vp_scale(bpy.types.Gizmo):
 
 def grip_layout(rect, px, gumball_on):
     """Où placer les poignées d'une fenêtre : {"corners": [4 points], "move": point ou None, "scale": point}, en
-    millimètres de papier. px : millimètres par pixel d'interface ; la poignée du centre s'efface quand le Gumball est là."""
+    millimètres de papier. px : millimètres par pixel d'interface ; la poignée du centre s'efface quand le Gizmo est là."""
     cx, cy, _w, _h = rect
     return {"corners": grip_points(rect), "move": None if gumball_on else (cx, cy),
             "scale": (cx + GRIP_SCALE_OFFSET[0] * px, cy + GRIP_SCALE_OFFSET[1] * px)}
@@ -3566,7 +3649,7 @@ class DESSIN_MT_viewport_scale(bpy.types.Menu):
         col = lay.column()
         col.enabled = not d.locked and not d.persp
         col.operator_context = 'EXEC_DEFAULT'
-        for _key, name, den in le.SCALES:
+        for _key, name, den in sorted(le.scale_list(detail_imperial(obj)), key=lambda x: x[2]):
             on = abs(den - d.scale) <= 1e-9 * max(1.0, den)
             col.operator(DESSIN_OT_detail_scale.bl_idname, text=name, icon='RADIOBUT_ON' if on else 'RADIOBUT_OFF').text = name
         col.separator()
@@ -3788,7 +3871,11 @@ class DESSIN_PT_layout_detail(bpy.types.Panel):
         col.use_property_split = True
         col.use_property_decorate = False
         col.enabled = not d.locked and not d.persp
-        col.prop(d, "scale_preset")
+        # (la liste suit les unités du modèle : métriques, ou échelles d'architecte en pieds et pouces)
+        row = col.row(align=True)
+        row.alignment = 'RIGHT'
+        row.label(text="Scale")
+        row.menu(DESSIN_MT_viewport_scale.bl_idname, text=le.fmt_scale(d.scale, detail_imperial(obj)))
         if d.scale_preset == 'CUSTOM':
             col.prop(d, "scale")
         col = box.column(align=True)
@@ -3985,7 +4072,7 @@ def layout_unregister():
                    (bpy.app.handlers.undo_post, layout_on_undo), (bpy.app.handlers.redo_post, layout_on_undo)):
         if fn in hl:
             hl.remove(fn)
-    for key in ("views", "model_ver", "built", "cache", "last_model", "paper"):
+    for key in ("views", "model_ver", "built", "cache", "last_model", "paper", "look"):
         _STATE[key].clear()
     _STATE["items"] = None
     _STATE["hold"] = 0.0

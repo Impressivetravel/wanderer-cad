@@ -3,7 +3,7 @@
 import bpy
 import os
 
-from .core import PREF_DEFAULTS, lang, pref_applied_language
+from .core import GB_SNAP_FROM_ITEMS, PREF_DEFAULTS, lang, pref_applied_language
 from .snapping import _perf_caches_clear
 from .drawing import _HOVER
 from .icons import ICON_PALETTES
@@ -194,6 +194,136 @@ class DESSIN_OT_alias_remove(bpy.types.Operator):
         return {'FINISHED'}
 
 
+# ---- import d'un fichier .pgp d'AutoCAD (#16) : ses alias deviennent des alias de Wanderer ----
+# Commandes d'AutoCAD dont le nom ne suffit pas à trouver l'équivalent (None : pas d'équivalent dans Wanderer)
+ACAD_COMMANDS = {
+    "LINE": "Polyline", "PLINE": "Polyline", "RECTANG": "Rectangle", "RECTANGLE": "Rectangle",
+    "SPLINE": "Interpolate Curve", "RAY": "Construction Line", "XLINE": "Construction Line",
+    "CIRCLE": "Circle: Center, Radius", "ARC": "Arc: 3 Points", "ELLIPSE": "Ellipse: From Center",
+    "POLYGON": "Polygon: Center, Radius", "FILLET": "Fillet Curve", "CHAMFER": "Chamfer Curve",
+    "ARRAY": "Array: Rectangular", "ARRAYRECT": "Array: Rectangular", "ARRAYPOLAR": "Array: Polar",
+    "DIMLINEAR": "Dimension", "DIMALIGNED": "Dimension", "DIMRADIUS": "Radius / Diameter",
+    "DIMDIAMETER": "Radius / Diameter", "DIMANGULAR": "Angular Dimension", "DIMCONTINUE": "Continue Dimension",
+    "DIMBASELINE": "Continue Dimension", "DIMORDINATE": "Ordinate Dimension", "DIMARC": "Arc Length Dimension",
+    "TEXT": "Text", "MTEXT": "Text", "DTEXT": "Text", "LEADER": "Annotation", "QLEADER": "Annotation",
+    "MLEADER": "Annotation", "MEASURE": "Divide", "PRESSPULL": "PushPull", "SWEEP": "Sweep 1 Rail",
+    "ISOLATEOBJECTS": "Isolate", "UNISOLATEOBJECTS": "Unisolate", "HIDEOBJECTS": "Hide", "QSAVE": "Save",
+    "3DMOVE": "Move", "3DROTATE": "Rotate", "3DSCALE": "Scale", "3DMIRROR": "Mirror", "BREAK": "Split",
+    "ERASE": "Delete", "ZOOM": "Zoom Extents", "PLOT": "Export PDF", "WBLOCK": "Export Model (DXF)",
+    "SOLID": None, "ORTHO": None, "HIDE": None, "SHADEMODE": None, "VSCURRENT": None,
+}
+
+
+def parse_pgp(text):
+    """Alias d'un fichier .pgp d'AutoCAD : [(alias, commande)] (lignes « L, *LINE » ; les commandes externes et les
+    commentaires sont ignorés)."""
+    out = []
+    for raw in (text or "").splitlines():
+        line = raw.split(";", 1)[0].strip()
+        if not line or "," not in line:
+            continue
+        alias, _sep, rest = line.partition(",")
+        alias, rest = alias.strip(), rest.strip()
+        if not rest.startswith("*") or not alias or " " in alias:
+            continue
+        cmd = rest[1:].strip().split(",", 1)[0].strip().lstrip("-_.'")
+        if cmd:
+            out.append((alias, cmd))
+    return out
+
+
+def pgp_resolve(cmd, entries):
+    """Commande de Wanderer (son nom) qui remplace la commande d'AutoCAD `cmd`, ou None."""
+    up = cmd.upper()
+    if up in ACAD_COMMANDS:
+        name = ACAD_COMMANDS[up]
+        if name is None:
+            return None
+        k = alias_target(entries, name)
+        return entries[k]["label"] if k is not None else None
+    k = alias_target(entries, cmd)
+    if k is None or entries[k].get("kind") == "native":
+        return None            # (les commandes natives de Blender au nom voisin ne sont pas des équivalents sûrs)
+    return entries[k]["label"]
+
+
+def import_pgp_aliases(prefs, text, entries=None):
+    """Ajoute aux alias de Wanderer ceux d'un .pgp. Renvoie (ajoutés, déjà présents, sans équivalent [commandes])."""
+    if entries is None:
+        entries = cmd_entries()
+    mine = {a.alias.strip().lower() for a in prefs.aliases}
+    added, already, missing = 0, 0, []
+    for alias, cmd in parse_pgp(text):
+        target = pgp_resolve(cmd, entries)
+        if target is None:
+            if cmd.upper() not in missing:
+                missing.append(cmd.upper())
+            continue
+        al = alias.lower()
+        if al in mine:
+            already += 1                # un alias à vous : il est gardé
+            continue
+        k = alias_target(entries, al)
+        if k is not None and entries[k]["label"] == target:
+            already += 1                # Wanderer le connaît déjà pour cette commande
+            continue
+        it = prefs.aliases.add()
+        it.alias, it.command = al, target
+        mine.add(al)
+        added += 1
+    return added, already, missing
+
+
+def read_text_file(path):
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    for enc in ("utf-8-sig", "utf-16", "cp1252", "latin-1"):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return ""
+
+
+class DESSIN_OT_alias_import_pgp(bpy.types.Operator):
+    bl_idname = "dessin.alias_import_pgp"
+    bl_label = "Import AutoCAD Aliases (.pgp)"
+    bl_description = ("Reads an AutoCAD alias file (acad.pgp) and adds its aliases to yours, for the commands Wanderer "
+                      "has. Your own aliases are kept")
+    bl_options = {'INTERNAL'}
+
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH', options={'SKIP_SAVE'})
+    filter_glob: bpy.props.StringProperty(default="*.pgp", options={'HIDDEN'})
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        prefs = _wanderer_prefs(context)
+        if prefs is None:
+            self.report({'WARNING'}, "Wanderer preferences are not available")
+            return {'CANCELLED'}
+        try:
+            text = read_text_file(self.filepath)
+        except OSError as e:
+            self.report({'WARNING'}, f"Cannot read the file: {e}")
+            return {'CANCELLED'}
+        if not parse_pgp(text):
+            self.report({'WARNING'}, "No alias found in this file (lines like  L, *LINE)")
+            return {'CANCELLED'}
+        added, already, missing = import_pgp_aliases(prefs, text)
+        alias_changed()
+        aliases_save(prefs)
+        _prefs_dirty(context)
+        msg = f"{added} alias(es) added, {already} already there"
+        if missing:
+            msg += f", {len(missing)} command(s) without an equivalent in Wanderer ({', '.join(missing[:6])}" + \
+                   ("..." if len(missing) > 6 else "") + ")"
+        self.report({'INFO'}, msg)
+        return {'FINISHED'}
+
+
 def _prop_hint(layout, data, name, hint):
     """Champ texte avec un texte d'aide gris tant qu'il est vide (Blender 4.1 et plus)."""
     try:
@@ -226,7 +356,9 @@ def draw_aliases(layout, prefs):
         else:
             sub.label(text="")
         row.operator(DESSIN_OT_alias_remove.bl_idname, text="", icon='X').index = i
-    layout.operator(DESSIN_OT_alias_add.bl_idname, icon='ADD')
+    row = layout.row(align=True)
+    row.operator(DESSIN_OT_alias_add.bl_idname, icon='ADD')
+    row.operator(DESSIN_OT_alias_import_pgp.bl_idname, text="Import AutoCAD .pgp", icon='IMPORT')
 
 
 class DESSIN_OT_alias_edit(bpy.types.Operator):
@@ -260,26 +392,29 @@ class DESSIN_OT_alias_edit(bpy.types.Operator):
 
 PRESET_STYLES = (('RHINO', "Rhino"), ('AUTOCAD', "AutoCAD"), ('MAX', "3ds Max"), ('BLENDER', "Blender"))
 _WORKFLOW_KEYS = ("nav_style", "cursor_style", "nav_zoom_cursor", "cmd_line", "cmd_type", "rclick_enter", "enter_last",
-                  "auto_idle", "esc_deselect", "copy_key")
+                  "auto_idle", "esc_deselect", "copy_key", "view_persp_mods")
 WORKFLOW_PRESETS = {
     # Rhino : le bouton droit tourne la vue, clic droit = Entrée. Quick Type (taper une lettre lance la ligne de commande)
     # reste éteint par défaut : les lettres gardent les raccourcis de Blender, Espace ouvre la ligne de commande ; on
     # l'allume depuis la barre du bas (ou Maj + Q) quand on le veut
     'RHINO': {"nav_style": 'RHINO', "cursor_style": 'RHINO', "nav_zoom_cursor": True, "cmd_line": True, "cmd_type": False,
-              "rclick_enter": True, "enter_last": True, "auto_idle": True, "esc_deselect": True, "copy_key": 'ALT'},
+              "rclick_enter": True, "enter_last": True, "auto_idle": True, "esc_deselect": True, "copy_key": 'ALT',
+              "view_persp_mods": 'CTRL_SHIFT'},     # sortir d'une vue de côté en orbitant : Ctrl + Maj + clic droit (Rhino)
     # AutoCAD : le bouton du milieu déplace la vue, réticule ; Quick Type éteint par défaut, comme pour Rhino
     'AUTOCAD': {"nav_style": 'AUTOCAD', "cursor_style": 'AUTOCAD', "nav_zoom_cursor": True, "cmd_line": True, "cmd_type": False,
-                "rclick_enter": True, "enter_last": True, "auto_idle": True, "esc_deselect": True, "copy_key": 'ALT'},
+                "rclick_enter": True, "enter_last": True, "auto_idle": True, "esc_deselect": True, "copy_key": 'ALT',
+                "view_persp_mods": 'ALT'},          # Alt + molette pour quitter la vue 2D en orbitant
     # 3ds Max : le bouton du milieu déplace la vue (Alt + milieu tourne), zoom vers la souris, Maj + glisser copie ;
     # un clic droit termine la commande, mais Entrée ne relance pas la précédente (ce n'est pas une habitude de 3ds Max)
     'MAX': {"nav_style": 'MAX', "cursor_style": 'RHINO', "nav_zoom_cursor": True, "cmd_line": True, "cmd_type": False,
-            "rclick_enter": True, "enter_last": False, "auto_idle": True, "esc_deselect": True, "copy_key": 'SHIFT'},
+            "rclick_enter": True, "enter_last": False, "auto_idle": True, "esc_deselect": True, "copy_key": 'SHIFT',
+            "view_persp_mods": 'ALT'},
     # Blender : navigation et raccourcis de Blender (les lettres gardent leur rôle ; Espace ouvre la ligne de commande)
     'BLENDER': {k: PREF_DEFAULTS[k] for k in _WORKFLOW_KEYS},
 }
 PRESET_TIPS = {
-    'RHINO': "Work as in Rhino: the right button orbits (a quick right click is Enter), Rhino cursor, zoom towards the cursor. Space opens the command line; Quick Type stays off (turn it on in the bottom bar, or Shift+Q, to start a command by typing a letter)",
-    'AUTOCAD': "Work as in AutoCAD: the middle button pans (Shift + middle orbits), crosshair cursor, zoom towards the cursor. Space opens the command line; Quick Type stays off (turn it on in the bottom bar, or Shift+Q, to start a command by typing a letter)",
+    'RHINO': "Work as in Rhino: the right button orbits (a quick right click is Enter; Ctrl + Shift + right button orbits out of a side view), Rhino cursor, zoom towards the cursor. Space opens the command line; Quick Type stays off (turn it on in the bottom bar, or Shift+Q, to start a command by typing a letter)",
+    'AUTOCAD': "Work as in AutoCAD: the middle button pans (Shift + middle orbits; Alt + middle orbits out of a side view), crosshair cursor, zoom towards the cursor. Space opens the command line; Quick Type stays off (turn it on in the bottom bar, or Shift+Q, to start a command by typing a letter)",
     'MAX': "Work as in 3ds Max: the middle button pans (Alt + middle orbits), zoom towards the cursor, Shift + drag copies an object (Clone Options: copy or instance, number, name) and extrudes edges or faces. Space opens the command line; Quick Type stays off (turn it on in the bottom bar, or Shift+Q, to start a command by typing a letter)",
     'BLENDER': "Work as in Blender: Blender's navigation, the letters keep Blender's shortcuts (Space opens the command line). The Wanderer tools stay",
 }
@@ -406,25 +541,33 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     show_tool_transform: bpy.props.BoolProperty(name="Transform", default=False, update=_update_hide_native,
                                                 description="Shows Blender's own Transform (all-in-one gizmo) tool in the toolbar")
     gumball_rot90: bpy.props.BoolProperty(
-        name="Gumball rotation in steps", default=True,
-        description="On: the Gumball rotates in steps and Shift gives free rotation. Off: free rotation, Shift gives steps")
+        name="Gizmo rotation in steps", default=True,
+        description="On: the Gizmo rotates in steps and Shift gives free rotation. Off: free rotation, Shift gives steps")
     copy_key: bpy.props.EnumProperty(
         name="Copy while dragging",
-        items=(('ALT', "Alt + drag (Rhino)", "Hold Alt while dragging an object or a Gumball handle to move a copy, like in Rhino. "
+        items=(('ALT', "Alt + drag (Rhino)", "Hold Alt while dragging an object or a Gizmo handle to move a copy, like in Rhino. "
                 "Shift keeps the dominant axis"),
-               ('SHIFT', "Shift + drag (3ds Max)", "Like in 3ds Max: Shift + drag an object or a Gumball handle opens Clone "
+               ('SHIFT', "Shift + drag (3ds Max)", "Like in 3ds Max: Shift + drag an object or a Gizmo handle opens Clone "
                 "Options (copy or instance, number of copies, name); on edges or faces it extrudes, and Ctrl + Shift + drag "
                 "copies them. The copy is kept even if you let go of Shift. Alt then keeps the dominant axis; Shift + click "
                 "still adds to the selection")),
         default='ALT',
-        description="Key that turns a drag (an object or a Gumball handle) into a copy")
+        description="Key that turns a drag (an object or a Gizmo handle) into a copy")
     gumball_step: bpy.props.EnumProperty(
         name="Rotation step", default='90',
         items=(('5', "5°", ""), ('10', "10°", ""), ('15', "15°", ""), ('30', "30°", ""), ('45', "45°", ""), ('90', "90°", "")),
-        description="Angle of each step when the Gumball rotates with steps enabled")
+        description="Angle of each step when the Gizmo rotates with steps enabled")
+    gumball_reach: bpy.props.BoolProperty(
+        name="Scale handles reach the edge of the object", default=True,
+        description="As in Rhino: each scale handle is a dotted line from the Gizmo to the edge of the selection, ended by a "
+                    "small square, so it shows the width and the height of the object. Off: short handles of a fixed length")
+    gumball_snap_from: bpy.props.EnumProperty(
+        name="Snappy Dragging snaps from", items=GB_SNAP_FROM_ITEMS, default='CLOSEST',
+        description="Snappy Dragging of the Gizmo: the point of the selection that lands on the snapped point, for the files "
+                    "where it was not chosen yet (each file keeps the choice made in its Gizmo menu)")
     gumball_line: bpy.props.FloatProperty(
         name="Arc thickness", default=3.0, min=1.0, max=8.0, precision=1,
-        description="Line thickness of the Gumball rotation arcs, in pixels")
+        description="Line thickness of the Gizmo rotation arcs, in pixels")
     rich_tooltips: bpy.props.BoolProperty(
         name="Detailed tool tooltips", default=True, update=_update_icon_palette,
         description="Hovering a tool shows how to use it step by step, its command line alias and the useful keys. Changing it reloads the add-on")
@@ -440,20 +583,28 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         name="G / R / S use the Toolkit tools (Recommended)", default=False, update=_update_grs_keymap,
         description="G, R and S activate the Toolkit Move, Rotate and Scale tools (Object and Edit mode) instead of Blender's own. "
                     "Off by default: you can still assign any key to any tool below")
+    quad_shared_bars: bpy.props.BoolProperty(
+        name="4 views: one header above the views", default=True,
+        description="As in Rhino: in the 4 views, Blender's header (modes, menus, snapping) and the tool settings are in a single "
+                    "strip above all the views, and N shows one sidebar for the four views, laid over their right edge. "
+                    "Off: the header stays in the top-left view and N acts per view")
     view_pan: bpy.props.BoolProperty(
         name="Pan in orthographic side views", default=True, update=_update_view_keymap,
         description="In Front / Top / Right... views the orbit button pans instead of orbiting (perspective views are unchanged).")
     view_persp: bpy.props.BoolProperty(
-        name="Ctrl + Shift + orbit button: orbit out of the view", default=True, update=_update_view_keymap,
-        description="In orthographic side views, holding Ctrl + Shift with the orbit button orbits. The view switches to perspective "
+        name="Orbit out of the view with", default=True, update=_update_view_keymap,
+        description="In orthographic side views, holding these keys with the orbit button orbits. The view switches to perspective "
                     "only if Auto Perspective is on in Preferences > Navigation; otherwise it stays orthographic (User Orthographic)")
-    view_button: bpy.props.EnumProperty(
-        name="Orbit button", default='MIDDLE', update=_update_view_keymap,
-        items=(('MIDDLE', "Middle mouse button", "Your orbit button is the middle mouse button (Blender default)"),
-               ('RIGHT', "Right mouse button", "Your orbit button is the right mouse button (a simple right click no longer opens the context menu in side views)"),
-               ('ALT_LEFT', "Alt + Left mouse button", "Your orbit button is Alt + left mouse button (3-button emulation)")),
-        description="The button you use to orbit")
-
+    view_persp_mods: bpy.props.EnumProperty(
+        name="Keys", default='ALT', update=_update_view_keymap,
+        items=(('ALT', "Alt + orbit button", "Alt + middle button (Alt + right button with the Rhino style): like leaving "
+                                             "the 2D view"),
+               ('SHIFT', "Shift + orbit button", "Shift + middle button: quick way back to perspective (in side views the "
+                                                 "middle button already pans)"),
+               ('CTRL_SHIFT', "Ctrl + Shift + orbit button", "As in Rhino"),
+               ('CTRL_ALT', "Ctrl + Alt + orbit button", "")),
+        description="Keys held with the orbit button to orbit out of an orthographic side view (with Alt + left button as "
+                    "orbit button, Ctrl + Shift is used)")
     cursor_style: bpy.props.EnumProperty(
         name="Crosshair style", default='AUTOCAD', update=_update_cursor,
         items=(('RHINO', "Rhino", "Selection box with four detached bars"),
@@ -518,13 +669,23 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         description="Quick Type: typing a letter in the 3D viewport starts the command line with that letter (Enter or Space to run), "
                     "like Rhino / AutoCAD. While it is on, the letters no longer trigger Blender's own shortcuts there; "
                     "turn it off to get them back (Space still opens the command line)")
+    cmd_type_ortho: bpy.props.BoolProperty(
+        name="Quick Type in 2D views", default=False, update=_update_cmd_line,
+        description="Quick Type turns on by itself in the orthographic views (Top, Front, Right...), like AutoCAD, and off "
+                    "again in perspective, where the letters keep Blender's shortcuts. The Quick Type button stays the "
+                    "manual switch for all views")
+    ortho_wire: bpy.props.BoolProperty(
+        name="Wireframe in 2D views by default", default=True,
+        description="Going to an orthographic view (Top, Front, Right...) switches the viewport to Wireframe, like a 2D "
+                    "drawing. It is only the starting shading: you can still change it in the 2D view. Going back to "
+                    "perspective restores the shading you had")
     cmd_size: bpy.props.IntProperty(
         name="Command bar size", default=100, min=40, max=250, subtype='PERCENTAGE', update=_update_cmd_line,
         description="Size of the command bar text and pill (lower it if it looks too big on your screen)")
     mode_icons: bpy.props.BoolProperty(
         name="Mode bar: icons only", default=False, update=_update_cmd_line,
         description="Always show the mode buttons at the bottom right of the 3D viewport (Grid Snap, Ortho, Polar, OSnap, "
-                    "SmartTrack, Gumball, Auto CPlane, Quick Type) as icons, even when the viewport is wide. "
+                    "SmartTrack, Gizmo, Auto CPlane, Quick Type) as icons, even when the viewport is wide. "
                     "Off: they show their names and only turn into icons when the viewport gets narrow")
     cmd_key: bpy.props.EnumProperty(
         name="Open with", items=CMD_KEY_ITEMS, default='SPACE', update=_update_cmd_line,
@@ -609,16 +770,17 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         if self.mouse_middle != 'DEFAULT' and 'MIDDLE' in (self.mouse_orbit, self.mouse_menu):
             layout.label(text="The middle button is already used by the orbit / context menu setting above.", icon='ERROR')
         layout.separator()
+        layout.prop(self, "quad_shared_bars")
         layout.label(text="Orthographic side views (Front, Top, Right...)")
         layout.prop(self, "view_pan")
-        if self.mouse_orbit == 'DEFAULT':         # sinon le bouton d'orbite choisi plus haut (style Rhino...) s'applique partout
-            row = layout.row()
-            row.enabled = self.view_pan
-            row.prop(self, "view_button")
         row = layout.row()
         row.enabled = self.view_pan
         row.prop(self, "view_persp")
-        layout.label(text="Shift + the button keeps its usual action. Perspective views orbit as before.")
+        sub = row.row()
+        sub.enabled = self.view_persp
+        sub.prop(self, "view_persp_mods", text="")
+        layout.label(text="The side views use the orbit button chosen above (middle button if kept as is). "
+                          "Perspective views orbit as before.")
 
     def _draw_command_line(self, layout):
         layout.label(text="Type a command name or alias, then Enter or Space, like in AutoCAD and Rhino.", icon='INFO')
@@ -626,6 +788,8 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         col = layout.column(align=True)
         col.enabled = self.cmd_line
         col.prop(self, "cmd_type")
+        col.prop(self, "cmd_type_ortho")
+        layout.prop(self, "ortho_wire")
         col.prop(self, "cmd_key")
         col.prop(self, "cmd_size")
         layout.prop(self, "mode_icons")           # (la barre de modes reste affichée sans la ligne de commande)
@@ -661,7 +825,9 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         col.prop(self, "gumball_rot90")
         col.prop(self, "gumball_step")
         col.prop(self, "gumball_line")
-        col.label(text="Size: Gumball tab of the sidebar.")
+        col.prop(self, "gumball_reach")
+        col.prop(self, "gumball_snap_from")
+        col.label(text="Size: Gizmo panel, Wanderer tab of the sidebar.")
 
     def _draw_toolbar(self, layout):
         layout.prop(self, "show_toolbar_tools")
@@ -716,7 +882,7 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
               ("navigation", "Navigation and mouse", False, "_draw_navigation"),
               ("command", "Command line and aliases", False, "_draw_command_line"),
               ("drawing", "Drawing: crosshair and behavior", True, "_draw_drawing"),
-              ("gumball", "Gumball", True, "_draw_gumball"),
+              ("gumball", "Gizmo", True, "_draw_gumball"),
               ("toolbar", "Toolbar", True, "_draw_toolbar"),
               ("perf", "Performance and precision", True, "_draw_performance"),
               ("shortcuts", "Shortcuts", True, "_draw_shortcuts"))

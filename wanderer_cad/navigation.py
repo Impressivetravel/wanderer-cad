@@ -5,7 +5,7 @@ import math
 import time
 from mathutils import Quaternion
 
-from .core import pref
+from .core import LAST_VIEW3D, pref, shift_held_set
 from .drawing import find_window_region
 from .selection import _SUBOBJ
 from .layers import tool_families
@@ -85,6 +85,24 @@ class DESSIN_OT_shortcuts_clear(bpy.types.Operator):
 
 
 # ---- vues orthogonales : le bouton d'orbite fait le pan (Face, Dessus, Droite...) ----
+# touches tenues avec le bouton d'orbite pour sortir d'une vue de côté en orbitant (préférence « view_persp_mods »)
+PERSP_MODS = {'ALT': dict(alt=True), 'SHIFT': dict(shift=True), 'CTRL_SHIFT': dict(ctrl=True, shift=True),
+              'CTRL_ALT': dict(ctrl=True, alt=True)}
+
+
+def persp_mods(orbit_alt=False, mtype=None):
+    """Touches de l'orbite hors d'une vue de côté. Si Alt est déjà pris pour ce bouton (orbite à Alt + clic gauche, ou
+    style de navigation Maya / 3ds Max qui met Alt + molette sur le pan / l'orbite), Ctrl + Maj est utilisé à la place."""
+    key = pref("view_persp_mods")
+    want = PERSP_MODS.get(key, PERSP_MODS['ALT'])
+    taken = (orbit_alt and want.get("alt")) or any(
+        t == mtype and all(bool(mods.get(k)) == bool(want.get(k)) for k in ("alt", "ctrl", "shift"))
+        for _op, t, mods in NAV_KEYS.get(pref("nav_style"), ()))
+    if taken:
+        key = 'CTRL_SHIFT'
+    return dict(PERSP_MODS.get(key, PERSP_MODS['ALT']))
+
+
 VIEW_BUTTONS = {'MIDDLE': ('MIDDLEMOUSE', False), 'RIGHT': ('RIGHTMOUSE', False), 'ALT_LEFT': ('LEFTMOUSE', True)}
 _VIEW_KEYMAPS = []   # (keymap, item) enregistrés dans la configuration « addon »
 
@@ -109,6 +127,9 @@ def in_side_view(context):
         return False
 
 
+STENCIL_MODES = frozenset({'SCULPT', 'PAINT_VERTEX', 'PAINT_WEIGHT', 'PAINT_TEXTURE'})
+
+
 class DESSIN_OT_orbit_pan(bpy.types.Operator):
     bl_idname = "dessin.orbit_pan"
     bl_label = "Orbit / Pan (pan in orthographic side views)"
@@ -121,6 +142,13 @@ class DESSIN_OT_orbit_pan(bpy.types.Operator):
 
     def invoke(self, context, event):
         btn = event.type
+        if btn == 'RIGHTMOUSE' and context.mode in STENCIL_MODES:
+            # pinceau à texture « Stencil » : le clic droit de Blender déplace le pochoir, on le lui laisse
+            try:
+                if bpy.ops.brush.stencil_control.poll():
+                    return {'PASS_THROUGH'}
+            except (AttributeError, RuntimeError):
+                pass
         if navigate_or_menu(context, event, lambda c: start_navigation(c, btn)):
             return {'FINISHED'}
         return {'PASS_THROUGH'}      # perspective / vue libre : l'orbite de Blender (ou de votre keymap) s'applique
@@ -347,8 +375,8 @@ class DESSIN_OT_trackpad_pan(bpy.types.Operator):
 
 class DESSIN_OT_trackpad_persp(bpy.types.Operator):
     bl_idname = "dessin.trackpad_persp"
-    bl_label = "Trackpad orbit out of a side view (Ctrl + Shift + two fingers)"
-    bl_description = ("In Front / Top / Right... orthographic views, Ctrl + Shift + two-finger gesture orbits. The view switches to "
+    bl_label = "Trackpad orbit out of a side view (Alt or Ctrl + Shift + two fingers, see Preferences)"
+    bl_description = ("In Front / Top / Right... orthographic views, the keys chosen in Preferences (Alt by default) + two-finger gesture orbits. The view switches to "
                       "perspective only if Auto Perspective is on in Preferences > Navigation")
     bl_options = {'INTERNAL'}
 
@@ -376,7 +404,7 @@ class DESSIN_OT_trackpad_persp(bpy.types.Operator):
 class DESSIN_OT_orbit_persp(bpy.types.Operator):
     bl_idname = "dessin.orbit_persp"
     bl_label = "Orbit out of a side view (from orthographic side views)"
-    bl_description = ("In Front / Top / Right... orthographic views, Ctrl + Shift + the orbit button orbits. The view switches to "
+    bl_description = ("In Front / Top / Right... orthographic views, the keys chosen in Preferences (Alt by default) + the orbit button orbits. The view switches to "
                       "perspective only if Auto Perspective is on in Preferences > Navigation")
     bl_options = {'INTERNAL'}
 
@@ -405,6 +433,17 @@ CONTEXT_MENUS = {
     'EDIT_ARMATURE': "VIEW3D_MT_armature_context_menu", 'POSE': "VIEW3D_MT_pose_context_menu",
     'EDIT_TEXT': "VIEW3D_MT_edit_font_context_menu", 'EDIT_METABALL': "VIEW3D_MT_edit_metaball_context_menu",
     'EDIT_LATTICE': "VIEW3D_MT_edit_lattice_context_menu",
+    'PARTICLE': "VIEW3D_MT_particle_context_menu", 'EDIT_CURVES': "VIEW3D_MT_edit_curves_context_menu",
+    'EDIT_GREASE_PENCIL': "VIEW3D_MT_greasepencil_edit_context_menu",
+}
+# modes où le clic droit de Blender ouvre un panneau (réglages du pinceau) et non un menu
+CONTEXT_PANELS = {
+    'SCULPT': "VIEW3D_PT_sculpt_context_menu", 'PAINT_VERTEX': "VIEW3D_PT_paint_vertex_context_menu",
+    'PAINT_WEIGHT': "VIEW3D_PT_paint_weight_context_menu", 'PAINT_TEXTURE': "VIEW3D_PT_paint_texture_context_menu",
+    'PAINT_GREASE_PENCIL': "VIEW3D_PT_greasepencil_draw_context_menu",
+    'SCULPT_GREASE_PENCIL': "VIEW3D_PT_greasepencil_sculpt_context_menu",
+    'WEIGHT_GREASE_PENCIL': "VIEW3D_PT_greasepencil_weight_context_menu",
+    'VERTEX_GREASE_PENCIL': "VIEW3D_PT_greasepencil_vertex_paint_context_menu",
 }
 
 
@@ -422,6 +461,15 @@ class DESSIN_OT_context_menu(bpy.types.Operator):
         if context.area.type == 'IMAGE_EDITOR':
             name = "IMAGE_MT_uvs_context_menu" if getattr(context.space_data, "mode", '') == 'UV' else None
         elif context.area.type == 'VIEW_3D':
+            panel = CONTEXT_PANELS.get(context.mode)
+            if panel is not None:               # Sculpt, peinture : le panneau du pinceau, comme le clic droit de Blender
+                if not hasattr(bpy.types, panel):
+                    return {'PASS_THROUGH'}
+                try:
+                    bpy.ops.wm.call_panel(name=panel)
+                except RuntimeError:
+                    return {'PASS_THROUGH'}
+                return {'FINISHED'}
             name = CONTEXT_MENUS.get(context.mode)
         else:
             name = EDITOR_MENUS.get(context.area.type)
@@ -435,6 +483,49 @@ class DESSIN_OT_context_menu(bpy.types.Operator):
 
     def execute(self, context):
         return {'CANCELLED'}
+
+
+_CUR = {"key": None}
+
+
+def tool_cursor_of(context, mode):
+    """Curseur de l'outil actif de la vue 3D dans ce mode ('DEFAULT', 'NONE' pour les outils de tracé, 'CROSSHAIR'...)."""
+    try:
+        from bl_ui.space_toolsystem_common import ToolSelectPanelHelper
+        cls = ToolSelectPanelHelper._tool_class_from_space_type('VIEW_3D')
+        item = cls._tool_get_active(context, 'VIEW_3D', mode)[0]
+    except (AttributeError, ImportError, RuntimeError, TypeError, KeyError):
+        return None
+    if item is None:
+        return None
+    return getattr(item, "cursor", None) or 'DEFAULT'
+
+
+def tool_cursor_watch(context):
+    """Le mode ou l'outil actif vient de changer (Échap, un menu qui passe en mode Édition comme « Add Curve as Bevel »,
+    Tab...) : la forme du curseur suit tout de suite l'outil. Blender ne la recalcule qu'en changeant de région : sans
+    cela, le curseur d'un outil de tracé (masqué, remplacé par le réticule) restait sur l'outil Select, donc invisible.
+    Retourne le curseur posé, ou None."""
+    try:
+        win, mode = context.window, context.mode
+        tool = context.workspace.tools.from_space_view3d_mode(mode, create=False)
+        key = (win.as_pointer(), mode, getattr(tool, "idname", None))
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return None
+    if key == _CUR["key"]:
+        return None
+    first = _CUR["key"] is None
+    _CUR["key"] = key
+    if first:
+        return None                        # (premier passage : rien n'a changé, Blender a posé le bon curseur)
+    cur = tool_cursor_of(context, mode)
+    if cur is None:
+        return None
+    try:
+        win.cursor_set(cur)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return None
+    return cur
 
 
 class DESSIN_OT_mouse_track(bpy.types.Operator):
@@ -452,6 +543,12 @@ class DESSIN_OT_mouse_track(bpy.types.Operator):
         ptr = area.as_pointer()
         if _SUBOBJ["objs"] and context.mode not in {'EDIT_MESH', 'EDIT_CURVE'}:
             _SUBOBJ["objs"] = set()        # sorti de l'Édition autrement (Tab) : Échap redevient normal
+        tool_cursor_watch(context)
+        shift_held_set(event.shift)       # Maj relâché sans que la touche soit vue (autre fenêtre, champ texte) : rattrapé
+        try:
+            LAST_VIEW3D[0] = context.area.as_pointer()      # Edit Group : vue où l'on travaille
+        except (AttributeError, ReferenceError):
+            pass
         hot = _CMD.setdefault("hot", {})
         try:
             hit = cmd_hit(area, event.mouse_x, event.mouse_y)
@@ -564,6 +661,17 @@ MOUSE_KEYMAPS = (("3D View", 'VIEW_3D'), ("Object Mode", 'EMPTY'), ("Mesh", 'EMP
                  ("Armature", 'EMPTY'), ("Pose", 'EMPTY'))
 
 
+# Autres modes de la vue 3D où Blender pose aussi un clic droit (panneau du pinceau, menu du mode) avant le keymap
+# « 3D View » : Sculpt, peinture, Grease Pencil... Seuls les réglages du bouton droit y sont posés (orbite, pan, zoom, menu) :
+# les raccourcis de ces modes (pinceaux, molette, lettres) ne sont pas touchés.
+MOUSE_KEYMAPS_RIGHT = (("Sculpt", 'EMPTY'), ("Vertex Paint", 'EMPTY'), ("Weight Paint", 'EMPTY'), ("Image Paint", 'EMPTY'),
+                       ("Particle", 'EMPTY'), ("Metaball", 'EMPTY'), ("Lattice", 'EMPTY'), ("Font", 'EMPTY'), ("Curves", 'EMPTY'),
+                       ("Sculpt Curves", 'EMPTY'), ("Point Cloud", 'EMPTY'),
+                       ("Grease Pencil Draw Mode", 'EMPTY'), ("Grease Pencil Edit Mode", 'EMPTY'),
+                       ("Grease Pencil Sculpt Mode", 'EMPTY'), ("Grease Pencil Weight Paint", 'EMPTY'),
+                       ("Grease Pencil Vertex Paint", 'EMPTY'))
+
+
 MOUSE_KEYMAPS_2D = (("View2D", 'EMPTY'), ("View2D Buttons List", 'EMPTY'), ("Node Editor", 'NODE_EDITOR'), ("Image", 'IMAGE_EDITOR'),
                     ("UV Editor", 'EMPTY'), ("Clip", 'CLIP_EDITOR'), ("Clip Editor", 'CLIP_EDITOR'), ("Graph Editor", 'GRAPH_EDITOR'),
                     ("Dopesheet", 'DOPESHEET_EDITOR'), ("NLA Editor", 'NLA_EDITOR'), ("Sequencer", 'SEQUENCE_EDITOR'),
@@ -659,9 +767,11 @@ def register_view_keymap():
     kc = wm.keyconfigs.addon if wm is not None else None
     if kc is None:
         return
-    enabled, persp, button = pref("view_pan"), pref("view_persp"), pref("view_button")
+    enabled, persp = pref("view_pan"), pref("view_persp")
     orbit_sel, menu_sel = pref("mouse_orbit"), pref("mouse_menu")
-    orbit_btn = button if orbit_sel == 'DEFAULT' else orbit_sel
+    # les vues de côté suivent le bouton d'orbite choisi plus haut (« Orbit button ») ; sans choix, le bouton du milieu
+    # (Blender convertit lui-même Alt + clic gauche en bouton du milieu quand il émule une souris à 3 boutons)
+    orbit_btn = 'MIDDLE' if orbit_sel == 'DEFAULT' else orbit_sel
     menu_btn = menu_sel if menu_sel not in ('DEFAULT', 'RIGHT_CLICK') else None
     middle_on = effective_middle() != 'DEFAULT' and menu_btn != 'MIDDLE' and orbit_sel != 'MIDDLE'
     hold_on = menu_sel == 'RIGHT_CLICK' and orbit_btn == 'RIGHT'     # menu au relâchement du clic droit (sans glisser)
@@ -671,16 +781,20 @@ def register_view_keymap():
     if not enabled and not remap:
         return
 
-    def add(km, *args, **kw):
-        kmi = km.keymap_items.new(*args, **kw)
+    right_only = {n for n, _t in MOUSE_KEYMAPS_RIGHT}
+
+    def add(km, idname, mtype, *args, **kw):
+        if km.name in right_only and mtype != 'RIGHTMOUSE':
+            return None                 # modes Sculpt / peinture... : seul le bouton droit y est réglé
+        kmi = km.keymap_items.new(idname, mtype, *args, **kw)
         _VIEW_KEYMAPS.append((km, kmi))
         return kmi
 
-    keymaps = [kc.keymaps.new(name=n, space_type=t) for n, t in (MOUSE_KEYMAPS if remap else MOUSE_KEYMAPS[:1])]
+    keymaps = [kc.keymaps.new(name=n, space_type=t) for n, t in (MOUSE_KEYMAPS + MOUSE_KEYMAPS_RIGHT if remap else MOUSE_KEYMAPS[:1])]
     if enabled:
         add(keymaps[0], DESSIN_OT_trackpad_pan.bl_idname, 'TRACKPADPAN', 'ANY')
         if persp:
-            add(keymaps[0], DESSIN_OT_trackpad_persp.bl_idname, 'TRACKPADPAN', 'ANY', shift=True, ctrl=True)
+            add(keymaps[0], DESSIN_OT_trackpad_persp.bl_idname, 'TRACKPADPAN', 'ANY', **persp_mods())
     for km in keymaps:
         for op, mtype, mods in nav_items:
             add(km, op, mtype, 'PRESS', **mods)
@@ -704,7 +818,13 @@ def register_view_keymap():
             if hold_on:         # clic sans glisser : Blender envoie un évènement CLICK au relâchement -> menu contextuel
                 add(km, DESSIN_OT_context_menu.bl_idname, mtype, 'CLICK', alt=alt)
             if (enabled or hold_on) and persp:
-                add(km, DESSIN_OT_orbit_persp.bl_idname, mtype, 'PRESS', alt=alt, shift=True, ctrl=True)
+                pm = persp_mods(alt, mtype)
+                with_alt = pm.get("alt", False) and not alt
+                pm["alt"] = alt or pm.get("alt", False)
+                # avec Alt : seulement en glissant, pour que Alt + clic (centrer la vue sur la souris) reste à Blender ;
+                # et pas dans les modes Sculpt / peinture, où Alt + clic droit règle le pochoir du pinceau
+                if not (with_alt and km.name in right_only):
+                    add(km, DESSIN_OT_orbit_persp.bl_idname, mtype, 'CLICK_DRAG' if with_alt else 'PRESS', **pm)
         if orbit_sel == 'RIGHT':                       # Shift / Ctrl + clic droit : pan / zoom, comme avec la molette
             add(km, "view3d.move", 'RIGHTMOUSE', 'PRESS', shift=True)
             add(km, "view3d.zoom", 'RIGHTMOUSE', 'PRESS', ctrl=True)

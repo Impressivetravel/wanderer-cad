@@ -12,7 +12,7 @@ from .snapping import _geom_ver
 from .drawing import find_window_region, project_px, px_scale, region_rv3d
 from .base import DessinBase
 from .selection import ray_cast_opaque
-from .settings import HATCH_PATTERNS, HATCH_PATTERN_ITEMS, _HATCH_EDIT
+from .settings import _HATCH_EDIT
 from .trim import wire_paths
 from .surfaces import (
     _ProfileOp, _plane_of, chain_open_paths, delete_objects, deselect_all_objects, grid_mesh,
@@ -22,12 +22,8 @@ from .surfaces import (
 
 # ---- Hachures : moteur ----
 
-HATCH_MAX_LINES = 6000          # lignes d'une famille de motif
-HATCH_MAX_SEGS = 250000         # segments d'une hachure
-
-
-class HatchTooDense(Exception):
-    """Motif trop serré pour la zone : il faut une échelle plus grande."""
+from .hatch_engine import HATCH_MAX_LINES, HATCH_MAX_SEGS, HatchTooDense, segments_2d   # noqa: F401
+from .hatch_patterns import hatch_families, is_custom, pattern_list
 
 
 def is_hatch(obj):
@@ -101,8 +97,48 @@ def hatch_loop_groups(paths):
             n, v = -n, -v            # plan vu de dessus : repère direct (X, Y, Z)
         flats = [np.stack([(P - c) @ u, (P - c) @ v], axis=1) for P, _pl in grp]
         areas = [_poly_area2(F) for F in flats]
+        flats, areas = _drop_duplicate_loops(flats, areas)
         groups.append((c, u, v, n, flats, areas))
     return groups, skipped
+
+
+def _seg_dist(Q, F):
+    """Distance de chaque point de Q au contour fermé F (2D)."""
+    A = F
+    B = np.roll(F, -1, axis=0)
+    AB = B - A
+    L2 = np.maximum((AB * AB).sum(axis=1), 1e-30)
+    D = Q[:, None, :] - A[None, :, :]
+    t = np.clip((D * AB[None]).sum(axis=2) / L2[None], 0.0, 1.0)
+    X = A[None] + t[..., None] * AB[None]
+    return np.sqrt(((Q[:, None, :] - X) ** 2).sum(axis=2)).min(axis=1)
+
+
+def _drop_duplicate_loops(flats, areas):
+    """Un contour tracé deux fois (le contour d'une hachure posé sur sa forme, une courbe copiée sur place) ne compte
+    qu'une fois : sinon l'imbrication paire / impaire se trompe et les trous de la forme disparaissent."""
+    keep = []
+    boxes = [(F.min(axis=0), F.max(axis=0)) for F in flats]
+    for i, F in enumerate(flats):
+        size = float(np.ptp(F, axis=0).max())
+        tol = max(1e-6 * size, 1e-9)
+        dup = False
+        for j in keep:
+            if abs(areas[j] - areas[i]) > 1e-6 * max(areas[i], 1e-18):
+                continue
+            if float(np.abs(boxes[i][0] - boxes[j][0]).max()) > tol or float(np.abs(boxes[i][1] - boxes[j][1]).max()) > tol:
+                continue
+            G = flats[j]
+            if len(F) * len(G) > 4_000_000:
+                continue
+            if float(_seg_dist(F, G).max()) <= tol and float(_seg_dist(G, F).max()) <= tol:
+                dup = True
+                break
+        if not dup:
+            keep.append(i)
+    if len(keep) == len(flats):
+        return flats, areas
+    return [flats[i] for i in keep], [areas[i] for i in keep]
 
 
 def hatch_regions(groups):
@@ -123,6 +159,24 @@ def hatch_regions(groups):
     return out
 
 
+_GROUP_BOXES = {}
+
+
+def _group_boxes(flats):
+    """Boîtes (x0, y0, x1, y1) et premiers points des contours d'un plan, calculés une fois : au survol, seuls les
+    contours dont la boîte contient le point sont testés (un plan de milliers de courbes reste fluide)."""
+    key = id(flats)
+    hit = _GROUP_BOXES.get(key)
+    if hit is not None and hit[0] is flats:
+        return hit[1], hit[2]
+    if len(_GROUP_BOXES) > 64:
+        _GROUP_BOXES.clear()
+    bb = np.array([(F[:, 0].min(), F[:, 1].min(), F[:, 0].max(), F[:, 1].max()) for F in flats], dtype=np.float64).reshape(-1, 4)
+    first = np.array([F[0] for F in flats], dtype=np.float64).reshape(-1, 2)
+    _GROUP_BOXES[key] = (flats, bb, first)
+    return bb, first
+
+
 def hatch_region_at(groups, o, d):
     """Région fermée qui contient le point visé par le rayon (o, d) : (c, u, v, n, anneaux 2D, distance) ou None.
     La plus petite boucle qui contient le point est le contour ; les boucles directement à l'intérieur sont les trous."""
@@ -138,11 +192,16 @@ def hatch_region_at(groups, o, d):
             continue
         hit = o + d * t - c
         p2 = (float(hit @ u), float(hit @ v))
-        cont = [i for i in range(len(flats)) if _pip_np(p2, flats[i])]
+        bb, first = _group_boxes(flats)
+        near = np.flatnonzero((bb[:, 0] <= p2[0]) & (bb[:, 2] >= p2[0]) & (bb[:, 1] <= p2[1]) & (bb[:, 3] >= p2[1]))
+        cont = [int(i) for i in near if _pip_np(p2, flats[i])]
         if not cont:
             continue
         outer = min(cont, key=lambda i: areas[i])
-        inner = [j for j in range(len(flats)) if j != outer and j not in cont and areas[j] < areas[outer]
+        ob = bb[outer]
+        inb = np.flatnonzero((first[:, 0] >= ob[0]) & (first[:, 0] <= ob[2]) & (first[:, 1] >= ob[1]) & (first[:, 1] <= ob[3]))
+        cset = set(cont)
+        inner = [int(j) for j in inb if j != outer and int(j) not in cset and areas[j] < areas[outer]
                  and _pip_np(flats[j][0], flats[outer])]
         holes = [j for j in inner if not any(k != j and areas[k] > areas[j] and _pip_np(flats[j][0], flats[k])
                                                  for k in inner)]
@@ -150,69 +209,11 @@ def hatch_region_at(groups, o, d):
     return best
 
 
-def hatch_segments_2d(rings, pattern, unit, rot, base):
-    """Segments 2D (N, 2, 2) du motif découpé par les anneaux (pair / impair : les trous restent vides)."""
-    fams = HATCH_PATTERNS.get(pattern)
-    if not fams:
-        return np.zeros((0, 2, 2))
-    A = np.vstack([np.asarray(R, dtype=np.float64) for R in rings])
-    B = np.vstack([np.roll(np.asarray(R, dtype=np.float64), -1, axis=0) for R in rings])
-    O = np.asarray(base, dtype=np.float64)
-    unit = max(float(unit), 1e-12)
-    segs = []
-    total = 0
-    for ang, al0, pp0, shift, spacing, dashes in fams:
-        a = math.radians(ang) + rot
-        dv = np.array((math.cos(a), math.sin(a)))
-        nv = np.array((-math.sin(a), math.cos(a)))
-        h, s, al0, pp0 = spacing * unit, shift * unit, al0 * unit, pp0 * unit
-        dash = [x * unit for x in dashes]
-        period = sum(abs(x) for x in dash)
-        pa, pb = (A - O) @ nv, (B - O) @ nv
-        qa, qb = (A - O) @ dv, (B - O) @ dv
-        lo, hi = float(min(pa.min(), pb.min())), float(max(pa.max(), pb.max()))
-        k0, k1 = math.ceil((lo - pp0) / h), math.floor((hi - pp0) / h)
-        if k1 < k0:
-            continue
-        if k1 - k0 + 1 > HATCH_MAX_LINES:
-            raise HatchTooDense()
-        dp = pb - pa
-        ok_e = np.abs(dp) > 1e-15
-        for c0 in range(k0, k1 + 1, 256):
-            ks = np.arange(c0, min(c0 + 256, k1 + 1))
-            cc = pp0 + ks * h
-            mask = ((pa[None, :] > cc[:, None]) != (pb[None, :] > cc[:, None])) & ok_e[None, :]
-            tt = (cc[:, None] - pa[None, :]) / np.where(ok_e, dp, 1.0)[None, :]
-            along = qa[None, :] + tt * (qb - qa)[None, :] - (al0 + ks * s)[:, None]
-            for row, k in enumerate(ks):
-                vals = np.sort(along[row][mask[row]])
-                if len(vals) < 2:
-                    continue
-                bp = O + dv * (al0 + k * s) + nv * (pp0 + k * h)
-                for i in range(0, len(vals) - 1, 2):
-                    t0, t1 = float(vals[i]), float(vals[i + 1])
-                    if t1 - t0 < 1e-12:
-                        continue
-                    if not dash or period < 1e-12:
-                        segs.append((bp + dv * t0, bp + dv * t1))
-                        total += 1
-                    else:
-                        m = math.floor(t0 / period)
-                        while m * period < t1:
-                            pos = m * period
-                            for ln in dash:
-                                if ln > 0:
-                                    a_, b_ = max(pos, t0), min(pos + ln, t1)
-                                    if b_ - a_ > 1e-12:
-                                        segs.append((bp + dv * a_, bp + dv * b_))
-                                        total += 1
-                                pos += abs(ln)
-                            m += 1
-                    if total > HATCH_MAX_SEGS:
-                        raise HatchTooDense()
-    if not segs:
-        return np.zeros((0, 2, 2))
-    return np.array(segs, dtype=np.float64)
+def hatch_segments_2d(rings, pattern, unit, rot, base, dd=None):
+    """Segments 2D (N, 2, 2) du motif découpé par les anneaux (pair / impair : les trous restent vides).
+    `pattern` : clé d'un motif, ou directement ses familles de lignes."""
+    fams = pattern if isinstance(pattern, (list, tuple)) else hatch_families(pattern, dd)
+    return segments_2d(rings, fams, unit, rot, base)
 
 
 def hatch_mesh_data(dd, pattern, scale, rot):
@@ -223,12 +224,13 @@ def hatch_mesh_data(dd, pattern, scale, rot):
     def to3(P2):
         P2 = np.asarray(P2, dtype=np.float64).reshape(-1, 2)
         return c + P2[:, :1] * u + P2[:, 1:2] * v
-    if pattern == 'SOLID':
+    fams = hatch_families(pattern, dd)
+    if fams is None:
         polys = [[Vector((float(p[0]), float(p[1]), 0.0)) for p in R] for R in rings]
         tris = geometry.tessellate_polygon(polys)
         V = to3(np.vstack(rings))
         return V, [], [tuple(t) for t in tris]
-    S = hatch_segments_2d(rings, pattern, float(dd["unit"]) * scale, rot, dd.get("base", (0.0, 0.0)))
+    S = hatch_segments_2d(rings, fams, float(dd["unit"]) * scale, rot, dd.get("base", (0.0, 0.0)))
     if not len(S):
         return np.zeros((0, 3)), [], []
     V = to3(S.reshape(-1, 2))
@@ -243,11 +245,39 @@ def _hatch_new_mesh(name, V, E, F):
     return me
 
 
+def keep_pattern_copy(dd, pattern):
+    """Un motif importé est recopié dans la hachure : elle reste juste si le motif est retiré de la liste,
+    ou si la hachure est copiée dans un autre fichier. True si la définition a changé."""
+    if is_custom(pattern):
+        from .hatch_patterns import _CUSTOM
+        try:
+            e = _CUSTOM.get(int(pattern[3:]))
+        except ValueError:
+            e = None
+        if e is not None:
+            fams = [list(f[:5]) + [list(f[5])] for f in e["fams"]]
+            if dd.get("fams") != fams or dd.get("pat") != e["name"]:
+                dd["fams"], dd["pat"] = fams, e["name"]
+                return True
+        return False
+    if pattern and ("fams" in dd or "pat" in dd):
+        dd.pop("fams", None)
+        dd.pop("pat", None)
+        return True
+    return False
+
+
 def rebuild_hatch(obj):
     """Reconstruit la géométrie d'une hachure à partir de sa définition et de ses réglages (motif, échelle, rotation)."""
     dd = json.loads(obj["dessin_hatch"])
     pg = obj.dessin_hatch
-    V, E, F = hatch_mesh_data(dd, pg.pattern, pg.scale, pg.rotation)
+    try:
+        pat = pg.pattern
+    except (TypeError, ValueError):
+        pat = ""
+    if keep_pattern_copy(dd, pat):
+        obj["dessin_hatch"] = json.dumps(dd)
+    V, E, F = hatch_mesh_data(dd, pat, pg.scale, pg.rotation)
     old = obj.data
     obj.data = _hatch_new_mesh(old.name, V, E, F)
     for mat in old.materials:
@@ -292,6 +322,7 @@ def create_hatch(context, region, pattern=None, scale=None, rot=None, unit=None,
     dd = {"c": [float(x) for x in (np.asarray(c) - origin)], "u": [float(x) for x in u], "v": [float(x) for x in v],
           "n": [float(x) for x in n], "rings": [[[float(p[0]), float(p[1])] for p in R] for R in rings],
           "unit": float(unit), "base": [0.0, 0.0]}
+    keep_pattern_copy(dd, pattern)
     V, E, F = hatch_mesh_data(dd, pattern, scale, rot)
     me = _hatch_new_mesh(name, V, E, F)
     obj = bpy.data.objects.new(name, me)
@@ -303,6 +334,86 @@ def create_hatch(context, region, pattern=None, scale=None, rot=None, unit=None,
         obj.dessin_hatch.pattern = pattern
         obj.dessin_hatch.scale = scale
         obj.dessin_hatch.rotation = rot
+    finally:
+        _HATCH_EDIT["busy"] = False
+    return obj
+
+
+def _rings_signature(world_rings):
+    """Signature d'une zone (anneaux en coordonnées monde, le premier = contour) : normale, plan, aire nette, boîte."""
+    R0 = np.asarray(world_rings[0], dtype=np.float64)
+    if len(R0) < 3:
+        return None
+    o = R0[0]
+
+    def vec_area(R):
+        R = np.asarray(R, dtype=np.float64) - o
+        return 0.5 * np.cross(R, np.roll(R, -1, axis=0)).sum(axis=0)
+    a0 = vec_area(R0)
+    la = float(np.linalg.norm(a0))
+    if la < 1e-18:
+        return None
+    nrm = a0 / la
+    net = la - sum(float(np.linalg.norm(vec_area(R))) for R in world_rings[1:] if len(R) >= 3)
+    allp = np.vstack([np.asarray(R, dtype=np.float64) for R in world_rings])
+    return nrm, float(nrm @ R0[0]), net, allp.min(axis=0), allp.max(axis=0), len(world_rings)
+
+
+def _same_area(sa, sb):
+    if sa is None or sb is None or sa[5] != sb[5]:
+        return False
+    size = float(np.linalg.norm(sa[4] - sa[3]))
+    tol = 1e-5 * size + 1e-9
+    return (abs(abs(float(sa[0] @ sb[0])) - 1.0) < 1e-6 and abs(sa[1] - (sb[1] if sa[0] @ sb[0] > 0 else -sb[1])) <= tol
+            and abs(sa[2] - sb[2]) <= 1e-4 * max(abs(sa[2]), 1e-12)
+            and float(np.abs(sa[3] - sb[3]).max()) <= tol and float(np.abs(sa[4] - sb[4]).max()) <= tol)
+
+
+def hatch_world_rings(obj):
+    dd = json.loads(obj["dessin_hatch"])
+    c, u, v = np.array(dd["c"]), np.array(dd["u"]), np.array(dd["v"])
+    M = np.array(obj.matrix_world, dtype=np.float64)
+    out = []
+    for R in dd["rings"]:
+        R = np.asarray(R, dtype=np.float64)
+        P = c + R[:, :1] * u + R[:, 1:2] * v
+        out.append(P @ M[:3, :3].T + M[:3, 3])
+    return out
+
+
+def hatch_on_area(context, region, skip=()):
+    """La hachure visible qui remplit déjà exactement cette zone (mêmes contour et trous), ou None."""
+    c, u, v, _n, rings = region[:5]
+    c, u, v = np.asarray(c, dtype=np.float64), np.asarray(u, dtype=np.float64), np.asarray(v, dtype=np.float64)
+    want = _rings_signature([c + np.asarray(R, dtype=np.float64)[:, :1] * u + np.asarray(R, dtype=np.float64)[:, 1:2] * v
+                             for R in rings])
+    if want is None:
+        return None
+    for o in context.view_layer.objects:
+        if not is_hatch(o) or o in skip:
+            continue
+        try:
+            if not o.visible_get():
+                continue
+            if _same_area(want, _rings_signature(hatch_world_rings(o))):
+                return o
+        except (KeyError, TypeError, ValueError, ReferenceError, RuntimeError):
+            continue
+    return None
+
+
+def hatch_restyle(obj, pattern, scale, rot):
+    """Donne un autre motif à une hachure (son calque, son pas et son point de base restent). Lève HatchTooDense."""
+    pg = obj.dessin_hatch
+    old = (pg.pattern, pg.scale, pg.rotation)
+    _HATCH_EDIT["busy"] = True
+    try:
+        pg.pattern, pg.scale, pg.rotation = pattern, scale, rot
+        try:
+            rebuild_hatch(obj)
+        except HatchTooDense:
+            pg.pattern, pg.scale, pg.rotation = old
+            raise
     finally:
         _HATCH_EDIT["busy"] = False
     return obj
@@ -339,8 +450,8 @@ def _hatch_paths_of(context, objs):
     dg = context.evaluated_depsgraph_get()
     paths = []
     for o in objs:
-        if is_hatch(o) or "dessin_cotation" in o.keys() or "dessin_cotation_texte" in o.keys():
-            continue
+        if is_hatch(o) or "dessin_cotation" in o.keys() or "dessin_cotation_texte" in o.keys() or "cad_clip" in o.keys():
+            continue            # (plan de coupe : son repère n'est pas un contour du dessin)
         try:
             key = (o.data.as_pointer(), np.array(o.matrix_world).tobytes(), _geom_ver(o.name), _geom_ver(o.data.name), o.mode)
         except (AttributeError, ReferenceError):
@@ -356,6 +467,10 @@ def _hatch_paths_of(context, objs):
                 _PATHS_CACHE[o.name] = (key, got)
         paths.extend((P.copy(), c) for P, c in got)
     return paths
+
+
+def _pattern_name(key):
+    return next((p[1] for p in pattern_list() if p[0] == key), key)
 
 
 def _select_only(context, objs):
@@ -390,16 +505,28 @@ class DESSIN_OT_hatch(_ProfileOp, bpy.types.Operator):
         if not regions:
             self.report({'WARNING'}, "Hatch needs closed planar curves (or curves whose ends touch)")
             return {'CANCELLED'}
-        made = []
+        made, changed = [], []
+        st = context.scene.dessin
         try:
             for rg in regions:
-                made.append(create_hatch(context, rg))
+                # zone déjà hachurée : sa hachure prend le nouveau motif (au lieu d'une seconde par-dessus)
+                old = hatch_on_area(context, rg, skip=changed)
+                if old is not None:
+                    hatch_restyle(old, st.hatch_pattern, st.hatch_scale, st.hatch_rotation)
+                    changed.append(old)
+                else:
+                    made.append(create_hatch(context, rg))
         except HatchTooDense:
             delete_objects(made)
             self.report({'WARNING'}, "Pattern too dense for this area: increase the hatch scale")
             return {'CANCELLED'}
-        _select_only(context, made)
-        msg = f"{len(made)} hatch(es) created"
+        _select_only(context, made + changed)
+        parts = []
+        if made:
+            parts.append(f"{len(made)} hatch(es) created")
+        if changed:
+            parts.append(f"{len(changed)} hatch(es) changed to {_pattern_name(st.hatch_pattern)}")
+        msg = ", ".join(parts)
         if skipped:
             msg += f", {skipped} curve(s) ignored (open or not planar)"
         self.report({'INFO'}, msg)
@@ -415,7 +542,7 @@ class DESSIN_OT_hatch_region(DessinBase):
     TITLE = "Hatch Region"
     NEEDED = 1
     HAS_MODE = True
-    MODES = tuple(p[1] for p in HATCH_PATTERN_ITEMS)
+    MODES = tuple(p[1] for p in pattern_list())
     mode = 0
     PLANAR = False
     LOCK_OK = False
@@ -431,9 +558,12 @@ class DESSIN_OT_hatch_region(DessinBase):
         self.hilite = []
         self.hatch_lines = None
         self._region = None
+        self._rf = None
+        pats = pattern_list()
+        self._pat_keys = [p[0] for p in pats]
+        self.MODES = tuple(p[1] for p in pats)
         try:
-            keys = [p[0] for p in HATCH_PATTERN_ITEMS]
-            self.mode = keys.index(context.scene.dessin.hatch_pattern)
+            self.mode = self._pat_keys.index(context.scene.dessin.hatch_pattern)
         except (ValueError, AttributeError):
             self.mode = 0
         self.collect_loops(context)
@@ -455,7 +585,8 @@ class DESSIN_OT_hatch_region(DessinBase):
         super().update_cursor(context, event)
 
     def pattern(self):
-        return HATCH_PATTERN_ITEMS[self.mode % len(HATCH_PATTERN_ITEMS)][0]
+        keys = getattr(self, "_pat_keys", None) or [p[0] for p in pattern_list()]
+        return keys[self.mode % len(keys)]
 
     def find_region(self):
         if self._mouse is None or self.region is None or not self._groups:
@@ -466,7 +597,15 @@ class DESSIN_OT_hatch_region(DessinBase):
             d = region_2d_to_vector_3d(self.region, rv3d, self._mouse)
         except (AttributeError, ReferenceError, TypeError):
             return None
-        return hatch_region_at(self._groups, np.array(o), np.array(d))
+        rg = hatch_region_at(self._groups, np.array(o), np.array(d))
+        if rg is None:
+            # pas de contour fermé d'un seul tenant : la zone fermée par des traits qui se croisent (comme AutoCAD)
+            from .boundary import region_under_mouse
+            try:
+                rg = region_under_mouse(self, bpy.context, self._mouse, islands=True)
+            except (ValueError, RuntimeError, ReferenceError, AttributeError):
+                rg = None
+        return rg
 
     def compute(self):
         self.hilite = []
@@ -509,13 +648,21 @@ class DESSIN_OT_hatch_region(DessinBase):
         if rg is None:
             self.report({'INFO'}, "Click inside an area closed by curves")
             return
+        st = context.scene.dessin
+        existing = hatch_on_area(context, rg[:5])
         try:
-            context.scene.dessin.hatch_pattern = self.pattern()
-            ob = create_hatch(context, rg[:5], pattern=self.pattern())
+            st.hatch_pattern = self.pattern()
+            if existing is not None:
+                # zone déjà hachurée : sa hachure prend le motif choisi (au lieu d'une seconde par-dessus)
+                ob = hatch_restyle(existing, self.pattern(), st.hatch_scale, st.hatch_rotation)
+            else:
+                ob = create_hatch(context, rg[:5], pattern=self.pattern())
         except HatchTooDense:
             self.report({'WARNING'}, "Pattern too dense for this area: increase the hatch scale")
             return
-        if context.scene.dessin.hatch_boundary:
+        if existing is not None:
+            self.report({'INFO'}, f"Hatch changed to {_pattern_name(self.pattern())}")
+        elif st.hatch_boundary:
             hatch_boundary_curve(context, ob)
         self.reset_state()
         self.refresh(context)
@@ -671,6 +818,155 @@ class DESSIN_OT_hatch_match(bpy.types.Operator):
             _HATCH_EDIT["busy"] = False
         self.report({'INFO'}, f"{len(dst)} hatch(es) matched to {src.name}")
         return {'FINISHED'}
+
+
+class DESSIN_OT_hatch_import(bpy.types.Operator):
+    bl_idname = "dessin.hatch_import"
+    bl_label = "Import Hatch Patterns"
+    bl_description = ("Adds the hatch patterns of a .pat file (AutoCAD, Rhino, Revit: acad.pat, acadiso.pat or your own) "
+                      "to the list of patterns. They are saved with the file")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    filepath: bpy.props.StringProperty(subtype='FILE_PATH', options={'SKIP_SAVE'})
+    filter_glob: bpy.props.StringProperty(default="*.pat", options={'HIDDEN'})
+
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+    def execute(self, context):
+        from .hatch_patterns import add_custom_patterns, read_pat_file
+        try:
+            pats = read_pat_file(self.filepath)
+        except OSError as e:
+            self.report({'WARNING'}, f"Cannot read the file: {e}")
+            return {'CANCELLED'}
+        if not pats:
+            self.report({'WARNING'}, "No hatch pattern found in this file")
+            return {'CANCELLED'}
+        keys = add_custom_patterns(context.scene, pats)
+        try:
+            context.scene.dessin.hatch_pattern = keys[0]
+        except (TypeError, ValueError):
+            pass
+        self.report({'INFO'}, f"{len(keys)} hatch pattern(s) imported")
+        return {'FINISHED'}
+
+
+class DESSIN_OT_hatch_pattern_remove(bpy.types.Operator):
+    bl_idname = "dessin.hatch_pattern_remove"
+    bl_label = "Remove Imported Pattern"
+    bl_description = ("Removes the chosen imported pattern from the list. The hatches that use it keep their look "
+                      "(each hatch keeps a copy of its pattern)")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    key: bpy.props.StringProperty(options={'SKIP_SAVE'})
+
+    def execute(self, context):
+        from .hatch_patterns import forget_preview, remove_custom_pattern
+        st = context.scene.dessin
+        key = self.key or st.hatch_pattern
+        if not is_custom(key):
+            self.report({'INFO'}, "Only the imported patterns can be removed")
+            return {'CANCELLED'}
+        # les hachures qui s'en servent gardent leur copie du motif (déjà dans leur définition)
+        for o in bpy.data.objects:
+            if is_hatch(o):
+                try:
+                    if o.dessin_hatch.pattern == key:
+                        dd = json.loads(o["dessin_hatch"])
+                        keep_pattern_copy(dd, key)
+                        o["dessin_hatch"] = json.dumps(dd)
+                except (TypeError, ValueError, KeyError, ReferenceError):
+                    pass
+        if st.hatch_pattern == key:
+            st.hatch_pattern = 'HATCH1'
+        remove_custom_pattern(context.scene, key)
+        forget_preview(key)
+        return {'FINISHED'}
+
+
+def draw_hatch_editor(layout, context, obj, compact=False):
+    """Réglages d'une hachure (motif en vignettes, échelle, rotation) et ses commandes."""
+    from .core import tr_label
+    hs = [o for o in context.selected_objects if is_hatch(o)]
+    pg = obj.dessin_hatch
+    row = layout.row()
+    row.template_icon_view(pg, "pattern", show_labels=True, scale=5.0, scale_popup=4.0)
+    col = row.column(align=True)
+    col.prop(pg, "pattern", text="")
+    col.prop(pg, "scale")
+    col.prop(pg, "rotation")
+    if len(hs) > 1:
+        col.label(text=tr_label(f"{len(hs)} hatches selected: all change"), icon='INFO')
+    row = layout.row(align=True)
+    row.operator(DESSIN_OT_hatch_base.bl_idname, text="Base Point")
+    row.operator(DESSIN_OT_hatch_match.bl_idname, text="Match")
+    row = layout.row(align=True)
+    row.operator(DESSIN_OT_hatch_boundary.bl_idname, text="Boundary")
+    row.operator(DESSIN_OT_hatch_explode.bl_idname, text="Explode")
+
+
+class DESSIN_OT_hatch_edit(bpy.types.Operator):
+    bl_idname = "dessin.hatch_edit"
+    bl_label = "Edit Hatch"
+    bl_description = ("Like HatchEdit: changes the pattern, scale and rotation of the selected hatches (pattern shown "
+                      "as pictures). Also opened by a double-click on a hatch")
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT' and any(is_hatch(o) for o in context.selected_objects)
+
+    def _target(self, context):
+        ob = context.active_object
+        if is_hatch(ob) and ob.select_get():
+            return ob
+        return next((o for o in context.selected_objects if is_hatch(o)), None)
+
+    def invoke(self, context, event):
+        ob = self._target(context)
+        if ob is None:
+            return {'CANCELLED', 'PASS_THROUGH'}
+        context.view_layer.objects.active = ob
+        return context.window_manager.invoke_popup(self, width=340)
+
+    def draw(self, context):
+        ob = self._target(context)
+        lay = self.layout
+        if ob is None:
+            lay.label(text="Select a hatch")
+            return
+        lay.label(text=ob.name, icon='MOD_LATTICE')
+        draw_hatch_editor(lay, context, ob)
+
+    def execute(self, context):
+        return {'FINISHED'}
+
+
+class DESSIN_OT_hatch_dblclick(bpy.types.Operator):
+    bl_idname = "dessin.hatch_dblclick"
+    bl_label = "Edit (double-click)"
+    bl_description = ("Double-click a hatch to edit its pattern, scale and rotation; double-click a block to edit it "
+                      "in place (Block Edit)")
+    bl_options = {'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return context.mode == 'OBJECT'
+
+    def invoke(self, context, event):
+        ob = context.active_object
+        if ob is None or not ob.select_get() or event.shift or event.ctrl or event.alt or event.oskey:
+            return {'CANCELLED', 'PASS_THROUGH'}
+        if is_hatch(ob):
+            bpy.ops.dessin.hatch_edit('INVOKE_DEFAULT')
+            return {'FINISHED'}
+        from .curve_tools import block_edit_state, is_block_instance
+        if is_block_instance(ob) and block_edit_state()["inst"] is None:
+            bpy.ops.dessin.block_edit()
+            return {'FINISHED'}
+        return {'CANCELLED', 'PASS_THROUGH'}
 
 
 # ---- Surfaces : FilletSrf / ChamferSrf, ExtendSrf, Split Isocurve, NetworkSrf ----

@@ -7,7 +7,7 @@ import numpy as np
 import types
 from mathutils import Matrix, Vector
 
-from .core import TAU, plane_axes
+from .core import GB_SNAP_FROM_ITEMS, TAU, plane_axes
 
 
 # --------------------------------------------------------------------------
@@ -117,6 +117,25 @@ def _update_polar(self, context):
         self.ortho = False
 
 
+def _update_linetype_scale(self, context):
+    from .linetypes import _touch_layouts, lt_update_scale
+    lt_update_scale(self.id_data)
+    try:
+        _touch_layouts(context)
+    except (RuntimeError, AttributeError):
+        pass
+
+
+def _update_layer_sort_alpha(self, context):
+    if self.layer_sort_alpha and self.layer_sort_color:
+        self.layer_sort_color = False       # un seul rangement à la fois
+
+
+def _update_layer_sort_color(self, context):
+    if self.layer_sort_color and self.layer_sort_alpha:
+        self.layer_sort_alpha = False
+
+
 DIM_STYLE_FIELDS = ("taille_texte", "ecart_texte", "position_texte", "prolongement", "decalage", "fleche_style", "fleche_taille",
                     "unite_cote", "decimales", "supprimer_zeros", "unite", "prefixe", "suffixe")
 DIM_STYLE_DEFAULTS = (
@@ -181,31 +200,7 @@ def ensure_dim_styles(st):
 # Familles de lignes d'un motif, en unités de motif (1 = pas de base) :
 # (angle°, décalage le long, décalage perpendiculaire, glissement le long par ligne, écart entre lignes, tirets)
 # tirets : longueurs > 0 tracées, < 0 vides (vide = ligne continue)
-HATCH_PATTERNS = {
-    'SOLID': None,
-    'HATCH1': ((45.0, 0.0, 0.0, 0.0, 1.0, ()),),
-    'HATCH2': ((45.0, 0.0, 0.0, 0.0, 1.0, ()), (135.0, 0.0, 0.0, 0.0, 1.0, ())),
-    'HATCH3': ((45.0, 0.0, 0.0, 0.0, 1.0, ()), (45.0, 0.0, 0.25, 0.0, 1.0, ())),
-    'DASH': ((45.0, 0.0, 0.0, 0.5, 1.0, (1.0, -0.5)),),
-    'GRID': ((0.0, 0.0, 0.0, 0.0, 1.0, ()), (90.0, 0.0, 0.0, 0.0, 1.0, ())),
-    'GRID60': ((0.0, 0.0, 0.0, 0.0, 1.0, ()), (60.0, 0.0, 0.0, 0.0, 1.0, ()), (120.0, 0.0, 0.0, 0.0, 1.0, ())),
-    'PLUS': ((0.0, -0.15, 0.0, 0.0, 1.0, (0.3, -0.7)), (90.0, -0.15, 0.0, 0.0, 1.0, (0.3, -0.7))),
-    'SQUARES': ((0.0, 0.0, 0.0, 0.0, 1.0, (0.5, -0.5)), (0.0, 0.0, 0.5, 0.0, 1.0, (0.5, -0.5)),
-                (90.0, 0.0, 0.0, 0.0, 1.0, (0.5, -0.5)), (90.0, 0.0, -0.5, 0.0, 1.0, (0.5, -0.5))),
-    'BRICK': ((0.0, 0.0, 0.0, 0.0, 1.0, ()), (90.0, 0.0, 0.0, 1.0, 1.0, (1.0, -1.0))),
-}
-HATCH_PATTERN_ITEMS = (
-    ('SOLID', "Solid", "Solid fill"),
-    ('HATCH1', "Hatch1", "Parallel lines at 45 degrees"),
-    ('HATCH2', "Hatch2", "Crossed lines at 45 degrees"),
-    ('HATCH3', "Hatch3", "Pairs of lines at 45 degrees"),
-    ('DASH', "Dash", "Dashed lines at 45 degrees"),
-    ('GRID', "Grid", "Square grid"),
-    ('GRID60', "Grid60", "Triangular grid (60 degrees)"),
-    ('PLUS', "Plus", "Small plus signs"),
-    ('SQUARES', "Squares", "Small squares"),
-    ('BRICK', "Brick", "Brick courses"),
-)
+from .hatch_patterns import HATCH_PATTERNS, HATCH_PATTERN_ITEMS, pattern_items  # noqa: E402,F401
 _HATCH_EDIT = {"busy": False}
 
 
@@ -225,7 +220,7 @@ def _hatch_prop_update(self, context):
                     o.dessin_hatch.scale = self.scale
                     o.dessin_hatch.rotation = self.rotation
                     targets.append(o)
-        except (AttributeError, RuntimeError, ReferenceError):
+        except (AttributeError, RuntimeError, ReferenceError, TypeError):
             pass
         for o in targets:
             try:
@@ -234,6 +229,14 @@ def _hatch_prop_update(self, context):
                 pass
             except (RuntimeError, ReferenceError, ValueError, TypeError, KeyError, AttributeError):
                 pass
+        # le dernier motif choisi devient celui des prochaines hachures (comme AutoCAD)
+        try:
+            st = bpy.context.scene.dessin
+            if st.hatch_pattern != self.pattern:
+                st.hatch_pattern = self.pattern
+            st.hatch_scale, st.hatch_rotation = self.scale, self.rotation
+        except (AttributeError, RuntimeError, ReferenceError, TypeError):
+            pass
     finally:
         _HATCH_EDIT["busy"] = False
 
@@ -250,7 +253,8 @@ def _redraw_bars():
 
 
 class DESSIN_PG_hatch(bpy.types.PropertyGroup):
-    pattern: bpy.props.EnumProperty(name="Pattern", items=HATCH_PATTERN_ITEMS, default='HATCH1', update=_hatch_prop_update)
+    pattern: bpy.props.EnumProperty(name="Pattern", items=pattern_items, default=1, update=_hatch_prop_update,
+                                    description="Hatch pattern")
     scale: bpy.props.FloatProperty(name="Scale", default=1.0, min=0.01, soft_max=20.0, update=_hatch_prop_update,
                                    description="Pattern scale (1 = spacing chosen when the hatch was created)")
     rotation: bpy.props.FloatProperty(name="Rotation", default=0.0, subtype='ANGLE', update=_hatch_prop_update,
@@ -320,8 +324,33 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     layer_col_render: bpy.props.BoolProperty(name="Disable in renders", default=True, description="Column: disable the layer in renders (camera)")
     layer_col_holdout: bpy.props.BoolProperty(name="Holdout", default=False, description="Column: holdout")
     layer_col_indirect: bpy.props.BoolProperty(name="Indirect only", default=False, description="Column: indirect only")
-    layer_sort_alpha: bpy.props.BoolProperty(name="Sort Alphabetically", default=False, description="Sorts the layers by name instead of keeping your own order")
+    layer_sort_alpha: bpy.props.BoolProperty(name="Sort Alphabetically", default=False, update=_update_layer_sort_alpha,
+                                             description="Sorts the layers by name instead of keeping your own order")
+    layer_sort_color: bpy.props.BoolProperty(name="Sort by Color", default=False, update=_update_layer_sort_color,
+                                             description="Sorts the layers by color, around the color wheel (red, orange, yellow, "
+                                                         "green, blue, purple), then grays from light to dark, then the layers "
+                                                         "without a color. Layers of the same color keep your own order")
+    match_layer: bpy.props.BoolProperty(name="Layer", default=True, description="Match Properties: copies the layer")
+    match_color: bpy.props.BoolProperty(name="Color", default=True, description="Match Properties: copies the color (or «color of the layer»)")
+    match_linetype: bpy.props.BoolProperty(name="Linetype", default=True, description="Match Properties: copies the linetype of a curve")
+    match_print: bpy.props.BoolProperty(name="Print width", default=True, description="Match Properties: copies the print width")
+    match_material: bpy.props.BoolProperty(name="Material", default=True, description="Match Properties: copies the materials")
+    match_text: bpy.props.BoolProperty(name="Text", default=True, description="Match Properties: text to text, copies the size, font and alignment")
+    match_hatch: bpy.props.BoolProperty(name="Hatch", default=True, description="Match Properties: hatch to hatch, copies the pattern, scale and rotation")
+    linetype_scale: bpy.props.FloatProperty(
+        name="Linetype Scale", default=50.0, min=1.0, max=100000.0, soft_max=1000.0, precision=0,
+        update=_update_linetype_scale,
+        description="Size of the dashes in the 3D views: drawn as printed at 1:N (at 50, a 6 mm dash is 30 cm long). "
+                    "The layouts print them at their real size in millimetres, whatever the scale of the viewport")
     layer_sync_select: bpy.props.BoolProperty(name="Sync Selection", default=True, description="Clicking a layer selects its objects in the 3D view")
+    layer_widths: bpy.props.StringProperty(default="{}", options={'HIDDEN'},
+                                           description="Widths of the columns of the layer list (JSON, in UI units)")
+    layer_list_rows: bpy.props.IntProperty(
+        name="Rows", default=25, min=5, max=400,
+        description="Height of the layer list, in rows: beyond it, the list scrolls (drag the grip under the list to change it)")
+    layer_list_scroll: bpy.props.FloatProperty(
+        name="Scroll", default=0.0, min=0.0, max=1.0, subtype='FACTOR',
+        description="Position in the layer list (drag, or use the arrows)")
     layer_show_objects: bpy.props.BoolProperty(name="Objects", default=False, description="Lists the objects under each layer (limited to 300 rows)")
     layer_search: bpy.props.StringProperty(name="Name", default="", options={'TEXTEDIT_UPDATE'}, description="Shows only the layers whose name contains this text")
     layer_search_exact: bpy.props.BoolProperty(name="Exact Match", default=False)
@@ -366,7 +395,7 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
         name="Sticky", default=False,
         description="Auto CPlane: the plane stays on the last planar selection when you select something that is not planar (otherwise it goes back to the ground plane)")
     gumball: bpy.props.BoolProperty(
-        name="Show Gumball", default=True,
+        name="Show Gizmo", default=True,
         description="Show the move / rotate / scale handles on the selection (objects, or vertices / edges / faces in Edit mode) when no drawing tool is active")
     offset_surf_dist: bpy.props.FloatProperty(
         name="Distance", default=0.1, min=0.0, subtype='DISTANCE', unit='LENGTH',
@@ -379,18 +408,22 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     offset_surf_delete: bpy.props.BoolProperty(
         name="Delete input", default=False, description="Offset Surface: delete the original surface after the offset")
     gumball_drag: bpy.props.EnumProperty(
-        name="Gumball dragging", default='SMOOTH',
+        name="Gizmo dragging", default='SMOOTH',
         items=(('SNAPPY', "Snappy Dragging", "Moving with an arrow snaps to the object snaps (End, Mid, Cen...) under the cursor"),
                ('SMOOTH', "Smooth Dragging", "Moving with an arrow follows the mouse freely")),
-        description="How the Gumball arrows move the selection")
+        description="How the Gizmo arrows move the selection")
+    gumball_snap_from: bpy.props.EnumProperty(
+        name="Snap from", default='CLOSEST', items=GB_SNAP_FROM_ITEMS,
+        description="Snappy Dragging: the point of the selection that lands on the snapped point")
+    gumball_snap_from_set: bpy.props.BoolProperty(default=False)   # choisi dans ce fichier ; sinon la préférence
     gumball_autoreset: bpy.props.BoolProperty(
-        name="AutoReset Gumball", default=False,
-        description="The Gumball goes back to the center of the selection each time the selection changes")
+        name="AutoReset Gizmo", default=False,
+        description="The Gizmo goes back to the center of the selection each time the selection changes")
     gumball_pivot_on: bpy.props.BoolProperty(default=False)
     gumball_pivot: bpy.props.FloatVectorProperty(size=3, subtype='XYZ', default=(0.0, 0.0, 0.0))
     gumball_size: bpy.props.FloatProperty(
-        name="Gumball size", default=100.0, min=20.0, max=300.0, subtype='PERCENTAGE',
-        description="Size of the Gumball handles (100% = default; lower it on high-resolution screens if the handles look too big)")
+        name="Gizmo size", default=100.0, min=20.0, max=300.0, subtype='PERCENTAGE',
+        description="Size of the Gizmo handles (100% = default; lower it on high-resolution screens if the handles look too big)")
     osnap_end: bpy.props.BoolProperty(name="End", default=True, description="End points of curves, polylines and open edges")
     osnap_near: bpy.props.BoolProperty(name="Near", default=True, description="Nearest point on an edge or curve")
     osnap_point: bpy.props.BoolProperty(name="Point", default=True, description="Empties, loose vertices and the world origin")
@@ -459,9 +492,13 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     # --- unités et format
     unite_cote: bpy.props.EnumProperty(
         name="Unit", default='CENTIMETERS',
-        items=(('SCENE', "Scene default", ""), ('MILLIMETERS', "Millimeters", ""),
-               ('CENTIMETERS', "Centimeters", ""), ('METERS', "Meters", "")), update=_cotation_restyle_update)
-    decimales: bpy.props.IntProperty(name="Resolution (decimals)", default=2, min=0, max=6, update=_cotation_restyle_update)
+        items=(('SCENE', "Scene default", "Unit of the scene (Imperial scenes: feet and inches, 10' - 6 1/2\")"),
+               ('MILLIMETERS', "Millimeters", ""), ('CENTIMETERS', "Centimeters", ""), ('METERS', "Meters", ""),
+               ('FEET', "Feet and inches", "Architectural: 10' - 6 1/2\" (fractions of an inch)"),
+               ('INCHES', "Inches", "Inches with fractions: 126 1/2\"")), update=_cotation_restyle_update)
+    decimales: bpy.props.IntProperty(name="Resolution (decimals)", default=2, min=0, max=6, update=_cotation_restyle_update,
+                                     description="Decimals; feet and inches: 0 = 1\", 1 = 1/2\", 2 = 1/4\", 3 = 1/8\", "
+                                                 "4 = 1/16\", 5 = 1/32\", 6 = 1/64\"")
     supprimer_zeros: bpy.props.BoolProperty(name="Remove trailing zeros", default=False, update=_cotation_restyle_update)
     unite: bpy.props.BoolProperty(name="Show unit", default=False, update=_cotation_restyle_update)
     prefixe: bpy.props.StringProperty(name="Prefix", default="", update=_cotation_restyle_update)
@@ -473,8 +510,10 @@ class DESSIN_PG_settings(bpy.types.PropertyGroup):
     block_scale: bpy.props.FloatProperty(name="Scale", default=1.0, min=1e-4, description="Scale of the inserted blocks")
     block_rotation: bpy.props.FloatProperty(name="Rotation", default=0.0, subtype='ANGLE', description="Rotation of the inserted blocks")
     # --- hachures
-    hatch_pattern: bpy.props.EnumProperty(name="Pattern", items=HATCH_PATTERN_ITEMS, default='HATCH1',
+    hatch_pattern: bpy.props.EnumProperty(name="Pattern", items=pattern_items, default=1,
                                           description="Pattern of the new hatches")
+    hatch_custom: bpy.props.StringProperty(default="[]", options={'HIDDEN'},
+                                           description="Hatch patterns imported from .pat files (JSON)")
     hatch_scale: bpy.props.FloatProperty(name="Scale", default=1.0, min=0.01, soft_max=20.0,
                                          description="Pattern scale of the new hatches")
     hatch_rotation: bpy.props.FloatProperty(name="Rotation", default=0.0, subtype='ANGLE',

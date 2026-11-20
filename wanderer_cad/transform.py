@@ -17,6 +17,9 @@ from .base import DessinBase, view_height
 from .subd import duplicate_hierarchy, expand_groups
 
 
+MOVE_LIGHT_COST = 0.010     # s : en dessous, Move suit chaque mouvement de souris sans cadence imposée
+
+
 class _PendingMove:
     """Copie légère d'un événement souris (l'événement de Blender ne doit pas être conservé)."""
     type = 'MOUSEMOVE'
@@ -147,13 +150,16 @@ class DessinTransform(DessinBase):
     def selected_now(self, context):
         if self.edit:
             return self.edit_sel(context)
-        out = []
-        for o in context.view_layer.objects:
-            try:
-                if o.select_get() and o.visible_get():
-                    out.append(o)
-            except RuntimeError:
-                pass
+        try:        # (la liste de Blender, sans repasser sur tous les objets à chaque mouvement de souris)
+            out = [o for o in context.selected_objects]
+        except (AttributeError, RuntimeError):
+            out = []
+            for o in context.view_layer.objects:
+                try:
+                    if o.select_get() and o.visible_get():
+                        out.append(o)
+                except RuntimeError:
+                    pass
         return expand_groups(context, out)
 
     def refresh_selecting(self, context):
@@ -305,17 +311,20 @@ class DessinTransform(DessinBase):
             return
         if self.points and event.type in {'MOUSEMOVE', 'INBETWEEN_MOUSEMOVE'}:
             now = time.monotonic()
-            if now - getattr(self, "_t_move", 0.0) < getattr(self, "_gap", 0.022):      # objets lourds : on ne recalcule pas à chaque événement souris
+            gap = getattr(self, "_gap", 0.0)
+            if gap > 0.0 and now - getattr(self, "_t_move", 0.0) < gap:      # mise à jour lourde : on ne recalcule pas à chaque événement souris
                 self._pending = _PendingMove(event)
                 return
             self._t_move = now
             self._pending = None
             t0 = time.perf_counter()
             super().update_cursor(context, event)
-            # le rythme s'adapte au coût réel d'une mise à jour (scène lourde : moins d'événements, plus fluide)
+            # Mise à jour légère (le cas courant, même dans une grosse scène : l'accrochage coûte ~0,1 ms) : chaque mouvement
+            # de souris est suivi. Une cadence minimale imposée (22 ms) tombait entre deux images de l'écran : l'objet
+            # avançait par à-coups. Mise à jour lourde : le rythme s'adapte à son coût réel (moins d'événements, plus fluide).
             cost = time.perf_counter() - t0
             self._cost = 0.6 * getattr(self, "_cost", cost) + 0.4 * cost
-            self._gap = min(0.12, max(0.022, 1.3 * self._cost))
+            self._gap = 0.0 if self._cost < MOVE_LIGHT_COST else min(0.12, 1.3 * self._cost)
             return
         self._pending = None
         super().update_cursor(context, event)
@@ -687,14 +696,24 @@ class MoveLogic:
     def delta_vec(self):
         u, v, _ = plane_axes(self.axis)
         d = self.cur - self.points[0]
-        if not self.ortho:
+        ortho = self.ortho or self.scene_ortho_on()
+        if self.lock is not None:
+            # axe verrouillé : la distance tapée part le long de cet axe, même quand la souris ne peut pas donner le sens
+            # (Z en vue de dessus : 0.9 monte, -0.9 descend)
+            a = AXES3[self.lock]
+            k = d.dot(a)
+            t = self.typed_value(0)
+            if t is not None:
+                return a * (t if k >= -1e-9 else -t)
+            return a * k
+        if not ortho:
             vec = d.copy()
             t = self.typed_value(0)
             if t is not None:
                 vec = (d / d.length if d.length > 1e-9 else u.copy()) * t
             return vec
         du, dv = d.dot(u), d.dot(v)
-        if self.ortho:
+        if ortho:
             if abs(du) >= abs(dv):
                 dv = 0.0
             else:
@@ -706,6 +725,13 @@ class MoveLogic:
             direction = vec / length if length > 1e-9 else u
             vec = direction * t
         return vec
+
+    def scene_ortho_on(self):
+        """Bouton Ortho (F8) de la barre du bas : il vaut aussi pour Move / Copy, comme Maj."""
+        try:
+            return bool(bpy.context.scene.dessin.ortho)
+        except (AttributeError, ReferenceError):
+            return False
 
     def compute(self):
         if not self.points or self.cur is None:
@@ -758,7 +784,7 @@ class DESSIN_OT_copier(MoveLogic, DessinTransform):
     def finish_shape(self, context):
         _, _, _, spec = self.compute()
         if spec is None:
-            self.report({'WARNING'}, "Copie invalide")
+            self.report({'WARNING'}, "Copy: the destination is the base point (nothing to copy)")
             return
         self.build(context, spec)      # crée la copie et remet les originaux en place
         self.count += 1
@@ -2026,6 +2052,119 @@ class DESSIN_OT_cut(DessinArray):
 
     def store_state(self):
         pass
+
+
+def slice_mesh_by_plane(obj, co, no, selected_only=False):
+    """Tranche un maillage avec un plan monde (co, no) : seules les arêtes de coupe sont ajoutées, rien n'est séparé ni
+    supprimé. selected_only : seules les faces sélectionnées sont tranchées (aucune : tout le maillage).
+    Retourne le nombre d'arêtes ajoutées (de points, pour un contour sans face)."""
+    mw = obj.matrix_world
+    lco = mw.inverted() @ co
+    lno = (mw.to_3x3().transposed() @ no).normalized()
+    me = obj.data
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(me)
+        faces = [f for f in bm.faces if f.select] if selected_only else []
+        if faces:
+            geom = set(faces)
+            for f in faces:
+                geom.update(f.edges)
+                geom.update(f.verts)
+            geom = list(geom)
+        else:
+            geom = list(bm.verts) + list(bm.edges) + list(bm.faces)
+        n_e, n_v = len(bm.edges), len(bm.verts)
+        bmesh.ops.bisect_plane(bm, geom=geom, dist=1e-7, plane_co=lco, plane_no=lno, clear_inner=False, clear_outer=False)
+        added = (len(bm.edges) - n_e) if len(bm.faces) else (len(bm.verts) - n_v)
+        if added > 0:
+            bm.normal_update()
+            bm.to_mesh(me)
+            me.update()
+        return max(0, added)
+    finally:
+        bm.free()
+
+
+class DESSIN_OT_slice(DESSIN_OT_cut):
+    bl_idname = "dessin.slice"
+    bl_label = "Slice"
+    bl_description = ("Slices meshes with a plane defined by a line (two points), like QuickSlice in 3ds Max: only the edges "
+                      "of the cut are added, the object stays in one piece. In Edit mode, only the selected faces are sliced "
+                      "(none selected: the whole mesh)")
+    TITLE = "Slice"
+    NO_SELECTION = "Select the meshes to slice first"
+
+    def invoke(self, context, event):
+        names = []
+        if context.mode == 'EDIT_MESH':
+            # lancée en mode Édition : on travaille sur les objets en cours d'édition, puis on y revient
+            for o in context.objects_in_mode_unique_data:
+                if o.type == 'MESH':
+                    names.append(o.name)
+                    try:
+                        o.select_set(True)
+                    except RuntimeError:
+                        pass
+        self.edit_objs = []
+        res = super().invoke(context, event)        # Split quitte le mode Édition
+        self.edit_objs = names
+        if names and 'RUNNING_MODAL' not in res:
+            self.back_to_edit(context)
+        return res
+
+    def back_to_edit(self, context):
+        names, self.edit_objs = getattr(self, "edit_objs", []), []
+        if not names or context.mode != 'OBJECT':
+            return
+        objs = [o for o in (bpy.data.objects.get(n) for n in names) if o is not None]
+        if not objs:
+            return
+        try:
+            if context.view_layer.objects.active not in objs:
+                context.view_layer.objects.active = objs[0]
+            self.in_view(context, lambda c: bpy.ops.object.mode_set(mode='EDIT'))
+        except (RuntimeError, ReferenceError, TypeError):
+            pass
+
+    def exit(self, context):
+        res = super().exit(context)
+        self.back_to_edit(context)
+        return res
+
+    def cancel(self, context):
+        super().cancel(context)
+        self.back_to_edit(context)
+
+    def prompt(self):
+        if getattr(self, "selecting", False):
+            return ""
+        if not self.points:
+            return "first point of the slicing line (or click an existing line)"
+        return "second point"
+
+    def compute(self):
+        pts, guides, info, spec = super().compute()
+        if spec is None:
+            return pts, guides, info, spec
+        return pts, guides[:1], "Slice: edges only, the object stays in one piece", ("slice", spec[1], spec[2])
+
+    def build(self, context, spec):
+        _, co, no = spec
+        only_sel = bool(getattr(self, "edit_objs", None))
+        added = 0
+        for obj, _mw in self.items:
+            try:
+                if obj.type == 'MESH':
+                    added += slice_mesh_by_plane(obj, co, no, only_sel)
+            except ReferenceError:
+                continue
+        self.committed = True
+        if added:
+            self.report({'INFO'}, f"Slice: {added} edge(s) added")
+        else:
+            self.report({'WARNING'}, "Slice: the line does not cross a mesh" + (" (or its selected faces)" if only_sel else ""))
+        return None
 
 
 def _late_imports():

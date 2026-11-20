@@ -2,7 +2,9 @@
 
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
-> **Status: stable (2.96.128).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+> **Status: stable (2.96.129).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+
+[![Support Wanderer CAD on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hostylmatic)
 
 ![Wanderer CAD: precision drawing and modeling, without leaving the Blender viewport](docs/images/slides/01-wanderer-cad.jpg)
 
@@ -10,7 +12,7 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 
 | | |
 |---|---|
-| ![A command line, like CAD software](docs/images/slides/02-command-line.jpg) | ![A Gumball, as in Rhino](docs/images/slides/03-gumball.jpg) |
+| ![A command line, like CAD software](docs/images/slides/02-command-line.jpg) | ![A Gizmo, as in Rhino](docs/images/slides/03-gumball.jpg) |
 | ![Object snaps and SmartTrack](docs/images/slides/04-snaps-smarttrack.jpg) | ![Control points you can see](docs/images/slides/05-curves.jpg) |
 | ![Extrude, with History](docs/images/slides/06-extrude-history.jpg) | ![Dimensions](docs/images/slides/07-dimensions.jpg) |
 | ![Layouts, from the model to a sheet](docs/images/slides/08-layouts.jpg) | ![Layers and selection filters](docs/images/slides/09-layers-filters.jpg) |
@@ -24,7 +26,7 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 - **Curve editing**: join, explode, trim, split, divide, overkill, fillet, chamfer, extend, offset, rebuild, simplify, change degree, insert and remove control points, match and blend curves.
 - **Curves from objects**: Intersect, Section, Contour, Duplicate Border, Duplicate Edge, Project.
 - **Transform**: move, copy, rotate, scale (reference points, 1D, 2D, to size), mirror, rectangular and polar arrays, align, stretch, **Orient**. Move, rotate and scale also work on curve points in Edit Mode.
-- **Gumball**: move, rotate and scale handles on the selection, plus an **extrusion sphere** and a **cut handle**: a closed flat curve cuts the solids on its way, or adds to them with Ctrl/Cmd.
+- **Gizmo**: move, rotate and scale handles on the selection, plus an **extrusion sphere** and a **cut handle**: a closed flat curve cuts the solids on its way, or adds to them with Ctrl/Cmd.
 - **Surfaces and solids**: planar, edge and network surfaces, patch, extrude (straight, along a curve, both sides, tapered, to a point), revolve, loft, sweep, **Pipe**, booleans (each result is checked: closed solid, coherent volume), **PushPull on flat and curved faces**, fillet and chamfer on edges and between surfaces, extend, split at isocurve, untrim, offset surface, **Extract Surface**, **Merge All Faces**, **Unroll Surface**, **Rebuild Surface**. Explode separates a solid into its smooth surfaces.
 - **History** (option `H`, off by default) keeps the result editable: Extrude, Revolve, Thicken, Pipe and the booleans create a Blender modifier instead of a fixed mesh, so the height, the angle, the thickness or the radius can still be changed in the Modifiers tab, and a boolean follows its operand when you move it.
 - **SubD**: boxes, spheres, cylinders, cones, tori and planes, loft, sweep, revolve and MultiPipe over a quad control cage, with cage editing tools (crease, insert edge, bevel, inset, bridge...) and live symmetry.
@@ -58,11 +60,11 @@ A screen recording of the session is in [docs/demos/napoleone-workflow.mp4](docs
 |---|---|
 | ![Polyline with typed coordinates](docs/images/napoleone-03-polyline-coordinates.jpg) **1. Polyline with coordinates.** The profile of the bridge is drawn in the Right view: `#0,360.16`, `#36.84,360.16`, `#360,37`... | ![Offset](docs/images/napoleone-04-offset.jpg) **2. Fillet Curve, then Offset.** The corners get a 6 mm radius, then the curve is offset by the sheet thickness (5 mm). |
 | ![Object snaps](docs/images/napoleone-05-osnap.jpg) **3. Object snaps.** The two ends are closed with short lines snapped to End, then everything is joined into one closed curve. | ![Extrude Curve](docs/images/napoleone-06-extrude-curve.jpg) **4. Extrude Curve.** The closed profile becomes a 720 mm long solid. |
-| ![Box with typed dimensions](docs/images/napoleone-07-box.jpg) **5. Box.** Two corners and a height, typed. | ![Gumball cut](docs/images/napoleone-08-gumball-cut.jpg) **6. Gumball cut.** A closed curve drawn on the face is dragged through the solid with the cut handle of the Gumball. |
-| ![Fillet Edge](docs/images/napoleone-09-fillet-edge.jpg) **7. Fillet Edge.** Box-select the edges, type the radius. | ![Holes with the Gumball](docs/images/napoleone-10-gumball-holes.jpg) **8. Copy, Mirror, cut.** Four circles, copied and mirrored, cut the holes of the base plate in one go. |
+| ![Box with typed dimensions](docs/images/napoleone-07-box.jpg) **5. Box.** Two corners and a height, typed. | ![Gizmo cut](docs/images/napoleone-08-gumball-cut.jpg) **6. Gizmo cut.** A closed curve drawn on the face is dragged through the solid with the cut handle of the Gizmo. |
+| ![Fillet Edge](docs/images/napoleone-09-fillet-edge.jpg) **7. Fillet Edge.** Box-select the edges, type the radius. | ![Holes with the Gizmo](docs/images/napoleone-10-gumball-holes.jpg) **8. Copy, Mirror, cut.** Four circles, copied and mirrored, cut the holes of the base plate in one go. |
 | ![Stretch](docs/images/napoleone-11-stretch.jpg) **9. Stretch.** The second table is a copy stretched by 720 mm with a crossing window. | ![Dimensions](docs/images/napoleone-12-dimensions.jpg) **10. Dimensions and layers.** One layer per material, dimensions on their own layer. |
 
-![Gumball cut, recorded](docs/demos/gumball-cut.gif)
+![Gizmo cut, recorded](docs/demos/gumball-cut.gif)
 
 ### The drawing
 
@@ -94,7 +96,7 @@ A layout is a tab next to the view tabs. It is a paper sheet in millimetres: vie
 
 ## The interface
 
-Layers are Blender collections, with a color, visibility, lock and saved states. Selection filters decide what a click can pick. Everything else lives in the add-on preferences: language, icon style, Gumball behaviour, snap budget, curve quality.
+Layers are Blender collections, with a color, visibility, lock and saved states. Selection filters decide what a click can pick. Everything else lives in the add-on preferences: language, icon style, Gizmo behaviour, snap budget, curve quality.
 
 | | |
 |---|---|
@@ -105,7 +107,7 @@ The mouse navigation of the viewport can follow the program you come from — Bl
 
 ![Navigation style](docs/images/ui-navigation-style.jpg)
 
-Everything else is in the add-on preferences, in nine sections: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gumball, Toolbar, Performance and Shortcuts.
+Everything else is in the add-on preferences, in nine sections: Presets, Appearance, Navigation and mouse, Command line and aliases, Drawing, Gizmo, Toolbar, Performance and Shortcuts.
 
 ![Add-on preferences](docs/images/wassily-preferences.jpg)
 
@@ -131,7 +133,7 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 ## Source layout
 
-The add-on is a package of 44 modules in `wanderer_cad/` (one per family of tools: `tools_draw`, `transform`, `booleans`, `gumball`, `pushpull`, `rhino_commands`, `layers`, `layout`...). `__init__.py` only loads them.
+The add-on is a package of 56 modules in `wanderer_cad/` (one per family of tools: `tools_draw`, `transform`, `booleans`, `gumball`, `pushpull`, `rhino_commands`, `layers`, `layout`...). `__init__.py` only loads them.
 
 ## Build the zip yourself
 
@@ -144,6 +146,14 @@ The zip is written to `dist/`.
 ## Feedback
 
 Please open an [issue](../../issues) with your Blender version, what you did and what you expected. Screenshots help.
+
+## Support the project
+
+I'm a designer, not a developer. Wanderer CAD started as the tool I was missing in my own work, and it became a project close to my heart. I share it so that as many people as possible can benefit from it, hoping it answers your needs as well as it answers mine.
+
+Wanderer CAD has now been downloaded more than 2,000 times, and that is a real pleasure to see. Thank you for joining the Wanderers!
+
+If you would like to support me, you can leave a small tip on [Ko-fi](https://ko-fi.com/hostylmatic). Every contribution helps keep the project going.
 
 ## License
 

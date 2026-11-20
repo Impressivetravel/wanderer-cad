@@ -9,6 +9,9 @@ import numpy as np
 from mathutils import Vector
 from mathutils.bvhtree import BVHTree
 
+from .core import has_lt, is_lt_mod, object_collections, object_collections_map, own_modifiers
+from .linetypes import lt_print_key
+
 
 # --------------------------------------------------------------------------
 # Formats de papier et échelles
@@ -34,21 +37,41 @@ SCALES = (
     ('S1_25', "1:25", 25.0), ('S1_50', "1:50", 50.0), ('S1_100', "1:100", 100.0), ('S1_200', "1:200", 200.0),
     ('S1_250', "1:250", 250.0), ('S1_500', "1:500", 500.0), ('S1_1000', "1:1000", 1000.0),
 )
-SCALE_DEN = {k: d for k, _n, d in SCALES}
+# Échelles d'architecte et d'ingénieur des plans en pieds et pouces : 1/4" = 1'-0" vaut 1:48
+SCALES_IMPERIAL = (
+    ('I3_1', "3\" = 1'-0\"", 4.0), ('I1H_1', "1 1/2\" = 1'-0\"", 8.0), ('I1_1', "1\" = 1'-0\"", 12.0),
+    ('I34_1', "3/4\" = 1'-0\"", 16.0), ('I12_1', "1/2\" = 1'-0\"", 24.0), ('I38_1', "3/8\" = 1'-0\"", 32.0),
+    ('I14_1', "1/4\" = 1'-0\"", 48.0), ('I316_1', "3/16\" = 1'-0\"", 64.0), ('I18_1', "1/8\" = 1'-0\"", 96.0),
+    ('I1_10', "1\" = 10'", 120.0), ('I116_1', "1/16\" = 1'-0\"", 192.0), ('I1_20', "1\" = 20'", 240.0),
+    ('I1_50', "1\" = 50'", 600.0), ('I1_100', "1\" = 100'", 1200.0),
+)
+SCALES_ALL = SCALES + SCALES_IMPERIAL
+SCALE_DEN = {k: d for k, _n, d in SCALES_ALL}
+
+
+def scale_list(imperial=False):
+    """Échelles proposées : métriques, ou celles des plans en pieds et pouces (avec 1:1 et les agrandissements)."""
+    if imperial:
+        return tuple(x for x in SCALES if x[2] <= 1.0) + SCALES_IMPERIAL
+    return SCALES
 
 
 def scale_preset(den):
     """Identifiant de l'échelle normalisée qui vaut `den`, sinon 'CUSTOM'."""
-    for k, _n, d in SCALES:
+    for k, _n, d in SCALES_ALL:
         if abs(d - den) <= 1e-9 * max(1.0, d):
             return k
     return 'CUSTOM'
 
 
-def fmt_scale(den):
-    """« 1:20 », « 2:1 », « 1:2.5 »."""
+def fmt_scale(den, imperial=False):
+    """« 1:20 », « 2:1 », « 1:2.5 » ; plan en pieds et pouces : « 1/4" = 1'-0" » quand c'est une échelle d'usage."""
     if den <= 0.0:
         return "?"
+    if imperial:
+        for _k, n, d in SCALES_IMPERIAL:
+            if abs(d - den) <= 1e-9 * max(1.0, d):
+                return n
 
     def num(x):
         return f"{x:.4f}".rstrip("0").rstrip(".")
@@ -60,9 +83,47 @@ def fmt_scale(den):
     return "1:" + num(den)
 
 
+def _imperial_inches(t):
+    """Longueur en pieds et pouces -> pouces : « 1/4" », « 1 1/2" », « 1'-0" », « 10' », « 1'6" », « 3 » (pouces). None sinon."""
+    t = t.strip().replace("”", '"').replace("’", "'").replace("''", '"')
+    if not t:
+        return None
+
+    def number(x):
+        x = x.strip().strip("-").strip()
+        if not x:
+            return 0.0
+        tot = 0.0
+        for part in x.replace("-", " ").split():
+            if "/" in part:
+                a, b = part.split("/", 1)
+                tot += float(a) / float(b)
+            else:
+                tot += float(part)
+        return tot
+    try:
+        feet = 0.0
+        if "'" in t:
+            f, t = t.split("'", 1)
+            feet = number(f)
+        inches = number(t.replace('"', ""))
+        v = feet * 12.0 + inches
+        return v if v > 0.0 else None
+    except (ValueError, ZeroDivisionError):
+        return None
+
+
 def parse_scale(text):
-    """« 1:50 », « 1/50 », « 50 », « 2:1 », « 0.5 » -> dénominateur (None si le texte n'est pas une échelle)."""
-    t = (text or "").strip().replace(",", ".").replace(" ", "")
+    """« 1:50 », « 1/50 », « 50 », « 2:1 », « 0.5 », ou une échelle en pieds et pouces « 1/4" = 1'-0" », « 1" = 10' »
+    -> dénominateur (None si le texte n'est pas une échelle)."""
+    raw = (text or "").strip()
+    if "=" in raw:
+        a, b = raw.split("=", 1)
+        pa, pb = _imperial_inches(a), _imperial_inches(b)
+        if pa is None or pb is None:
+            return None
+        return pb / pa
+    t = raw.replace(",", ".").replace(" ", "")
     if not t:
         return None
     try:
@@ -101,11 +162,11 @@ class Item:
         self.text = False        # annotation de type texte (dessinée par-dessus les traits)
 
 
-def print_tag(obj, owner=None):
+def print_tag(obj, owner=None, cmap=None):
     """(calque, épaisseur d'impression propre à l'objet) : ce qui décide de l'impression d'un objet. Le calque est celui
     de `owner` (l'objet qui pose une instance) s'il est donné ; l'épaisseur vaut 0 quand l'objet suit son calque."""
     try:
-        cols = (owner if owner is not None else obj).users_collection
+        cols = object_collections(owner if owner is not None else obj, cmap)
         layer = cols[0].name if cols else ""
     except (ReferenceError, AttributeError, IndexError):
         layer = ""
@@ -113,7 +174,11 @@ def print_tag(obj, owner=None):
         lw = float(obj.get("wd_lw", 0.0) or 0.0)
     except (TypeError, ValueError, ReferenceError, AttributeError):
         lw = 0.0
-    return (layer, max(lw, 0.0))
+    try:
+        lt = lt_print_key(obj, cmap)    # type de ligne ('' : continu) : tirets refaits en mm sur le papier
+    except (AttributeError, ReferenceError, TypeError):
+        lt = ""
+    return (layer, max(lw, 0.0), lt)
 
 
 def is_annotation(obj):
@@ -126,6 +191,9 @@ def is_annotation(obj):
         return False
 
 
+READING = {"on": False}        # vrai pendant qu'une mise en page lit le modèle
+
+
 def scene_depsgraph(scene):
     """Graphe d'évaluation d'une scène, même si ce n'est pas celle de la fenêtre."""
     try:
@@ -135,7 +203,11 @@ def scene_depsgraph(scene):
         pass
     try:
         vl = scene.view_layers[0]
-        vl.update()                   # (crée le graphe d'une scène qui n'a pas encore été affichée, fichier tout juste ouvert)
+        READING["on"] = True          # (cette lecture réveille le graphe : ce n'est pas un changement du modèle, voir layout.py)
+        try:
+            vl.update()               # (crée le graphe d'une scène qui n'a pas encore été affichée, fichier tout juste ouvert)
+        finally:
+            READING["on"] = False
         return vl.depsgraph
     except (AttributeError, IndexError, RuntimeError):
         return None
@@ -154,11 +226,11 @@ def hidden_collections(names):
     return out
 
 
-def _in_hidden(obj, hidden):
+def _in_hidden(obj, hidden, cmap=None):
     if not hidden:
         return False
     try:
-        return any(c.name in hidden for c in obj.users_collection)
+        return any(c.name in hidden for c in object_collections(obj, cmap))
     except (ReferenceError, AttributeError):
         return False
 
@@ -279,6 +351,36 @@ def _curve_is_wire(obj):
         return True
 
 
+def _poly_wire(cu):
+    """Polylignes (toutes les splines en segments droits) : sommets et arêtes lus directement, sans passer par une copie
+    convertie en maillage (plusieurs millisecondes par courbe : une demi-minute sur un plan de 10 000 traits).
+    None : la courbe a des arcs ou des splines, elle passe par la conversion."""
+    try:
+        if cu.shape_keys is not None or not len(cu.splines):
+            return None
+        Vs, Es, base = [], [], 0
+        for sp in cu.splines:
+            if sp.type != 'POLY':
+                return None
+            n = len(sp.points)
+            if n < 2:
+                continue
+            co = np.empty(n * 4, dtype=np.float32)
+            sp.points.foreach_get("co", co)
+            Vs.append(co.reshape(-1, 4)[:, :3].astype(np.float64))
+            idx = np.arange(n - 1, dtype=np.int64)
+            e = np.stack((idx, idx + 1), axis=1)
+            if sp.use_cyclic_u and n > 2:
+                e = np.vstack((e, np.array([[n - 1, 0]], dtype=np.int64)))
+            Es.append(e + base)
+            base += n
+        if not Vs:
+            return None
+        return np.vstack(Vs), np.vstack(Es)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+        return None
+
+
 def _temp_mesh(data, setup):
     """Maillage d'une copie réglée (setup) d'une courbe ou d'un texte : (sommets locaux, arêtes, nombre de faces par arête)."""
     c2 = data.copy()
@@ -326,6 +428,7 @@ def collect_model(scene, hidden_names=(), annotations=True):
     except IndexError:
         vl = None
     hidden = hidden_collections(hidden_names)
+    cmap = object_collections_map()         # calque de chaque objet, en un passage
     items, later, seen = [], [], set()
     for inst in dg.object_instances:
         ob = inst.object
@@ -338,7 +441,7 @@ def collect_model(scene, hidden_names=(), annotations=True):
             if par_o is None:
                 continue
             try:
-                real = par_o.type == 'EMPTY' or any(m.type == 'NODES' for m in par_o.modifiers)
+                real = par_o.type == 'EMPTY' or any(m.type == 'NODES' and not is_lt_mod(m) for m in par_o.modifiers)
             except (AttributeError, ReferenceError):
                 real = False
             if not real:
@@ -346,15 +449,15 @@ def collect_model(scene, hidden_names=(), annotations=True):
             shown = par_o
         else:
             shown = orig
-        if not _visible(shown, vl) or _in_hidden(shown, hidden) or _in_hidden(orig, hidden):
+        if not _visible(shown, vl) or _in_hidden(shown, hidden, cmap) or _in_hidden(orig, hidden, cmap):
             continue
-        if orig.get("wd_gen") or orig.get("wd_layout_gen"):
-            continue
+        if orig.get("wd_gen") or orig.get("wd_layout_gen") or orig.get("cad_clip"):
+            continue              # (un plan de coupe est un repère d'écran : il ne s'imprime pas)
         ann = is_annotation(orig)
         if ann and not annotations:
             continue
         color = tuple(float(c) for c in orig.color[:3])
-        tag = print_tag(orig, shown)
+        tag = print_tag(orig, shown, cmap)
         mat = inst.matrix_world.copy()
         key = (orig.name, tuple(round(x, 9) for row in mat for x in row))
         if key in seen:
@@ -363,9 +466,19 @@ def collect_model(scene, hidden_names=(), annotations=True):
         if orig.type == 'FONT' and not len(orig.modifiers):
             later.append(('FONT', orig, mat, color, tag))
             continue
-        if orig.type == 'CURVE' and not len(orig.modifiers) and _curve_is_wire(orig):
+        if orig.type == 'CURVE' and not own_modifiers(orig) and _curve_is_wire(orig):
             later.append(('ANNOT' if ann else 'WIRE', orig, mat, color, tag))
             continue
+        if orig.type == 'MESH' and has_lt(orig) and not own_modifiers(orig) and not inst.is_instance:
+            try:                        # contour à tirets : le trait entier (les tirets sont refaits sur le papier)
+                if len(orig.data.edges) and not len(orig.data.polygons):
+                    V, E = _mesh_arrays(orig.data)
+                    it = Item('WIRE', orig.name, color, tag)
+                    it.V, it.E = _world(V, mat), E
+                    items.append(it)
+                    continue
+            except (AttributeError, ReferenceError, RuntimeError):
+                pass
         try:
             me = ob.to_mesh()
         except (RuntimeError, AttributeError, TypeError):
@@ -422,7 +535,11 @@ def collect_model(scene, hidden_names=(), annotations=True):
                 it.text = True
                 _fill_item(it, _world(V, mat), E, cnt, T)
             else:
-                V, E, cnt, _T = _temp_mesh(orig.data, _setup_wire)
+                fast = _poly_wire(orig.data)
+                if fast is not None:
+                    V, E = fast
+                else:
+                    V, E, cnt, _T = _temp_mesh(orig.data, _setup_wire)
                 it = Item(kind, orig.name, color, tag)
                 it.V, it.E = _world(V, mat), E
             items.append(it)

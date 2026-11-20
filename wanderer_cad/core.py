@@ -18,7 +18,15 @@ IDLE_TOOL = "dessin.selection_boite_tool"  # outil par défaut (Select / Move) r
 IDLE_FALLBACK = "builtin.select_box"
 
 # Réglages des préférences de l'add-on (valeurs utilisées aussi quand les préférences sont inaccessibles)
-PREF_DEFAULTS = {"light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "copy_key": 'ALT', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_button": 'MIDDLE', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+# Snappy Dragging du Gizmo : quel point de la sélection vient se poser sur l'accrochage (inspiré du Snap Base de Blender)
+GB_SNAP_FROM_ITEMS = (
+    ('CLOSEST', "Closest Point", "The point of the selection nearest to the snapped point lands on it: two boxes touch"),
+    ('GUMBALL', "Gizmo", "The centre of the Gizmo lands on the snapped point (after Relocate Gizmo, the point you "
+                           "clicked)"),
+    ('ORIGIN', "Origin", "The origin of the active object lands on the snapped point (furniture or blocks with their origin "
+                         "on the floor or at a corner)"),
+)
+PREF_DEFAULTS = {"quad_shared_bars": True, "light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_type_ortho": False, "ortho_wire": True, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "copy_key": 'ALT', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "gumball_reach": True, "gumball_snap_from": 'CLOSEST', "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_persp_mods": 'ALT', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -120,7 +128,7 @@ FR_LABELS = {
     "Ellipse: Diameter": "Ellipse : diamètre", "Ellipse: From Center": "Ellipse : depuis le centre",
     "Ellipse: From Foci": "Ellipse : par les foyers", "Ellipsoid": "Ellipsoïde", "Explode": "Décomposer",
     "Extrude": "Extruder", "Extrude Curve": "Extruder la courbe", "Extrude Along Curve": "Extruder le long d'une courbe", "Extrude Surface": "Extruder une surface",
-    "Fillet Edge": "Congé d'arête", "Clipping Plane": "Plan de coupe", "Fillet Curve": "Raccord", "Chamfer Curve": "Chanfrein", "Group": "Grouper", "Groups": "Groupes", "Join": "Joindre",
+    "Fillet Edge": "Congé d'arête", "Clipping Plane": "Plan de coupe", "Fillet Curve": "Raccord", "Chamfer Curve": "Chanfrein", "Group": "Grouper", "Groups": "Groupes", "Edit Group": "Modifier le groupe", "Close Group": "Fermer le groupe", "Join": "Joindre",
     "Lasso Select": "Sélection au lasso", "Leave the tool": "Quitter l'outil", "Loft": "Lissage", "Make 2D": "Créer le 2D",
     "Match Surface": "Adapter la surface", "Material": "Matériau", "Display As": "Afficher comme", "Theme": "Thème", "Mirror": "Miroir", "Move": "Déplacer",
     "Move (base → destination)": "Déplacer (base → destination)", "Named Views": "Vues nommées",
@@ -130,7 +138,7 @@ FR_LABELS = {
     "Polygon: Area": "Polygone : aire", "Polygon: Center, Radius": "Polygone : centre, rayon",
     "Polygon: Circumscribed": "Polygone : circonscrit", "Polygon: Edge": "Polygone : arête", "Polygon: Star": "Polygone : étoile",
     "Polyline": "Polyligne", "Polyline (point by point)": "Polyligne (point par point)", "Project Curve": "Projeter une courbe",
-    "Pyramid": "Pyramide", "Radius / Diameter": "Rayon / diamètre", "Center Mark": "Marque de centre", "Hatch": "Hachures", "Untrim": "Désajuster", "Untrim Holes": "Désajuster les trous", "Block": "Bloc", "Insert Block": "Insérer un bloc", "Block Edit": "Éditer le bloc", "Close Block Edit": "Fermer l'édition du bloc", "Explode Block": "Décomposer le bloc", "Blocks": "Blocs", "Delete Block": "Supprimer le bloc", "Select Block Copies": "Sélectionner les copies du bloc", "No block yet": "Aucun bloc", "Rebuild Curve": "Reconstruire la courbe", "Simplify Curve": "Simplifier la courbe", "Change Degree": "Changer le degré", "Insert Control Point": "Insérer un point de contrôle", "Remove Control Point": "Supprimer un point de contrôle", "Match Curve": "Raccorder la courbe", "Blend Curve": "Courbe de raccord", "Network Surface": "Surface par réseau", "Fillet Surface": "Raccord de surfaces", "Chamfer Surface": "Chanfrein de surfaces", "Extend Surface": "Prolonger la surface", "Split at Isocurve": "Couper à l'isocourbe", "Continue Dimension": "Cote continue", "Ordinate Dimension": "Cote ordonnée", "Arc Length Dimension": "Cote de longueur d'arc", "Move Dimension Line": "Déplacer la ligne de cote", "Selected dimension": "Cote sélectionnée", "Hatch Region": "Hachure par point", "Hatch Base Point": "Point de base de hachure", "Explode Hatch": "Décomposer la hachure", "Hatch Boundary": "Contour de hachure", "Match Hatch": "Copier la hachure", "New hatches": "Nouvelles hachures", "Base Point": "Point de base", "Boundary": "Contour", "By Point": "Par point", "Rail Revolve": "Révolution sur rail",
+    "Pyramid": "Pyramide", "Radius / Diameter": "Rayon / diamètre", "Center Mark": "Marque de centre", "Hatch": "Hachures", "Untrim": "Désajuster", "Untrim Holes": "Désajuster les trous", "Block": "Bloc", "Insert Block": "Insérer un bloc", "Block Edit": "Éditer le bloc", "Close Block Edit": "Fermer l'édition du bloc", "Explode Block": "Décomposer le bloc", "Blocks": "Blocs", "Delete Block": "Supprimer le bloc", "Select Block Copies": "Sélectionner les copies du bloc", "No block yet": "Aucun bloc", "Rebuild Curve": "Reconstruire la courbe", "Simplify Curve": "Simplifier la courbe", "Change Degree": "Changer le degré", "Insert Control Point": "Insérer un point de contrôle", "Remove Control Point": "Supprimer un point de contrôle", "Match Curve": "Raccorder la courbe", "Blend Curve": "Courbe de raccord", "Network Surface": "Surface par réseau", "Fillet Surface": "Raccord de surfaces", "Chamfer Surface": "Chanfrein de surfaces", "Extend Surface": "Prolonger la surface", "Split at Isocurve": "Couper à l'isocourbe", "Continue Dimension": "Cote continue", "Ordinate Dimension": "Cote ordonnée", "Arc Length Dimension": "Cote de longueur d'arc", "Move Dimension Line": "Déplacer la ligne de cote", "Selected dimension": "Cote sélectionnée", "Hatch Region": "Hachure par point", "Hatch Base Point": "Point de base de hachure", "Explode Hatch": "Décomposer la hachure", "Hatch Boundary": "Contour de hachure", "Match Hatch": "Copier la hachure", "New hatches": "Nouvelles hachures", "Base Point": "Point de base", "Boundary": "Contour", "Break": "Coupure", "Match Properties": "Copier les propriétés", "Linetype": "Type de ligne", "Linetype of the Selection": "Type de ligne de la sélection", "By Point": "Par point", "Rail Revolve": "Révolution sur rail",
     "Remove All Materials": "Supprimer tous les matériaux", "Rename Named View": "Renommer la vue nommée",
     "Reset to defaults": "Valeurs par défaut", "Restore Named View": "Restaurer la vue nommée", "Revolve": "Révolution",
     "Rotate": "Rotation", "Rotate (center, reference, angle)": "Rotation (centre, référence, angle)",
@@ -143,7 +151,7 @@ FR_LABELS = {
     "Ungroup": "Dégrouper", "Update Named View": "Mettre à jour la vue nommée",
     # commandes générales
     "Undo": "Annuler", "Redo": "Rétablir", "Delete": "Supprimer", "Select All": "Tout sélectionner", "Select None": "Tout désélectionner",
-    "Invert Selection": "Inverser la sélection", "Hide": "Masquer", "Isolate": "Isoler", "Local View": "Vue locale", "Quit Local View": "Quitter la vue locale", "Show All": "Tout afficher", "Lock": "Verrouiller", "Unlock All": "Tout déverrouiller", "Unlock Selected": "Déverrouiller la sélection",
+    "Invert Selection": "Inverser la sélection", "Hide": "Masquer", "Isolate": "Isoler", "Local View": "Vue locale", "Quit Local View": "Quitter la vue locale", "Show All": "Tout afficher", "Walk": "Marcher", "Show": "Afficher", "Unisolate": "Désisoler", "Lock": "Verrouiller", "Unlock All": "Tout déverrouiller", "Unlock Selected": "Déverrouiller la sélection",
     "Zoom Extents": "Zoom étendu", "Zoom Selected": "Zoom sur la sélection", "Perspective / Ortho": "Perspective / orthogonale",
     "Wireframe": "Filaire", "Shaded": "Ombré", "Rendered": "Rendu", "X-Ray": "Rayons X", "Grid": "Grille",
     "Cursor to Origin": "Curseur à l'origine", "Save": "Enregistrer", "Select Similar": "Sélectionner similaire",
@@ -156,7 +164,7 @@ FR_LABELS = {
     # vues
     "Top": "Dessus", "Front": "Face", "Right": "Droite", "Back": "Arrière", "Left": "Gauche", "Bottom": "Dessous",
     "Perspective": "Perspective", "Axonometric": "Axonométrie",
-    # barre de modes (comme Rhino en français : Ortho, SmartTrack et Gumball gardent leur nom)
+    # barre de modes (comme Rhino en français : Ortho, SmartTrack et Gizmo gardent leur nom)
     "Grid Snap": "Magnétisme grille", "Polar": "Polaire", "OSnap": "Accrochage", "Auto CPlane": "Auto CPlan",
     "Quick Type": "Saisie rapide", "repeat": "répéter",
 }
@@ -185,9 +193,9 @@ FR_ALIASES = {
     "match_srf_tool": "adapter", "rail_revolve_tool": "revolrail", "shell_tool": "coque", "xline_tool": "do droite",
     "stretch_tool": "e etirer", "divide_tool": "div me diviser mesurer", "overkill_tool": "nettoyer", "clip_plane_tool": "plancoupe plandecoupe clip", "fillet_curve_tool": "raccord", "chamfer_curve_tool": "chanfrein",
     "pipe_tool": "tuyau", "intersect_tool": "intersectionobjets", "section_tool": "coupe", "contour_tool": "contours",
-    "extract_srf_tool": "extrairesrf", "dup_border_tool": "dupliquerbord dupliquerbordure", "dup_edge_tool": "dupliquerarete", "dup_face_border_tool": "dupliquerbordface dupliquerbordureface", "extend_crv_tool": "prolonger prolongercourbe allonger",
+    "extract_srf_tool": "extrairesrf", "dup_border_tool": "dupliquerbord dupliquerbordure", "dup_edge_tool": "dupliquerarete", "dup_face_border_tool": "dupliquerbordface dupliquerbordureface", "extend_crv_tool": "prolonger prolongercourbe allonger", "boundary_tool": "contourpoint polcont", "break_crv_tool": "coupure couper briser", "match_props_tool": "corresprop copierproprietes",
     "merge_faces_tool": "fusionnerfaces", "unroll_tool": "developper developpersrf", "rebuild_srf_tool": "reconstruiresrf",
-    "orient_tool": "orienter", "orient3pt_tool": "orienter3pts orienter3points",
+    "orient_tool": "orienter", "orient3pt_tool": "orienter3pts orienter3points", "slice_tool": "trancher tranche",
 }
 FR_LABELS.update({
     "Pipe": "Tuyau", "Intersect": "Intersection d'objets", "Section": "Section", "Contour": "Contour",
@@ -195,7 +203,7 @@ FR_LABELS.update({
     "Alias Editor": "Éditeur d'alias",
     "Extract Surface": "Extraire une surface", "Duplicate Border": "Dupliquer la bordure", "Duplicate Edge": "Dupliquer une arête", "Duplicate Face Border": "Dupliquer la bordure d'une face",
     "Merge All Faces": "Fusionner les faces coplanaires", "Unroll Surface": "Développer une surface",
-    "Rebuild Surface": "Reconstruire une surface", "Orient": "Orienter", "Orient 3 Points": "Orienter (3 points)",
+    "Rebuild Surface": "Reconstruire une surface", "Orient": "Orienter", "Orient 3 Points": "Orienter (3 points)", "Slice": "Trancher",
 })
 FR_LABELS.update({
     "Layout": "Mise en page", "Layouts": "Mises en page", "New Layout": "Nouvelle mise en page", "Open Layout": "Ouvrir la mise en page",
@@ -230,9 +238,9 @@ FR_ACTION_ALIASES = {
     "Export SVG": "exportersvg", "Export DXF": "exporterdxf",
     "Block Edit": "editerbloc modifbloc", "Close Block Edit": "fermerbloc", "Explode Block": "decomposerbloc", "Hatch Base Point": "basehachure", "Explode Hatch": "decomposerhachure", "Hatch Boundary": "contourhachure", "Match Hatch": "copierhachure",
     "Undo": "annuler", "Redo": "retablir", "Delete": "ef effacer supprimer", "Select All": "toutsel", "Select None": "toutdesel",
-    "Invert Selection": "inverser", "Hide": "masquer", "Isolate": "isoler", "Show All": "toutafficher", "Lock": "verrouiller geler", "Unlock All": "deverrouiller toutdeverrouiller degeler", "Unlock Selected": "deverrouillerselection", "Zoom Extents": "z zoometendu",
+    "Invert Selection": "inverser", "Hide": "masquer", "Isolate": "isoler", "Show All": "toutafficher", "Walk": "marcher promenade", "Show": "afficher toutafficher", "Unisolate": "desisoler finisoler", "Lock": "verrouiller geler", "Unlock All": "deverrouiller toutdeverrouiller degeler", "Unlock Selected": "deverrouillerselection", "Zoom Extents": "z zoometendu",
     "Zoom Selected": "zoomsel", "Wireframe": "filaire", "Shaded": "ombre", "Rendered": "rendu", "Grid": "grille",
-    "Save": "enregistrer", "Local View": "vuelocale", "Camera View": "vuecamera", "Group": "gr grouper", "Ungroup": "degrouper",
+    "Save": "enregistrer", "Local View": "vuelocale", "Camera View": "vuecamera", "Group": "gr grouper", "Ungroup": "degrouper", "Edit Group": "editergroupe ouvrirgroupe", "Close Group": "fermergroupe",
 }
 
 # phrases de l'invite de commande (traduites à l'affichage, après analyse du texte : l'ordre des segments ne change pas)
@@ -461,6 +469,16 @@ def lang():
 _LANG_APPLIED = {"v": None}
 
 
+def alt_left_navigates():
+    """Blender émule le bouton du milieu avec Alt + clic gauche (Preferences > Input > Emulate 3 Button Mouse) :
+    Alt + clic gauche sert alors à naviguer et ne doit pas sélectionner."""
+    try:
+        inp = bpy.context.preferences.inputs
+        return bool(inp.use_mouse_emulate_3_button and inp.mouse_emulate_3_button_modifier == 'ALT')
+    except AttributeError:
+        return False
+
+
 def pref_applied_language():
     return _LANG_APPLIED["v"] or 'EN'
 
@@ -618,6 +636,110 @@ def oneshot_toggle(key):
     return _ONESHOT["keys"]
 
 
+# Vue locale (Blender) et Edit Group : un objet peut être caché dans une seule vue 3D.
+_LOCAL_VER = [0]          # change à chaque entrée / sortie de groupe (les accrochages en cache sont relus)
+LAST_VIEW3D = [0]         # dernière vue 3D survolée (as_pointer) : les objets créés pendant Edit Group y apparaissent
+
+
+def object_collections_map():
+    """{pointeur d'objet: [collections]} pour toute la scène, en un passage. Object.users_collection parcourt toutes les
+    collections à chaque appel (0,3 ms par objet dans un gros fichier) : dans une boucle sur des milliers d'objets cela
+    fait des secondes. Même ordre que users_collection (collections du fichier, puis celle de chaque scène)."""
+    out = {}
+    try:
+        for c in bpy.data.collections:
+            for o in c.objects:
+                out.setdefault(o.as_pointer(), []).append(c)
+        for sc in bpy.data.scenes:
+            c = sc.collection
+            for o in c.objects:
+                out.setdefault(o.as_pointer(), []).append(c)
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    return out
+
+
+def object_collections(o, cmap=None):
+    """Collections de l'objet : lues dans `cmap` (object_collections_map) s'il est donné, sinon users_collection."""
+    if cmap is not None:
+        try:
+            return cmap.get(o.as_pointer(), ())
+        except (AttributeError, ReferenceError):
+            return ()
+    try:
+        return o.users_collection or ()
+    except (AttributeError, ReferenceError):
+        return ()
+
+
+LT_MOD = "Wanderer Linetype"     # modificateur (Geometry Nodes) qui dessine le type de ligne d'une courbe dans les vues
+
+
+def is_lt_mod(md):
+    try:
+        return md.type == 'NODES' and md.name.startswith(LT_MOD)
+    except (AttributeError, ReferenceError):
+        return False
+
+
+def own_modifiers(o):
+    """Les modificateurs de l'objet, sans celui du type de ligne (qui ne change que l'affichage du trait)."""
+    try:
+        return [md for md in o.modifiers if not is_lt_mod(md)]
+    except (AttributeError, ReferenceError):
+        return []
+
+
+def has_lt(o):
+    try:
+        return any(is_lt_mod(md) for md in o.modifiers)
+    except (AttributeError, ReferenceError):
+        return False
+
+
+def obj_visible(o, space=None):
+    """Objet visible, et dans cette vue 3D si elle est en vue locale (Edit Group cache le reste du modèle dans la vue)."""
+    try:
+        if space is not None and getattr(space, "local_view", None) is not None:
+            return o.visible_get(viewport=space)
+        return o.visible_get()
+    except (RuntimeError, ReferenceError, TypeError, AttributeError):
+        return False
+
+
+def local_view_token(space):
+    """Identifie la vue locale d'une vue 3D (None hors vue locale), pour les caches d'accrochage."""
+    try:
+        lv = getattr(space, "local_view", None)
+        return None if lv is None else (space.as_pointer(), lv.as_pointer(), _LOCAL_VER[0])
+    except (AttributeError, ReferenceError):
+        return None
+
+
+# Maj tenu : avec Quick Type allumé, Maj + lettre va aux raccourcis de Blender (#18) ; la puce Quick Type s'éteint donc
+# tant que Maj est enfoncé, et se rallume au relâché.
+_SHIFT = {"held": False}
+
+
+def shift_held():
+    return _SHIFT["held"]
+
+
+def shift_held_set(on):
+    """Maj enfoncé / relâché (touche Maj, ou état de Maj lu sur un autre évènement). True si l'état a changé ; les
+    barres ne sont redessinées que si Quick Type peut être allumé."""
+    on = bool(on)
+    if on == _SHIFT["held"]:
+        return False
+    _SHIFT["held"] = on
+    try:
+        if pref("cmd_type") or pref("cmd_type_ortho"):
+            redraw_bars()
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    return True
+
+
 def oneshot_hold_set(on):
     """Maj tenu / relâché au-dessus des cases. True si l'état a changé (les barres sont redessinées)."""
     on = bool(on)
@@ -728,6 +850,30 @@ def unit_metres(scene):
     """Mètres par unité affichée de la scène (1 quand la scène n'a pas de système d'unités)."""
     us = scene.unit_settings
     return 1.0 if us.system == 'NONE' else UNIT_TO_M.get(us.length_unit, 1.0)
+
+
+def scene_m_per_unit():
+    """Mètres par unité affichée de la scène courante (pour les longueurs tapées en pieds / pouces)."""
+    try:
+        return unit_metres(bpy.context.scene)
+    except (AttributeError, ReferenceError):
+        return 1.0
+
+
+def scene_imperial(scene=None):
+    """La scène est en unités impériales (pieds / pouces) : cotes en 10' - 6 1/2", saisie 6-1/2" sans pieds."""
+    from .units_text import is_imperial
+    try:
+        us = (scene or bpy.context.scene).unit_settings
+        return is_imperial(us.system, us.length_unit)
+    except (AttributeError, ReferenceError):
+        return False
+
+
+def typed_length(text, unit_f):
+    """Longueur tapée (nombre dans l'unité affichée, ou 10' 6 1/2", 6-1/2", 1/2"...) -> unités Blender, ou None."""
+    from .units_text import parse_length
+    return parse_length(text, unit_f, scene_m_per_unit(), scene_imperial())
 
 
 def grid_snap_shown(scene):

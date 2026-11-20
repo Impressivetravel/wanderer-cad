@@ -4,7 +4,7 @@ import bpy
 import itertools
 import time
 
-from .core import tr_label
+from .core import pref, tr_label
 from .views import _CMD
 
 
@@ -29,6 +29,13 @@ from .views import _CMD
 # (la « colonne »), juste de sa largeur, qui ne montre rien d'autre (ni en-tête, ni grille, ni objets, ni barres du bas)
 # et que les commandes ignorent. Elle est créée avec les 4 vues et refermée avec elles.
 #
+# Comme dans Rhino encore, l'en-tête de Blender (modes, menus, orientation, accrochage) et la barre des réglages d'outil
+# sont dans une bande unique au-dessus des 4 vues, sur toute la largeur (la « bande ») : une vue 3D basse, comme la
+# colonne de la barre d'outils. Les boutons d'affichage de l'en-tête (Solid / Wireframe, superpositions, poignées) n'y
+# sont pas dessinés : ils commanderaient la bande elle-même ; chaque vue a son affichage dans le menu de son titre.
+# Le panneau N est unique pour les 4 vues : la touche N, où que soit la souris dans les 4 vues, ouvre ou ferme celui
+# de la vue en haut à droite, posé par-dessus elle sur le bord droit de l'ensemble, sans retailler les 4 vues.
+#
 # Rien n'est mémorisé dans le fichier : les 4 vues sont reconnues à leur disposition (4 vues 3D en grille 2 x 2). L'écran
 # de Blender ne calcule la taille d'une zone qu'au rafraîchissement suivant : la coupe et la fermeture se font donc en
 # plusieurs temps, par un minuteur, en retrouvant chaque fois les zones par leur pointeur (une zone fermée ne doit plus
@@ -46,10 +53,12 @@ QUAD_DISPLAY_ITEMS = (
     ('RENDERED', "Rendered", "The render engine, with the lights of the scene"),
 )
 QUAD_COL_MAX = 0.25          # la colonne de la barre d'outils fait au plus ce quart de la largeur des 4 vues
+QUAD_STRIP_MAX = 0.2         # la bande de l'en-tête fait au plus ce cinquième de la hauteur des 4 vues
+QUAD_STRIP_PAD = 4           # pixels de vue laissés sous l'en-tête, dans la bande
 QUAD_UI_KEYS = ("show_region_header", "show_region_tool_header", "show_region_toolbar", "show_region_ui")
 
 _QUAD = {"job": None, "hit": {}, "ui": {}, "shade": {}, "home": {}, "click": (None, 0.0), "cache": (None, {}),
-         "focus": {}, "drawn": {}, "sync": {}, "colw": {}, "fit": None}
+         "focus": {}, "drawn": {}, "sync": {}, "colw": {}, "fit": None, "set": {}, "repair": None}
 # job : coupe ou fermeture en cours (QuadJob) ; hit : zones cliquables du titre de chaque vue ; ui : réglages de la vue
 # d'origine (en-tête, panneaux, texte de Blender) par écran, rendus au retour à une vue ; shade : dernier affichage de
 # chaque quart ; home : nom de la vue où l'on était avant les 4 vues ; click : dernier clic sur un titre (double-clic) ;
@@ -141,6 +150,59 @@ def quad_column_of(screen, grid, tol=QUAD_TOL):
     return None
 
 
+def _grid_box(screen, grid):
+    areas = [a for a in screen.areas if a.as_pointer() in grid.values()]
+    if len(areas) != 4:
+        return None
+    x0, y0 = min(a.x for a in areas), min(a.y for a in areas)
+    return x0, y0, max(a.x + a.width for a in areas), max(a.y + a.height for a in areas)
+
+
+def quad_strip_of(screen, grid, tol=QUAD_TOL):
+    """La bande de l'en-tête des 4 vues `grid` : une vue 3D basse posée sur elles, au moins aussi large qu'elles (elle
+    couvre aussi la colonne de la barre d'outils et la colonne N). None s'il n'y en a pas."""
+    try:
+        box = _grid_box(screen, grid)
+        if box is None:
+            return None
+        x0, y0, x1, y1 = box
+        for a in screen.areas:
+            if a.type != 'VIEW_3D' or a.as_pointer() in grid.values() or a.height <= 0:
+                continue
+            if (abs(a.y - y1) <= tol and a.x <= x0 + tol and a.x + a.width >= x1 - tol
+                    and a.height <= QUAD_STRIP_MAX * (y1 - y0)):
+                return a
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+    return None
+
+
+def quad_extra_kind(area):
+    """'COLUMN' (barre d'outils) ou 'STRIP' (en-tête) si cette vue 3D accompagne 4 vues, sinon None.
+    Ces vues ne dessinent ni barres du bas, ni titre, ni rien de Wanderer."""
+    try:
+        screen = area.id_data
+        ptr = area.as_pointer()
+        quad_of(screen, ptr)                                 # (met à jour la reconnaissance des 4 vues de l'écran)
+        seen = set()
+        for _pos, grid in _QUAD["cache"][1].values():
+            key = tuple(sorted(grid.values()))
+            if key in seen:
+                continue
+            seen.add(key)
+            for kind, fn in (('COLUMN', quad_column_of), ('STRIP', quad_strip_of)):
+                a = fn(screen, grid)
+                if a is not None and a.as_pointer() == ptr:
+                    return kind
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        pass
+    return None
+
+
+def quad_is_strip(area):
+    return quad_extra_kind(area) == 'STRIP'
+
+
 def quad_is_column(area):
     """True si cette vue 3D est la colonne de la barre d'outils de 4 vues : elle ne dessine ni barres ni titre."""
     try:
@@ -168,6 +230,24 @@ def quad_tool_width(area):
         return max((int(r.width) for r in area.regions if r.type == 'TOOLS'), default=0)
     except (AttributeError, ReferenceError, TypeError):
         return 0
+
+
+def quad_region_size(area, rtype, attr, flag):
+    """Taille (attr : 'width' ou 'height', pixels) de la région rtype d'une vue 3D, 0 si elle est masquée (flag)."""
+    try:
+        if not getattr(area.spaces.active, flag, False):
+            return 0
+        return max((int(getattr(r, attr)) for r in area.regions if r.type == rtype), default=0)
+    except (AttributeError, ReferenceError, TypeError):
+        return 0
+
+
+def quad_header_height(area):
+    """Hauteur de l'en-tête et de la barre des réglages d'outil d'une vue 3D (pixels), 0 si l'en-tête est masqué."""
+    h = quad_region_size(area, 'HEADER', 'height', "show_region_header")
+    if h <= 0:
+        return 0
+    return h + quad_region_size(area, 'TOOL_HEADER', 'height', "show_region_tool_header")
 
 
 def quad_native(area):
@@ -387,6 +467,55 @@ def _area_close(win, screen, area):
     return len(screen.areas) < n
 
 
+def _area_join(win, screen, keep, gone):
+    """Fond la zone `gone` dans sa voisine `keep` (bord commun entier) : c'est `keep` qui grandit, quelles que soient les
+    autres voisines (screen.area_join garde la zone d'où l'on part, source_xy, et retire celle où l'on arrive). Retourne
+    le pointeur de la zone qui reste, ou None si rien n'a changé."""
+    n = len(screen.areas)
+    kp, gp = keep.as_pointer(), gone.as_pointer()
+    a, b = (gone, keep) if _QUAD.get("join_rev") else (keep, gone)
+    try:
+        src = (int(a.x + a.width // 2), int(a.y + a.height // 2))
+        dst = (int(b.x + b.width // 2), int(b.y + b.height // 2))
+        with bpy.context.temp_override(window=win, screen=screen, area=a, region=_win_region(a)):
+            bpy.ops.screen.area_join(source_xy=src, target_xy=dst)
+    except (RuntimeError, TypeError, AttributeError, ValueError):
+        return None
+    if len(screen.areas) >= n:
+        return None
+    alive = {x.as_pointer() for x in screen.areas}
+    if kp not in alive and gp in alive:          # Blender a gardé l'autre : les rôles sont inversés pour la suite
+        _QUAD["join_rev"] = not _QUAD.get("join_rev")
+        return gp
+    return kp
+
+
+def quad_joinable(a, b, tol=QUAD_TOL):
+    """True si les zones a et b se touchent par un bord commun entier (même largeur et l'une sur l'autre, ou même
+    hauteur et côte à côte) : elles peuvent être fondues en une."""
+    try:
+        same_x = abs(a.x - b.x) <= tol and abs(a.width - b.width) <= tol
+        same_y = abs(a.y - b.y) <= tol and abs(a.height - b.height) <= tol
+        stacked = abs(a.y + a.height - b.y) <= tol or abs(b.y + b.height - a.y) <= tol
+        beside = abs(a.x + a.width - b.x) <= tol or abs(b.x + b.width - a.x) <= tol
+        return (same_x and stacked) or (same_y and beside)
+    except (AttributeError, ReferenceError, TypeError):
+        return False
+
+
+def _area_merge(win, screen, gone, into):
+    """Fait disparaître `gone` au profit d'une des zones `into` (dans l'ordre) qui la touche par un bord entier ; à
+    défaut, la ferme et laisse Blender choisir la voisine. Retourne (fait, {ancien pointeur: nouveau}) : si Blender a
+    gardé `gone` à la place de sa voisine, celle-ci est désormais `gone`."""
+    for k in into:
+        if k is not None and k is not gone and quad_joinable(gone, k):
+            kept = _area_join(win, screen, k, gone)
+            if kept is not None:
+                kp = k.as_pointer()
+                return True, ({kp: kept} if kept != kp else {})
+    return _area_close(win, screen, gone), {}
+
+
 def _quad_native_off(win, screen, area):
     """Quitte le « Toggle Quad View » de Blender dans cette vue 3D (avant de la couper en 4 vues séparées)."""
     try:
@@ -456,23 +585,25 @@ def quad_ui_apply(space, st):
         pass
 
 
-def quad_ui_for(pos, orig, column=False):
-    """Réglages d'un quart : l'en-tête et la barre d'outils en haut à gauche, le panneau latéral en haut à droite (s'ils
-    étaient affichés), rien ailleurs ; le texte de Blender laisse la place au titre de la vue. column : la barre d'outils
-    est dans sa colonne, à gauche des 4 vues (aucun quart ne la montre)."""
-    return {"show_region_header": pos == QUAD_HEADER and orig.get("show_region_header", True),
-            "show_region_tool_header": pos == QUAD_HEADER and orig.get("show_region_tool_header", True),
+def quad_ui_for(pos, orig, column=False, strip=False):
+    """Réglages d'un quart : l'en-tête et la barre d'outils en haut à gauche, le panneau latéral (N) en haut à droite
+    (s'ils étaient affichés), rien ailleurs ; le texte de Blender laisse la place au titre de la vue. Le panneau N reste
+    celui d'une vue : il se pose par-dessus elle (touche N dans la vue), sans retailler les 4 vues. column / strip : la
+    barre d'outils ou l'en-tête sont dans leur propre colonne ou bande (aucun quart ne les montre)."""
+    return {"show_region_header": pos == QUAD_HEADER and not strip and orig.get("show_region_header", True),
+            "show_region_tool_header": pos == QUAD_HEADER and not strip and orig.get("show_region_tool_header", True),
             "show_region_toolbar": pos == QUAD_HEADER and not column and orig.get("show_region_toolbar", True),
             "show_region_ui": pos == QUAD_SIDEBAR and orig.get("show_region_ui", False),
             "show_text": False}
 
 
-def quad_column_setup(area):
+def quad_column_setup(area, show=None):
     """La colonne ne montre que la barre d'outils : ni en-tête, ni panneau, ni grille, ni poignées, et sa vue regarde au
-    loin (aucun objet ne passe dans la mince bande de vue qui dépasse de la barre)."""
+    loin (aucun objet ne passe dans la mince bande de vue qui dépasse de la barre). show : les régions montrées à la
+    place (la bande de l'en-tête, la colonne N)."""
     space = area.spaces.active
-    quad_ui_apply(space, {"show_region_header": False, "show_region_tool_header": False, "show_region_toolbar": True,
-                          "show_region_ui": False, "show_text": False})
+    quad_ui_apply(space, show or {"show_region_header": False, "show_region_tool_header": False, "show_region_toolbar": True,
+                                  "show_region_ui": False, "show_text": False})
     for obj, k, v in ((getattr(space, "overlay", None), "show_overlays", False), (space, "show_gizmo", False)):
         try:
             setattr(obj, k, v)
@@ -485,6 +616,12 @@ def quad_column_setup(area):
         r3.view_distance = 1.0
     except (AttributeError, TypeError, RuntimeError):
         pass
+
+
+def quad_strip_setup(area, orig):
+    """La bande ne montre que l'en-tête et la barre des réglages d'outil (comme la vue d'origine les montrait)."""
+    quad_column_setup(area, {"show_region_header": True, "show_region_tool_header": orig.get("show_region_tool_header", True),
+                             "show_region_toolbar": False, "show_region_ui": False, "show_text": False})
 
 
 QUAD_COL_PAD = 4            # pixels laissés à droite de la barre d'outils, dans sa colonne
@@ -575,6 +712,8 @@ class QuadJob:
         self.native = False         # 'enter' : le quad view de Blender a d'abord été quitté
         self.col = None             # colonne de la barre d'outils (créée en premier, refermée en dernier)
         self.col_tried = False
+        self.strip = None           # bande de l'en-tête, au-dessus de tout (créée avant la colonne, refermée après)
+        self.strip_tried = False
         self.t0 = time.monotonic()
         self.error = ""
 
@@ -593,7 +732,55 @@ class QuadJob:
                 self.stage, self.t0 = 9, time.monotonic()        # coupe restée en chemin : on referme ce qui a été ouvert
             else:
                 return None
+        if self.kind == 'repair':
+            return self.step_repair(win, screen)
         return self.step_enter(win, screen) if self.kind == 'enter' else self.step_exit(win, screen)
+
+    # ---- 4 vues défaites à la main (deux vues fusionnées, une vue coupée) : retour à une vue, puis de nouveau 4 vues
+    def step_repair(self, win, screen):
+        rec = _QUAD["set"].get(screen.as_pointer())
+        alive = {a.as_pointer(): a for a in screen.areas}
+        if self.stage == 0:
+            if rec is None:
+                return None
+            box = rec["box"]
+            pool = [a for a in screen.areas if quad_inside(a, box)]
+            if not pool:
+                return None
+            self.made = [a.as_pointer() for a in pool]
+            keep = max(pool, key=lambda a: (a.type == 'VIEW_3D', a.width * a.height))
+            self.keep = keep.as_pointer()
+            self.stage = 1
+        pool = [alive[q] for q in self.made if q in alive]
+        keep = alive.get(self.keep)
+        if keep is None or not pool:
+            return None
+        if any(a.width <= 0 or a.height <= 0 for a in pool):
+            return self.WAIT
+        others = [a for a in pool if a is not keep]
+        if not others:
+            # il ne reste qu'une vue : elle retrouve ses panneaux, puis les 4 vues sont refaites proprement
+            _QUAD["set"].pop(screen.as_pointer(), None)
+            quad_ui_apply(keep.spaces.active, _QUAD["ui"].get(screen.as_pointer(), {}))
+            self.kind, self.stage, self.ptr = 'enter', 0, self.keep
+            self.made, self.col, self.strip = [], None, None
+            self.col_tried = self.strip_tried = False
+            self.t0 = time.monotonic()
+            return self.WAIT
+        # une zone qui touche la vue gardée par un bord entier s'y fond ; sinon deux autres zones alignées entre elles
+        for a in others:
+            if quad_joinable(a, keep):
+                ok, moved = _area_merge(win, screen, a, [keep])
+                if moved:
+                    self.keep = moved.get(self.keep, self.keep)
+                return self.WAIT if ok else None
+        for a in others:
+            for b in others:
+                if a is not b and quad_joinable(a, b):
+                    ok, _moved = _area_merge(win, screen, a, [b])
+                    return self.WAIT if ok else None
+        ok = _area_close(win, screen, others[0])
+        return self.WAIT if ok else None
 
     # ---- vers les 4 vues
     def step_enter(self, win, screen):
@@ -610,9 +797,20 @@ class QuadJob:
                 return self.WAIT
             space = area.spaces.active
             sptr = screen.as_pointer()
-            if not self.col_tried:
+            shared = bool(pref("quad_shared_bars"))
+            if not self.strip_tried:
                 _QUAD["ui"][sptr] = quad_ui_read(space)
                 _QUAD["home"][sptr] = _area_view_name(win, screen, area)
+                self.strip_tried = True
+                hh = quad_header_height(area) if shared else 0
+                if hh > 0 and area.height > 6 * hh:
+                    # d'abord la bande de l'en-tête, en haut, sur toute la largeur
+                    s = _area_split(win, screen, area, 'HORIZONTAL', 1.0 - (hh + QUAD_STRIP_PAD) / float(area.height))
+                    if s is not None:
+                        self.strip = s
+                        self.stage = 6
+                        return self.WAIT
+            if not self.col_tried:
                 self.col_tried = True
                 tw = quad_tool_width(area)
                 if tw > 0 and area.width > 8 * tw:
@@ -677,6 +875,22 @@ class QuadJob:
             quad_column_setup(c)
             self.stage = 0
             return self.WAIT
+        if self.stage == 6:
+            # la bande vient d'être coupée : la plus basse des deux zones est la bande (quel que soit le côté où Blender
+            # a posé la nouvelle zone), l'autre est coupée en 4 vues
+            c = _area_by_ptr(screen, self.strip)
+            if c is None:
+                self.strip = None
+                self.stage = 0
+                return self.WAIT
+            if c.width <= 0 or c.height <= 0 or area.height <= 0:
+                return self.WAIT
+            if c.height > area.height:
+                self.strip, self.ptr = self.ptr, self.strip
+                c, area = area, c
+            quad_strip_setup(c, _QUAD["ui"].get(screen.as_pointer(), {}))
+            self.stage = 0
+            return self.WAIT
         # stage 9 : la coupe n'a pas abouti, on referme ce qui a été ouvert (une zone par passage, l'écran rafraîchi entre deux)
         for q in reversed(self.made):
             a = _area_by_ptr(screen, q)
@@ -686,12 +900,14 @@ class QuadJob:
             if a is not None:
                 _area_close(win, screen, a)
                 return 0.2
-        if self.col is not None:
-            c = _area_by_ptr(screen, self.col)
-            self.col = None
-            if c is not None:
-                _area_close(win, screen, c)
-                return 0.2
+        for attr in ("col", "strip"):
+            q = getattr(self, attr)
+            if q is not None:
+                c = _area_by_ptr(screen, q)
+                setattr(self, attr, None)
+                if c is not None:
+                    _area_close(win, screen, c)
+                    return 0.2
         quad_ui_apply(area.spaces.active, _QUAD["ui"].get(screen.as_pointer(), {}))
         _redraw_all(screen)
         return None
@@ -713,8 +929,9 @@ class QuadJob:
                     _QUAD["shade"][(sptr, p)] = a.spaces.active.shading.type
             rects = {r[0]: r for r in quad_rects(screen) if r[0] in grid.values()}
             self.total = sum(r[3] * r[4] for r in rects.values())
-            c = quad_column_of(screen, grid)
-            self.col = c.as_pointer() if c is not None else None
+            for attr, fn in (("col", quad_column_of), ("strip", quad_strip_of)):
+                c = fn(screen, grid)
+                setattr(self, attr, c.as_pointer() if c is not None else None)
             self.stage = 1
         left = {r[0]: r[3] * r[4] for r in quad_rects(screen) if r[0] in self.grid.values()}
         if self.keep not in left:
@@ -722,13 +939,22 @@ class QuadJob:
         if sum(left.values()) < 0.9 * self.total:
             return self.WAIT                                             # (la zone agrandie n'a pas encore sa taille)
         nxt = quad_diag_order(self.grid, self.keep, left)
-        if nxt is None and self.col is not None:
-            c = _area_by_ptr(screen, self.col)                           # la colonne de la barre d'outils, en dernier
-            self.col = None
-            if c is not None and c.width > 0:
-                _area_close(win, screen, c)
-                return self.WAIT
         if nxt is None:
+            # la colonne de la barre d'outils, puis la bande de l'en-tête, en dernier
+            for attr in ("col", "strip"):
+                q = getattr(self, attr)
+                if q is None:
+                    continue
+                c = _area_by_ptr(screen, q)
+                setattr(self, attr, None)
+                if c is not None and c.width > 0:
+                    _ok, moved = _area_merge(win, screen, c, [_area_by_ptr(screen, self.keep)])
+                    if moved:
+                        self.keep = moved.get(self.keep, self.keep)
+                        self.grid = {p: moved.get(q, q) for p, q in self.grid.items()}
+                    return self.WAIT
+        if nxt is None:
+            _QUAD["set"].pop(screen.as_pointer(), None)                  # (retour voulu à une vue : plus rien à surveiller)
             area = _area_by_ptr(screen, self.keep)                       # il ne reste qu'elle : elle retrouve ses panneaux
             quad_ui_apply(area.spaces.active, _QUAD["ui"].get(screen.as_pointer(), {}))
             _QUAD["cache"] = (None, {})
@@ -740,9 +966,15 @@ class QuadJob:
                     pass
             return None
         a = _area_by_ptr(screen, nxt)
-        if a is None or not _area_close(win, screen, a):
+        # fondue dans une des 4 vues encore là (la vue gardée d'abord) : jamais dans la bande ni dans une colonne
+        others = [_area_by_ptr(screen, q) for q in [self.keep] + [q for q in left if q not in (self.keep, nxt)]]
+        ok, moved = _area_merge(win, screen, a, others) if a is not None else (False, {})
+        if not ok:
             self.error = "close"
             return None
+        if moved:                                    # (Blender a gardé la zone fermée à la place de sa voisine)
+            self.keep = moved.get(self.keep, self.keep)
+            self.grid = {p: moved.get(q, q) for p, q in self.grid.items() if q != nxt or moved.get(q)}
         return self.WAIT
 
 
@@ -754,12 +986,15 @@ def quad_setup(win, screen, grid):
     col = quad_column_of(screen, grid)
     if col is not None:
         quad_column_setup(col)
+    strip = quad_strip_of(screen, grid)
+    if strip is not None:
+        quad_strip_setup(strip, orig)
     for pos, q in grid.items():
         a = _area_by_ptr(screen, q)
         if a is None:
             continue
         space = a.spaces.active
-        quad_ui_apply(space, quad_ui_for(pos, orig, column=col is not None))
+        quad_ui_apply(space, quad_ui_for(pos, orig, column=col is not None, strip=strip is not None))
         shade = _QUAD["shade"].get((sptr, pos))
         if shade:
             try:
@@ -807,6 +1042,176 @@ def quad_home(context):
         return quad_focus(screen, grid) if grid is not None else None
     except (AttributeError, ReferenceError, RuntimeError):
         return None
+
+
+def quad_inside(area, box, tol=QUAD_TOL):
+    """True si la zone est dans le rectangle box (x0, y0, x1, y1)."""
+    try:
+        x0, y0, x1, y1 = box
+        return (area.x >= x0 - tol and area.y >= y0 - tol and area.x + area.width <= x1 + tol
+                and area.y + area.height <= y1 + tol and area.width > 0 and area.height > 0)
+    except (AttributeError, ReferenceError, TypeError):
+        return False
+
+
+def quad_guard(screen):
+    """Comme dans Rhino, les 4 vues ne se fusionnent pas et ne se recoupent pas. Tant qu'elles sont intactes, on retient
+    leurs zones (4 vues, bande, colonne) ; si l'une disparaît (deux vues fusionnées) ou si une zone nouvelle apparaît
+    dedans (une vue coupée, ou des 4 vues dans une des 4 vues), elles sont refaites. Retourne True si c'est lancé."""
+    if _QUAD["job"] is not None:
+        return False
+    try:
+        sptr = screen.as_pointer()
+        rects = quad_rects(screen)
+        groups = quad_groups(rects)
+    except (AttributeError, ReferenceError, RuntimeError):
+        return False
+    rec = _QUAD["set"].get(sptr)
+    seen = set()
+    for _ptr, (_pos, grid) in groups.items():
+        key = tuple(sorted(grid.values()))
+        if key in seen:
+            continue
+        seen.add(key)
+        col, strip = quad_column_of(screen, grid), quad_strip_of(screen, grid)
+        if col is None and strip is None:
+            continue                                         # (4 vues 3D en grille faites à la main : pas les nôtres)
+        ptrs = set(grid.values()) | {a.as_pointer() for a in (col, strip) if a is not None}
+        areas = [a for a in screen.areas if a.as_pointer() in ptrs]
+        box = (min(a.x for a in areas), min(a.y for a in areas),
+               max(a.x + a.width for a in areas), max(a.y + a.height for a in areas))
+        inside = {a.as_pointer() for a in screen.areas if quad_inside(a, box)}
+        if inside == ptrs:
+            _QUAD["set"][sptr] = {"ptrs": ptrs, "box": box}      # intactes
+            return False
+    if rec is None:
+        return False
+    alive = {a.as_pointer() for a in screen.areas}
+    if not (rec["ptrs"] & alive):
+        _QUAD["set"].pop(sptr, None)                         # (écran tout autre : on oublie)
+        return False
+    # défaites : on garde le cadre connu (une fenêtre redimensionnée l'a peut-être déplacé : celui des zones restantes)
+    left = [a for a in screen.areas if a.as_pointer() in rec["ptrs"]]
+    x0, y0, x1, y1 = rec["box"]
+    if left:
+        x0, y0 = min([x0] + [a.x for a in left]), min([y0] + [a.y for a in left])
+        x1 = max([x1] + [a.x + a.width for a in left])
+        y1 = max([y1] + [a.y + a.height for a in left])
+    rec["box"] = (x0, y0, x1, y1)
+    return True
+
+
+def quad_guard_soon(screen, win=None):
+    """quad_guard au dessin d'une vue : la réparation se fait un instant plus tard (jamais pendant un dessin)."""
+    if _QUAD["job"] is not None or _QUAD.get("repair") is not None:
+        return False
+    if not quad_guard(screen):
+        return False
+    try:
+        win = win or bpy.context.window
+        _QUAD["repair"] = (win.as_pointer(), screen.as_pointer())
+        bpy.app.timers.register(_quad_repair_tick, first_interval=0.05)
+    except (AttributeError, ReferenceError, RuntimeError, ValueError):
+        _QUAD["repair"] = None
+        return False
+    return True
+
+
+def _quad_repair_tick():
+    job, _QUAD["repair"] = _QUAD.get("repair"), None
+    if job is None or _QUAD["job"] is not None:
+        return None
+    win = _window_by_ptr(job[0])
+    if win is None or win.screen is None or win.screen.as_pointer() != job[1]:
+        return None
+    a = next((x for x in win.screen.areas if x.type == 'VIEW_3D'), None)
+    if a is None:
+        return None
+    _QUAD["job"] = QuadJob('repair', win, win.screen, a.as_pointer())
+    try:
+        bpy.app.timers.register(_quad_tick, first_interval=0.02)
+    except (RuntimeError, ValueError, AttributeError):
+        _QUAD["job"] = None
+    return None
+
+
+def quad_grid_any(context):
+    """Grille des 4 vues dont fait partie la vue 3D du contexte : un quart, ou la bande / la colonne qui les accompagne."""
+    try:
+        area, screen = context.area, context.screen
+        pos, grid = quad_of(screen, area.as_pointer())
+        if grid is not None:
+            return grid
+        if quad_extra_kind(area) is None:
+            return None
+        for _p, g in _QUAD["cache"][1].values():
+            return g
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    return None
+
+
+class DESSIN_OT_quad_sidebar(bpy.types.Operator):
+    bl_idname = "dessin.quad_sidebar"
+    bl_label = "Sidebar (4 views)"
+    bl_description = ("In the 4 views, N shows or hides one sidebar for the four views, laid over their right edge "
+                      "(it belongs to the top-right view and takes no space from the others)")
+    bl_options = {'INTERNAL'}
+
+    @classmethod
+    def poll(cls, context):
+        return (context.area is not None and context.area.type == 'VIEW_3D' and bool(pref("quad_shared_bars"))
+                and quad_grid_any(context) is not None)
+
+    def execute(self, context):
+        grid = quad_grid_any(context)
+        a = _area_by_ptr(context.screen, grid.get(QUAD_SIDEBAR)) if grid is not None else None
+        if a is None:
+            return {'PASS_THROUGH'}
+        try:
+            space = a.spaces.active
+            space.show_region_ui = not bool(getattr(space, "show_region_ui", False))
+            a.tag_redraw()
+        except (AttributeError, TypeError, RuntimeError):
+            return {'CANCELLED'}
+        # un seul panneau : ceux qu'une autre vue aurait ouverts (avant cette version, menu View...) se referment
+        for pos, q in grid.items():
+            if pos == QUAD_SIDEBAR:
+                continue
+            o = _area_by_ptr(context.screen, q)
+            try:
+                if o is not None and o.spaces.active.show_region_ui:
+                    o.spaces.active.show_region_ui = False
+                    o.tag_redraw()
+            except (AttributeError, TypeError, RuntimeError):
+                pass
+        return {'FINISHED'}
+
+
+_QUAD_KEYMAPS = []
+
+
+def register_quad_keymap():
+    """N dans les 4 vues : le panneau latéral unique, posé sur leur bord droit (ailleurs, le N de Blender, le poll de la
+    commande échouant)."""
+    try:
+        kc = bpy.context.window_manager.keyconfigs.addon
+        # (le N de Blender est dans « 3D View Generic », lu avant « 3D View » : notre N doit être au même endroit)
+        for name in ("3D View Generic", "3D View"):
+            km = kc.keymaps.new(name=name, space_type='VIEW_3D')
+            kmi = km.keymap_items.new(DESSIN_OT_quad_sidebar.bl_idname, 'N', 'PRESS')
+            _QUAD_KEYMAPS.append((km, kmi))
+    except (AttributeError, RuntimeError, TypeError):
+        pass
+
+
+def unregister_quad_keymap():
+    for km, kmi in _QUAD_KEYMAPS:
+        try:
+            km.keymap_items.remove(kmi)
+        except (RuntimeError, ReferenceError, TypeError):
+            pass
+    _QUAD_KEYMAPS.clear()
 
 
 def quad_leave_then(context, then):
@@ -971,10 +1376,10 @@ def quad_title(context):
 def quad_reset():
     """Fichier ouvert ou module désactivé : plus rien en cours, plus rien de mémorisé."""
     _QUAD.update(job=None, hit={}, ui={}, shade={}, home={}, click=(None, 0.0), cache=(None, {}),
-                 focus={}, drawn={}, sync={}, colw={}, fit=None)
+                 focus={}, drawn={}, sync={}, colw={}, fit=None, set={}, repair=None)
 
 
-QUAD_CLASSES = (DESSIN_OT_quad_view, DESSIN_OT_quad_display, DESSIN_MT_quad_view)
+QUAD_CLASSES = (DESSIN_OT_quad_view, DESSIN_OT_quad_display, DESSIN_MT_quad_view, DESSIN_OT_quad_sidebar)
 
 
 def _late_imports():

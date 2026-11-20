@@ -11,7 +11,8 @@ from mathutils import Matrix, Vector
 from mathutils.geometry import interpolate_bezier
 
 from . import layout_engine as le
-from .core import TAU
+from .core import TAU, has_lt, object_collections_map, own_modifiers
+from .linetypes import LINETYPES, layer_linetype, lt_eligible, lt_scale
 from .layers import _LAYERCOL, find_layer_collection
 
 
@@ -770,6 +771,8 @@ def dxf_collect(context, selected_only=False, faces=True, recognize=True):
     scene = context.scene
     deps = context.evaluated_depsgraph_get()
     ents, layers, used = [], {"0": 7}, {"0": None}
+    lay_lt = {}
+    cmap = object_collections_map()
     stats = {"curves": 0, "circles": 0, "faces": 0, "texts": 0, "objects": 0, "skipped": 0}
     cache = {}
 
@@ -777,7 +780,8 @@ def dxf_collect(context, selected_only=False, faces=True, recognize=True):
         key = base.name
         if key in cache:
             return cache[key]
-        col = base.users_collection[0] if base.users_collection else None
+        cols_ = cmap.get(base.as_pointer())
+        col = cols_[0] if cols_ else None
         if col is None or col == scene.collection:
             name, aci = "0", 7
         else:
@@ -792,6 +796,14 @@ def dxf_collect(context, selected_only=False, faces=True, recognize=True):
                 own = le._aci(c)
         except (AttributeError, TypeError):
             pass
+        if col is not None and col != scene.collection:
+            lay_lt[name] = layer_linetype(base, cmap)
+        try:
+            lt = base.get("wd_lt") if lt_eligible(base) else None
+        except (AttributeError, ReferenceError):
+            lt = None
+        if lt and lt != lay_lt.get(name, 'CONTINUOUS'):
+            own = (own, lt)             # type de ligne propre à l'objet (couleur éventuelle, type de ligne)
         cache[key] = (name, own)
         return cache[key]
 
@@ -853,6 +865,12 @@ def dxf_collect(context, selected_only=False, faces=True, recognize=True):
                 else:
                     ents.append(('poly', lay, col, W, closed))
             continue
+        if not inst.is_instance and has_lt(base) and not own_modifiers(base) and base.type == 'MESH':
+            V = [tuple(mw @ v.co) for v in base.data.vertices]       # contour à tirets : le trait entier (type de ligne DXF)
+            for e in base.data.edges:
+                ents.append(('line', lay, col, V[e.vertices[0]], V[e.vertices[1]]))
+                stats["curves"] += 1
+            continue
         try:                                         # maillage : faces (3DFACE) et arêtes libres (LINE)
             me = ob.to_mesh()
         except RuntimeError:
@@ -895,6 +913,8 @@ def dxf_collect(context, selected_only=False, faces=True, recognize=True):
                     stats["curves"] += 1
         finally:
             ob.to_mesh_clear()
+    stats["linetypes"] = dict(lay_lt)
+    stats["lt_scale"] = lt_scale(scene)
     return ents, layers, stats
 
 
@@ -903,9 +923,11 @@ def _num(v):
     return t.rstrip("0").rstrip(".") if "." in t else t
 
 
-def write_model_dxf(path, ents, layers, factor=1.0, unit_code=0):
-    """Écrit un DXF R12 (AC1009). factor : unités Blender -> unités du fichier."""
+def write_model_dxf(path, ents, layers, factor=1.0, unit_code=0, linetypes=None, lt_unit=None):
+    """Écrit un DXF R12 (AC1009). factor : unités Blender -> unités du fichier.
+    linetypes : {calque: type de ligne} ; lt_unit : unités Blender par mm de motif (échelle des types de ligne)."""
     o = []
+    linetypes = linetypes or {}
 
     def g(code, val):
         o.append("%d\n%s" % (code, val))
@@ -915,8 +937,13 @@ def write_model_dxf(path, ents, layers, factor=1.0, unit_code=0):
 
     def head(kind, lay, col):
         g(0, kind); g(8, lay)
+        lt = None
+        if isinstance(col, tuple):
+            col, lt = col
         if col is not None:
             g(62, col)
+        if lt:
+            g(6, lt)
 
     def ocs(p, nrm):
         ax, ay, nz = dxf_ocs(nrm)
@@ -954,12 +981,22 @@ def write_model_dxf(path, ents, layers, factor=1.0, unit_code=0):
     g(9, "$EXTMAX"); pt(10, hi)
     g(0, "ENDSEC")
     g(0, "SECTION"); g(2, "TABLES")
-    g(0, "TABLE"); g(2, "LTYPE"); g(70, 1)
+    used_lt = set(linetypes.values())
+    for e in ents:
+        if isinstance(e[2], tuple) and e[2][1]:
+            used_lt.add(e[2][1])
+    lts = [(k, n, p) for k, n, _d, p in LINETYPES if k != 'CONTINUOUS' and k in used_lt]
+    unit = (lt_unit or 0.05) * factor          # longueur d'un mm de motif dans les unités du fichier
+    g(0, "TABLE"); g(2, "LTYPE"); g(70, 1 + len(lts))
     g(0, "LTYPE"); g(2, "CONTINUOUS"); g(70, 0); g(3, "Solid line"); g(72, 65); g(73, 0); g(40, "0.0")
+    for k, n, pat in lts:
+        g(0, "LTYPE"); g(2, k); g(70, 0); g(3, n); g(72, 65); g(73, len(pat)); g(40, _num(sum(pat) * unit))
+        for i, x in enumerate(pat):
+            g(49, _num((x if i % 2 == 0 else -x) * unit))
     g(0, "ENDTAB")
     g(0, "TABLE"); g(2, "LAYER"); g(70, len(layers))
     for name, aci in layers.items():
-        g(0, "LAYER"); g(2, name); g(70, 0); g(62, aci); g(6, "CONTINUOUS")
+        g(0, "LAYER"); g(2, name); g(70, 0); g(62, aci); g(6, linetypes.get(name, "CONTINUOUS") or "CONTINUOUS")
     g(0, "ENDTAB")
     g(0, "TABLE"); g(2, "STYLE"); g(70, 1)
     g(0, "STYLE"); g(2, "STANDARD"); g(70, 0); g(40, "0.0"); g(41, "1.0"); g(50, "0.0"); g(71, 0); g(42, "0.2"); g(3, "txt"); g(4, "")
@@ -1073,7 +1110,7 @@ class DESSIN_OT_export_cad(bpy.types.Operator):
             return {'CANCELLED'}
         key, factor, code = export_unit(context.scene, self.units)
         try:
-            write_model_dxf(path, ents, layers, factor, code)
+            write_model_dxf(path, ents, layers, factor, code, linetypes=stats.get("linetypes"), lt_unit=stats.get("lt_scale"))
         except OSError as ex:
             self.report({'ERROR'}, f"Cannot write the file: {ex}")
             return {'CANCELLED'}

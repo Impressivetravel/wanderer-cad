@@ -522,6 +522,7 @@ CMD_KEY_ITEMS = (('SPACE', "Space", "Space opens the command line (Space again o
                  ('ACCENT_GRAVE', "` (backtick)", "The ` key opens the command line"),
                  ('NONE', "None", "No key: click the command bar at the bottom of the viewport"))
 CMD_ALIASES = {
+    "walk_tool": "walk walkabout",
     "layout_detail_tool": "viewport mview mv vports detail",
     "detail_callout_tool": "detailview viewdetail dview",
     "deplacer_tool": "m move", "copier_tool": "co cp copy", "selection_boite_tool": "select sel", "selection_lasso_tool": "lasso", "selection_rect_tool": "selbox", "selection_cercle_tool": "selcircle",
@@ -541,9 +542,9 @@ CMD_ALIASES = {
     "camera_tool": "cam camera", "camera_target_tool": "camt", "offset_surface_tool": "offsrf", "extrude_tool": "ext extrude", "extrude_crv_tool": "extrudecrv extc ec", "extrude_srf_tool": "extrudesrf exts es", "planar_srf_tool": "ps planarsrf", "edge_srf_tool": "edgesrf esrf", "thicken_tool": "thicken th", "cap_tool": "cap", "split_face_tool": "splitface sf", "project_curve_tool": "project proj", "patch_tool": "patch", "xline_tool": "xl xline", "stretch_tool": "st stretch", "divide_tool": "div divide", "overkill_tool": "overkill ok", "clip_plane_tool": "clip clippingplane clp", "fillet_curve_tool": "fc filletcurve fillet2d", "chamfer_curve_tool": "cc chamfercurve chamfer2d", "blend_srf_tool": "blendsrf bs", "match_srf_tool": "matchsrf ms", "rail_revolve_tool": "railrev rr", "shell_tool": "shell sh",
     # commandes Rhino de la 2.96.124 (une seule entrée dans la ligne de commande : l'outil de la barre)
     "pipe_tool": "pipe", "intersect_tool": "int intersect", "section_tool": "sec section", "contour_tool": "contour",
-    "extract_srf_tool": "extractsrf", "dup_border_tool": "dupborder", "dup_edge_tool": "dupedge", "dup_face_border_tool": "dupfaceborder", "extend_crv_tool": "extend ex extendcrv extendcurve lengthen",
+    "extract_srf_tool": "extractsrf", "dup_border_tool": "dupborder", "dup_edge_tool": "dupedge", "dup_face_border_tool": "dupfaceborder", "extend_crv_tool": "extend ex extendcrv extendcurve lengthen", "boundary_tool": "bo boundary bpoly", "break_crv_tool": "br break breakatpoint", "match_props_tool": "ma matchprop matchproperties painter",
     "merge_faces_tool": "mergeallfaces mergeallcoplanarfaces", "unroll_tool": "unroll unrollsrf",
-    "rebuild_srf_tool": "rebuildsrf", "orient_tool": "orient orient2pt", "orient3pt_tool": "orient3pt o3pt",
+    "rebuild_srf_tool": "rebuildsrf", "orient_tool": "orient orient2pt", "orient3pt_tool": "orient3pt o3pt", "slice_tool": "slice quickslice",
 }
 
 

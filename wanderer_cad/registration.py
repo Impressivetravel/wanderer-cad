@@ -31,7 +31,7 @@ from .subd import (
 from .transform import (
     DESSIN_OT_array_linear, DESSIN_OT_array_polar, DESSIN_OT_array_rect, DESSIN_OT_copier, DESSIN_OT_cut,
     DESSIN_OT_deplacer, DESSIN_OT_echelle, DESSIN_OT_echelle_1d, DESSIN_OT_echelle_2d, DESSIN_OT_echelle_taille,
-    DESSIN_OT_miroir, DESSIN_OT_rotation,
+    DESSIN_OT_miroir, DESSIN_OT_rotation, DESSIN_OT_slice,
 )
 from .edges import DESSIN_OT_chamfer_edge, DESSIN_OT_fillet_edge, DESSIN_OT_offset_edge
 from .booleans import (
@@ -52,7 +52,7 @@ from .dimensions import (
 from .layers import (
     DESSIN_MT_layer_move_to, DESSIN_OT_layer_carry, DESSIN_OT_layer_click, DESSIN_OT_layer_colors_view,
     DESSIN_OT_layer_current, DESSIN_OT_layer_delete, DESSIN_OT_layer_delete_all, DESSIN_OT_layer_duplicate,
-    DESSIN_OT_layer_fold, DESSIN_OT_layer_isolate, DESSIN_OT_layer_lock_all, DESSIN_OT_layer_move,
+    DESSIN_OT_layer_fold, DESSIN_OT_layer_col_resize, DESSIN_OT_layer_rows_resize, DESSIN_OT_layer_scroll, DESSIN_OT_layer_isolate, DESSIN_OT_layer_lock_all, DESSIN_OT_layer_move,
     DESSIN_OT_layer_move_selection, DESSIN_OT_layer_new, DESSIN_OT_layer_object, DESSIN_OT_layer_purge,
     DESSIN_OT_layer_refresh_colors, DESSIN_OT_layer_rename, DESSIN_OT_layer_reparent, DESSIN_OT_layer_select,
     DESSIN_OT_layer_set, DESSIN_OT_layer_show_all, DESSIN_OT_layer_state, DESSIN_PG_layer, DESSIN_PT_layers,
@@ -61,9 +61,12 @@ from .layers import (
 from .import_dxf import DESSIN_OT_export_cad, DESSIN_OT_import_cad, menu_export_cad, menu_import_cad
 from .objects import (
     DESSIN_MT_ctx_display, DESSIN_MT_ctx_material, DESSIN_MT_ctx_polyline, DESSIN_MT_ctx_select, DESSIN_OT_group,
+    DESSIN_MT_ctx_viewport_shading,
     DESSIN_OT_lock, DESSIN_OT_unlock_all, DESSIN_OT_unlock_selected,
+    DESSIN_OT_isolate, DESSIN_OT_unisolate, DESSIN_OT_show, DESSIN_OT_hide,
     DESSIN_OT_display_as, DESSIN_OT_material_remove_all, DESSIN_OT_poly_edit, DESSIN_OT_track_to, DESSIN_OT_ungroup, _GROUP_SEL,
     install_ctx_object_menu, menu_ctx_extra, menu_group, uninstall_ctx_object_menu,
+    DESSIN_OT_group_close, DESSIN_OT_group_edit, register_group_edit, unregister_group_edit,
 )
 from .curve_edit import (
     DESSIN_OT_chamfer_curve, DESSIN_OT_divide, DESSIN_OT_fillet_curve, DESSIN_OT_stretch, DESSIN_OT_xline,
@@ -72,11 +75,13 @@ from .curve_edit import (
 from .display import (
     DESSIN_OT_clip_edit, DESSIN_OT_clip_plane, DESSIN_OT_overkill, DESSIN_OT_sel_filter, DESSIN_OT_sel_filter_hold,
     DESSIN_PT_clip, DESSIN_PT_groups, DESSIN_PT_selfilter, DESSIN_PT_shapes, _CLIP, _group_select_tick,
-    clear_clip_planes, register_sel_filter_keys, sel_filter_restore, unregister_sel_filter_keys,
+    clear_clip_planes, register_clip_draw, unregister_clip_draw, register_sel_filter_keys, sel_filter_restore, unregister_sel_filter_keys,
 )
 from .gumball import (
     DESSIN_MT_gumball, DESSIN_OT_gumball, DESSIN_OT_gumball_extrude, DESSIN_OT_gumball_relocate,
-    DESSIN_OT_gumball_reset, DESSIN_OT_gumball_set, DESSIN_OT_gumball_settings, GumballBase,
+    DESSIN_OT_gumball_reset, DESSIN_OT_gumball_set, DESSIN_OT_gumball_settings, DESSIN_OT_gumball_snap_from, GumballBase,
+    register_rot_indicator,
+    unregister_rot_indicator,
 )
 from .offset_extrude import DESSIN_OT_extrude, DESSIN_OT_offset_surface
 from .trim import _CURVE_PTS, _TRIM_HL, curve_points_cb, trim_highlight_cb
@@ -89,9 +94,11 @@ from .surfaces import (
     DESSIN_OT_extrude_crv, DESSIN_OT_extrude_path, DESSIN_OT_extrude_srf, DESSIN_OT_loft, DESSIN_OT_planar_srf,
     DESSIN_OT_revolve, DESSIN_OT_sweep1, DESSIN_OT_sweep2, _ProfileOp,
 )
+from .hatch_patterns import refresh_custom, register_previews, unregister_previews
 from .hatch import (
     DESSIN_OT_hatch, DESSIN_OT_hatch_base, DESSIN_OT_hatch_boundary, DESSIN_OT_hatch_explode, DESSIN_OT_hatch_match,
-    DESSIN_OT_hatch_region,
+    DESSIN_OT_hatch_region, DESSIN_OT_hatch_import, DESSIN_OT_hatch_pattern_remove, DESSIN_OT_hatch_edit,
+    DESSIN_OT_hatch_dblclick,
 )
 from .surface_tools import (
     DESSIN_OT_chamfer_srf, DESSIN_OT_extend_srf, DESSIN_OT_fillet_srf, DESSIN_OT_network_srf, DESSIN_OT_split_iso,
@@ -113,7 +120,7 @@ from .surface_edit import (
 from .make2d import DESSIN_OT_make2d
 from .layout import LAYOUT_CLASSES, layout_after_command, layout_register, layout_unregister
 from .layout_sheet import SHEET_CLASSES
-from .quadview import QUAD_CLASSES, quad_follow, quad_reset
+from .quadview import QUAD_CLASSES, quad_follow, quad_reset, register_quad_keymap, unregister_quad_keymap
 from .lights import (
     DESSIN_OT_camera, DESSIN_OT_camera_target, DESSIN_OT_light_area, DESSIN_OT_light_point, DESSIN_OT_light_spot,
     DESSIN_OT_light_sun,
@@ -122,9 +129,12 @@ from .gumball_handles import (
     DESSIN_GGT_gumball, DESSIN_GT_gb_arc, DESSIN_GT_gb_arrow, DESSIN_GT_gb_bar, DESSIN_GT_gb_dot, DESSIN_GT_gb_plane, DESSIN_OT_gumball_alt_hover, DESSIN_OT_gumball_pull, DESSIN_PT_gumball, _EXT_BALL,
     draw_extrude_ball, statusbar_osnap,
 )
-from .menus import DESSIN_MT_menu, menu_add
+from .menus import DESSIN_MT_menu, SUBMENU_CLASSES, menu_add
 from .icons import ensure_icon
 from .toolbar import LAYOUT_TOOLS, RHINO_TOOLS
+from .boundary import DESSIN_OT_boundary
+from .drafting import DESSIN_OT_break_crv, DESSIN_OT_match_props
+from .linetypes import DESSIN_MT_ctx_linetype, DESSIN_OT_object_linetype
 from .toolbar import (
     DESSIN_TT_align, DESSIN_TT_annotation, DESSIN_TT_arc_3pts, DESSIN_TT_array_polar, DESSIN_TT_blend_crv,
     DESSIN_TT_blend_srf, DESSIN_TT_block, DESSIN_TT_block_insert, DESSIN_TT_boite, DESSIN_TT_bool_union,
@@ -168,11 +178,11 @@ from .rhino_commands import (
 from .command_line import (
     CmdKeyEvent, DESSIN_MT_auto_cplane, DESSIN_MT_grid_snap, DESSIN_MT_mouse_menu, DESSIN_MT_osnap, DESSIN_MT_polar_angle,
     DESSIN_OT_command_line, DESSIN_OT_cplane_named, DESSIN_OT_grid_snap_set, DESSIN_OT_grid_snap_step, DESSIN_OT_osnap_hold,
-    DESSIN_OT_osnap_set, DESSIN_OT_quick_type_toggle, _VBAR, register_osnap_hold_keys, unregister_osnap_hold_keys, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
+    DESSIN_OT_osnap_set, DESSIN_OT_quick_type_toggle, DESSIN_OT_blender_key, _VBAR, register_osnap_hold_keys, unregister_osnap_hold_keys, cmd_bar_cb, cmd_hit, register_cmd_keymap, register_mouse_track,
     unregister_cmd_keymap, unregister_mouse_track, views_bar_cb,
 )
 from .preferences import (
-    DESSIN_AP_prefs, DESSIN_OT_alias_add, DESSIN_OT_alias_edit, DESSIN_OT_alias_remove, DESSIN_OT_apply_preset,
+    DESSIN_AP_prefs, DESSIN_OT_alias_add, DESSIN_OT_alias_import_pgp, DESSIN_OT_alias_edit, DESSIN_OT_alias_remove, DESSIN_OT_apply_preset,
     DESSIN_OT_prefs_reset, DESSIN_PG_alias, aliases_restore_soon,
 )
 from .command_line import alias_changed
@@ -270,6 +280,11 @@ classes = (
     DESSIN_OT_dist,
     DESSIN_OT_center_mark,
     DESSIN_OT_hatch_region,
+    DESSIN_OT_boundary,
+    DESSIN_OT_break_crv,
+    DESSIN_OT_match_props,
+    DESSIN_OT_object_linetype,
+    DESSIN_MT_ctx_linetype,
     DESSIN_OT_cotation_chain,
     DESSIN_OT_cotation_ordinate,
     DESSIN_OT_cotation_arc,
@@ -289,6 +304,7 @@ classes = (
     DESSIN_OT_array_linear,
     DESSIN_OT_array_polar,
     DESSIN_OT_cut,
+    DESSIN_OT_slice,
     DESSIN_OT_bool_union,
     DESSIN_OT_bool_difference,
     DESSIN_OT_bool_intersection,
@@ -306,6 +322,7 @@ classes = (
     DESSIN_OT_poly_edit,
     DESSIN_OT_extend_crv,
     DESSIN_MT_ctx_polyline,
+    DESSIN_MT_ctx_viewport_shading,
     DESSIN_OT_tool_from_edit,
     DESSIN_OT_join,
     DESSIN_OT_explode,
@@ -331,6 +348,10 @@ classes = (
     DESSIN_OT_orient,
     DESSIN_OT_orient3pt,
     DESSIN_OT_hatch_match,
+    DESSIN_OT_hatch_import,
+    DESSIN_OT_hatch_pattern_remove,
+    DESSIN_OT_hatch_edit,
+    DESSIN_OT_hatch_dblclick,
     DESSIN_OT_fillet_srf,
     DESSIN_OT_chamfer_srf,
     DESSIN_OT_extend_srf,
@@ -374,6 +395,7 @@ classes = (
     DESSIN_OT_light_area,
     DESSIN_OT_camera,
     DESSIN_OT_camera_target,
+    *SUBMENU_CLASSES,
     DESSIN_MT_menu,
     DESSIN_PG_dimstyle,
     DESSIN_PG_hatch,
@@ -400,6 +422,9 @@ classes = (
     DESSIN_OT_toolbox_fold, DESSIN_PT_toolbox,
     DESSIN_OT_layer_carry,
     DESSIN_OT_layer_fold,
+    DESSIN_OT_layer_col_resize,
+    DESSIN_OT_layer_rows_resize,
+    DESSIN_OT_layer_scroll,
     DESSIN_OT_layer_reparent,
     DESSIN_MT_layer_move_to,
     DESSIN_OT_layer_state,
@@ -416,10 +441,16 @@ classes = (
     DESSIN_PT_layers,
     DESSIN_OT_group,
     DESSIN_OT_ungroup,
+    DESSIN_OT_group_edit,
+    DESSIN_OT_group_close,
     DESSIN_OT_material_remove_all,
     DESSIN_MT_ctx_material,
     DESSIN_OT_display_as,
     DESSIN_MT_ctx_display,
+    DESSIN_OT_hide,
+    DESSIN_OT_isolate,
+    DESSIN_OT_unisolate,
+    DESSIN_OT_show,
     DESSIN_OT_lock,
     DESSIN_OT_unlock_all,
     DESSIN_OT_unlock_selected,
@@ -432,6 +463,7 @@ classes = (
     DESSIN_OT_gumball_reset,
     DESSIN_OT_gumball_set,
     DESSIN_OT_gumball_settings,
+    DESSIN_OT_gumball_snap_from,
     DESSIN_MT_gumball,
     DESSIN_OT_gumball_extrude,
     DESSIN_OT_gumball_pull,
@@ -459,6 +491,7 @@ classes = (
     DESSIN_OT_shortcuts_clear,
     DESSIN_OT_prefs_reset,
     DESSIN_OT_alias_add,
+    DESSIN_OT_alias_import_pgp,
     DESSIN_OT_alias_remove,
     DESSIN_OT_alias_edit,
     DESSIN_OT_apply_preset,
@@ -468,6 +501,7 @@ classes = (
     DESSIN_OT_osnap_set,
     DESSIN_OT_osnap_hold,
     DESSIN_OT_quick_type_toggle,
+    DESSIN_OT_blender_key,
     DESSIN_MT_osnap,
     DESSIN_OT_grid_snap_set,
     DESSIN_OT_grid_snap_step,
@@ -481,12 +515,13 @@ def _tool_list(mode):
     return ToolSelectPanelHelper._tool_class_from_space_type('VIEW_3D')._tools[mode]
 
 
-def _arrange_tools(mode, chain, head=()):
+def _arrange_tools(mode, chain, head=(), nav=()):
     """Place nos outils juste après « Transformer », dans l'ordre voulu, avec leurs séparateurs.
-    `head` (Select / Move + Lasso) va dans le même bloc que « Cursor », juste avant lui."""
+    `head` (Select / Move + Lasso) va dans le même bloc que « Cursor », juste avant lui ; `nav` (Walk) juste après
+    le menu de Select."""
     from bl_ui.space_toolsystem_common import ToolDef
     tools = _tool_list(mode)
-    ours = {id(cls._bl_tool) for cls, _ in list(chain) + list(head)}
+    ours = {id(cls._bl_tool) for cls, _ in list(chain) + list(head)} | {id(c._bl_tool) for c in nav}
     tools[:] = [t for t in tools if id(t) not in ours]
     if head:
         group = tuple(cls._bl_tool for cls, _ in head)
@@ -501,6 +536,8 @@ def _arrange_tools(mode, chain, head=()):
                     pos = k
                     break
         tools.insert(pos, group)
+        for k, c in enumerate(nav):
+            tools.insert(pos + 1 + k, c._bl_tool)
     idx = len(tools) - 1
     for k, t in enumerate(tools):
         if isinstance(t, ToolDef) and t.idname == "builtin.transform":
@@ -981,6 +1018,16 @@ def _wrap_rclick(cls):
     cls._rc_wrapped = True
 
 
+@bpy.app.handlers.persistent
+def _hatch_patterns_load(*_args):
+    """Motifs de hachure importés (rangés dans les scènes du fichier) : la liste est refaite à l'ouverture."""
+    try:
+        refresh_custom()
+    except (AttributeError, RuntimeError, ReferenceError):
+        pass
+    return None
+
+
 def register():
     # les préférences d'abord : la langue choisie doit être connue avant d'enregistrer les noms d'outils
     bpy.utils.register_class(DESSIN_PG_alias)        # (le type des alias, dont les préférences ont besoin)
@@ -1012,6 +1059,7 @@ def register():
             bpy.utils.register_class(c)
     _enrich_tooltips()
     _apply_tool_hints_pref()
+    register_previews()
     bpy.types.Scene.dessin = bpy.props.PointerProperty(type=DESSIN_PG_settings)
     bpy.types.Object.dessin_hatch = bpy.props.PointerProperty(type=DESSIN_PG_hatch)
     bpy.types.Object.dessin_dim = bpy.props.PointerProperty(type=DESSIN_PG_dim)
@@ -1025,7 +1073,7 @@ def register():
     bpy.app.timers.register(ensure_statusbar_osnap, first_interval=4.0)
     bpy.app.timers.register(ensure_idle_tool, first_interval=1.5)
     bpy.types.UI_MT_button_context_menu.prepend(named_view_button_menu)
-    bpy.types.VIEW3D_MT_add.append(menu_add)
+    bpy.types.VIEW3D_MT_add.prepend(menu_add)
     bpy.types.TOPBAR_MT_file_import.append(menu_import_cad)
     bpy.types.TOPBAR_MT_file_export.append(menu_export_cad)
     bpy.types.UI_MT_button_context_menu.append(layer_button_menu)
@@ -1044,6 +1092,12 @@ def register():
         bpy.app.handlers.depsgraph_update_post.append(_on_depsgraph_update)
     if _on_load_post not in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.append(_on_load_post)
+    if _hatch_patterns_load not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_hatch_patterns_load)
+    try:
+        bpy.app.timers.register(_hatch_patterns_load, first_interval=0.3)
+    except (RuntimeError, ValueError):
+        pass
     for hl in (bpy.app.handlers.undo_post, bpy.app.handlers.redo_post):
         if _on_undo_redo not in hl:
             hl.append(_on_undo_redo)
@@ -1137,15 +1191,15 @@ def register():
         # même outil en mode édition (maillage) : sous-classe ordinaire, pas une classe Blender enregistrée
         _EDIT_TOOLS.append(type(cls.__name__ + "_edit", (cls,), {"bl_context_mode": 'EDIT_MESH'}))
 
-    def register_set(mode, selection_cls, lasso_cls, chain, extra=()):
+    def register_set(mode, selection_cls, lasso_cls, chain, extra=(), nav=()):
         # Select / Move et Lasso juste sous l'outil « Transform » de Blender, puis nos outils après un séparateur
         head = []
         if selection_cls is not None:
             lasso_cls._in_group = True        # Select / Move, Select Box, Select Circle et Lasso partagent un menu déroulant
             head = [(selection_cls, False)] + [(c, False) for c in extra] + [(lasso_cls, False)]
-        for cls, _sep in head + list(chain):
+        for cls, _sep in head + list(chain) + [(c, False) for c in nav]:
             bpy.utils.register_tool(cls, after={"builtin.transform"}, separator=False, group=False)
-        _arrange_tools(mode, list(chain), head)
+        _arrange_tools(mode, list(chain), head, nav)
 
     _names = [t[0] for t in TOOL_ORDER]
     def _between(first, last):
@@ -1153,7 +1207,7 @@ def register():
     _groups = [
         _between(DESSIN_TT_polyligne, DESSIN_TT_arc_3pts) + [DESSIN_TT_project_curve, DESSIN_TT_blend_crv, DESSIN_TT_match_crv,
             DESSIN_TT_rebuild_crv, DESSIN_TT_simplify_crv, DESSIN_TT_change_degree, DESSIN_TT_insert_point, DESSIN_TT_remove_point],                   # courbes
-        _between(DESSIN_TT_deplacer, DESSIN_TT_array_polar) + [DESSIN_TT_align, DESSIN_TT_stretch],                     # transformer
+        _between(DESSIN_TT_deplacer, DESSIN_TT_array_polar) + [DESSIN_TT_align] + RHINO_TOOLS["transform"] + [DESSIN_TT_stretch],   # transformer (Orient dans le menu d'Align)
         [DESSIN_TT_join, DESSIN_TT_explode, DESSIN_TT_trim, DESSIN_TT_cut, DESSIN_TT_divide, DESSIN_TT_overkill, DESSIN_TT_split_face, DESSIN_TT_fillet_c, DESSIN_TT_chamfer_c] + _between(DESSIN_TT_bool_union, DESSIN_TT_chamfer)
             + [DESSIN_TT_offset_surface, DESSIN_TT_offset, DESSIN_TT_block, DESSIN_TT_block_insert],  # modifier, blocs
         [DESSIN_TT_plan, DESSIN_TT_srf_corners, DESSIN_TT_planar_srf, DESSIN_TT_edge_srf, DESSIN_TT_network_srf, DESSIN_TT_patch, DESSIN_TT_extrude_crv, DESSIN_TT_extrude_srf, DESSIN_TT_extrude_path, DESSIN_TT_revolve,
@@ -1166,11 +1220,14 @@ def register():
          DESSIN_TT_camera, DESSIN_TT_camera_target],                                                # lumières / caméras
         [DESSIN_TT_cotation, DESSIN_TT_cotation_chain, DESSIN_TT_cotation_ordinate, DESSIN_TT_cotation_arc, DESSIN_TT_cotation_rayon, DESSIN_TT_cotation_angle, DESSIN_TT_annotation, DESSIN_TT_text, DESSIN_TT_center_mark, DESSIN_TT_cotation_edit, DESSIN_TT_hatch, DESSIN_TT_hatch_region, DESSIN_TT_mesure_aire, DESSIN_TT_dist, DESSIN_TT_id_point, DESSIN_TT_make2d, DESSIN_TT_clip_plane],    # annotation
     ]
-    for _gi, _fk in ((0, "curves"), (1, "transform"), (2, "modify"), (4, "srf_edit"), (5, "solids")):
+    for _gi, _fk in ((0, "curves"), (2, "modify"), (4, "srf_edit"), (5, "solids")):
         _groups[_gi] = list(_groups[_gi]) + RHINO_TOOLS[_fk]
-    _groups[-1] = list(_groups[-1]) + LAYOUT_TOOLS          # Layout, Detail : à la fin des annotations
+    _groups[-1] = list(_groups[-1]) + RHINO_TOOLS.get("annotation", []) + LAYOUT_TOOLS     # Boundary... puis Layout, Detail
+    # ordre dans la barre d'outils : les outils de déplacement (Move, Copy, Rotate, Scale, Mirror...) tout en haut,
+    # juste sous les outils de sélection, puis les courbes, la modification, les surfaces...
+    _order = [1, 0] + list(range(2, len(_groups)))
     obj_chain = []
-    for g in _groups:
+    for g in (_groups[i] for i in _order):
         for i, c in enumerate(g):
             obj_chain.append((c, i == 0))
     _edit_of = dict(zip(_names, _EDIT_TOOLS[:-4]))
@@ -1189,9 +1246,12 @@ def register():
     edit_chain[_ke:_ke] = _sub_edit
     k_mir = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_miroir]) + 1
     edit_chain.insert(k_mir, (DESSIN_TT_extrude, False))            # Extrude : mode édition seulement
-    register_set('OBJECT', DESSIN_TT_selection_boite, DESSIN_TT_selection_lasso, obj_chain, extra=(DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle))
-    register_set('EDIT_MESH', _EDIT_TOOLS[-3], _EDIT_TOOLS[-4], edit_chain, extra=(_EDIT_TOOLS[-2], _EDIT_TOOLS[-1]))
+    _nav_edit = [_edit_variant(c) for c in RHINO_TOOLS["nav"]]           # Walk : aussi en mode édition
+    register_set('OBJECT', DESSIN_TT_selection_boite, DESSIN_TT_selection_lasso, obj_chain, extra=(DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle),
+                 nav=RHINO_TOOLS["nav"])
+    register_set('EDIT_MESH', _EDIT_TOOLS[-3], _EDIT_TOOLS[-4], edit_chain, extra=(_EDIT_TOOLS[-2], _EDIT_TOOLS[-1]), nav=_nav_edit)
     _EDIT_TOOLS.append(DESSIN_TT_extrude)
+    _EDIT_TOOLS.extend(_nav_edit)
     _EDIT_TOOLS.extend(_edit_extra)
     _EDIT_TOOLS.extend(c for c, _s in _sub_edit)
     # mode édition d'une courbe : outils de courbe, de transformation, de modification et de surfaces (ils quittent l'édition puis se lancent)
@@ -1211,7 +1271,7 @@ def register():
                     {"bl_context_mode": 'EDIT_CURVE', "bl_keymap": _crv_select_keymap("view3d.select_circle")})
     _EDIT_TOOLS.extend([lasso_crv, sel_crv, circ_crv])
     crv_chain = []
-    for g in _groups[:4] + _groups[-1:]:
+    for g in [_groups[i] for i in (1, 0, 2, 3)] + _groups[-1:]:
         for i, c in enumerate(g):
             crv = _edit_variant(c, 'EDIT_CURVE')
             _EDIT_TOOLS.append(crv)
@@ -1229,8 +1289,12 @@ def register():
     apply_nav_inputs()
     nav_inputs_sync_soon()          # les cases de navigation reprennent les réglages de Blender, sans les changer
     register_view_keymap()
+    register_quad_keymap()
     register_cmd_keymap()
     register_mouse_track()
+    register_rot_indicator()
+    register_group_edit()
+    register_clip_draw()
     aliases_restore_soon()          # alias de l'utilisateur gardés d'une installation précédente
     register_sel_filter_keys()
     register_osnap_hold_keys()
@@ -1264,8 +1328,12 @@ def unregister():
     unregister_shortcuts()
     unregister_grs_keymap()
     unregister_view_keymap()
+    unregister_quad_keymap()
     unregister_cmd_keymap()
     unregister_mouse_track()
+    unregister_rot_indicator()
+    unregister_group_edit()
+    unregister_clip_draw()
     unregister_sel_filter_keys()
     unregister_osnap_hold_keys()
     oneshot_reset()
@@ -1348,6 +1416,9 @@ def unregister():
         bpy.app.handlers.depsgraph_update_post.remove(_on_depsgraph_update)
     if _on_load_post in bpy.app.handlers.load_post:
         bpy.app.handlers.load_post.remove(_on_load_post)
+    if _hatch_patterns_load in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_hatch_patterns_load)
+    unregister_previews()
     for hl in (bpy.app.handlers.undo_post, bpy.app.handlers.redo_post):
         if _on_undo_redo in hl:
             hl.remove(_on_undo_redo)

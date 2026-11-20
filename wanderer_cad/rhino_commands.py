@@ -1717,20 +1717,34 @@ class DESSIN_OT_orient3pt(DessinTransform):
     bl_idname = "dessin.orient3pt"
     bl_label = "Orient 3 Points"
     bl_description = ("Like Orient3Pt: moves and rotates the selected objects from one plane to another. Three reference points "
-                      "(origin, X direction, side of the plane), then three target points. The size does not change. C: copy")
+                      "(origin, X direction, side of the plane), then three target points. D: also scale, uniformly, so that "
+                      "the distance between the first two points matches the target. C: copy")
 
     TITLE = "Orient 3 Points"
     NEEDED = 6
     NUMFIELDS = 0
     PLANAR = False
     HAS_CENTER = True
+    HAS_MODE = True
+    MODES = ("keep the size", "scale to the target length")
     NO_SELECTION = "Select the objects to orient first"
+
+    def invoke(self, context, event):
+        self.mode = 0
+        return super().invoke(context, event)
     STEPS = ("reference point 1 (origin)", "reference point 2 (X direction)", "reference point 3 (side of the plane)",
              "target point 1 (origin)", "target point 2 (X direction)", "target point 3 (side of the plane)")
 
     def prompt(self):
-        opt = f"   [C: copy = {'yes' if self.center else 'no'}]"
+        opt = f"   [C: copy = {'yes' if self.center else 'no'}, D: {self.MODES[self.mode]}]"
         return self.STEPS[min(len(self.points), 5)] + opt
+
+    def scale_k(self, P, t2):
+        """Échelle uniforme (option D) : longueur cible 1 → 2 sur longueur de référence 1 → 2."""
+        if self.mode != 1:
+            return 1.0
+        a, b = (P[1] - P[0]).length, (t2 - P[3]).length
+        return b / a if a > 1e-9 and b > 1e-9 else 1.0
 
     def lock_allowed(self):
         # X / Y / Z verrouille la direction X de chaque trio (point 2 depuis le point 1) et le côté du plan (point 3)
@@ -1767,14 +1781,18 @@ class DESSIN_OT_orient3pt(DessinTransform):
             if a.length < 1e-9 or b.length < 1e-9:
                 return [], ref, "", ("xform", Matrix.Translation(P[3] - P[0]))
             rot = a.normalized().rotation_difference(b.normalized()).to_matrix().to_4x4()
-            M = Matrix.Translation(P[3]) @ rot @ Matrix.Translation(-P[0])
-            return [], ref + [[P[3], self.cur]], f"Angle {math.degrees(a.angle(b)):.2f}°", ("xform", M)
+            k = self.scale_k(P, self.cur)
+            M = Matrix.Translation(P[3]) @ rot @ Matrix.Diagonal((k, k, k, 1.0)) @ Matrix.Translation(-P[0])
+            info = f"Angle {math.degrees(a.angle(b)):.2f}°" + (f"   Scale ×{k:.4f}" if self.mode == 1 else "")
+            return [], ref + [[P[3], self.cur]], info, ("xform", M)
         Ft = _frame3(P[3], P[4], self.cur)               # cible 3 : le plan complet
         if Ft is None:
             return [], ref + [[P[3], P[4]]], "", None
-        M = Ft @ Fr.inverted()
+        k = self.scale_k(P, P[4])
+        M = Ft @ Matrix.Diagonal((k, k, k, 1.0)) @ Fr.inverted()
         tilt = math.degrees(Fr.col[2].xyz.angle(Ft.col[2].xyz))
-        return [], ref + [[P[3], P[4]], [P[3], self.cur]], f"Plane tilt {tilt:.2f}°", ("xform", M)
+        info = f"Plane tilt {tilt:.2f}°" + (f"   Scale ×{k:.4f}" if self.mode == 1 else "")
+        return [], ref + [[P[3], P[4]], [P[3], self.cur]], info, ("xform", M)
 
 def _late_imports():
     pass

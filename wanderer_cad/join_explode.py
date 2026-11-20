@@ -17,8 +17,8 @@ from .base import DessinBase
 from .selection import _project_region, draw_box_cb, draw_fence_cb, objects_screen_bounds
 from .offset_extrude import back_to_idle
 from .trim import (
-    circle_hints, is_xline, surface_trim, trim_mesh_cut_fn, trim_mesh_cutters, trim_wire, wire_graph, wire_paths,
-    write_wire,
+    circle_hints, is_xline, surface_trim, trim_mesh_cut_fn, trim_mesh_cutters, trim_projection, trim_wire, wire_graph,
+    wire_paths, write_wire,
 )
 
 
@@ -197,8 +197,8 @@ class DESSIN_OT_trim(bpy.types.Operator):
     bl_idname = "dessin.trim"
     bl_label = "Trim"
     bl_description = ("Trims curves, outlines and surfaces like Trim: the selected objects are the cutters - curves, outlines or solid / surface meshes (nothing selected: all curves); "
-                      "click the part to remove: of a curve (between two intersections) or of a surface (the outline is projected along the view); "
-                      "drag a box to remove every part it touches")
+                      "click the part to remove: of a curve (between two intersections) or of a surface (the outline is projected along the view; in a perspective view, "
+                      "planar curves are projected square to their plane); drag a fence line or a box to remove every part of curve or of surface it touches")
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
@@ -309,9 +309,9 @@ class DESSIN_OT_trim(bpy.types.Operator):
         write_wire(target, res[0], res[1], hints=hints)
         return True
 
-    def multi_trim(self, context, hits_fn, what):
+    def multi_trim(self, context, hits_fn, what, samples=()):
         """Retire, une à une, toutes les portions de courbes désignées par hits_fn(ax, ay, bx, by) -> (vivants, paramètre milieu)
-        (les arêtes changent après chaque coupe)."""
+        (les arêtes changent après chaque coupe), puis les parties de surfaces touchées aux points `samples` (pixels région)."""
         region = self.region
         rv3d = region_rv3d(region, self.area)
         failed = set()
@@ -351,6 +351,7 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 failed.add(key)
             if not hit:
                 break
+        done += self.surface_samples(context, samples)
         if not done:
             self.report({'INFO'}, f"Nothing to trim {what} (the parts must cross a cutting curve)")
             return {'CANCELLED'}
@@ -378,7 +379,10 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 t1 = np.where(pos, np.minimum(t1, r), t1)
             alive &= t0 <= t1
             return alive, (t0 + t1) * 0.5
-        return self.multi_trim(context, hits, "in the box")
+        step = max(12.0 * px_scale(), (x1 - x0) / 6.0, (y1 - y0) / 6.0)
+        nx, ny = max(1, int((x1 - x0) / step)), max(1, int((y1 - y0) / step))
+        samples = [(x0 + (x1 - x0) * (i + 0.5) / nx, y0 + (y1 - y0) * (j + 0.5) / ny) for j in range(ny) for i in range(nx)]
+        return self.multi_trim(context, hits, "in the box", samples)
 
     def fence_trim(self, context, line):
         """Ligne de coupe (Fence) : toutes les portions de courbes que la ligne traverse sont retirées."""
@@ -394,7 +398,10 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 v = np.where(par, 0.0, ((fx0 - ax) * dy - (fy0 - ay) * dx) / np.where(par, 1.0, den))       # sur la ligne de coupe
             alive = ~par & (u >= 0.0) & (u <= 1.0) & (v >= 0.0) & (v <= 1.0)
             return alive, np.clip(u, 0.0, 1.0)
-        return self.multi_trim(context, hits, "along the fence")
+        length = math.hypot(fdx, fdy)
+        ns = max(2, min(48, int(length / (12.0 * px_scale())) + 1))
+        samples = [(fx0 + fdx * (i + 0.5) / ns, fy0 + fdy * (i + 0.5) / ns) for i in range(ns)]
+        return self.multi_trim(context, hits, "along the fence", samples)
 
     def click(self, context, event):
         region = find_window_region(context.area, event.mouse_x, event.mouse_y)
@@ -469,14 +476,14 @@ class DESSIN_OT_trim(bpy.types.Operator):
         m_ = 2.0
         fill((xmx >= xmn[i] - m_) & (xmn <= xmx[i] + m_) & (ymx >= ymn[i] - m_) & (ymn <= ymx[i] + m_))
 
-    def try_surface(self, context, event, region, rv3d, graphs, fallback_msg):
-        """Trim d'une surface (maillage à faces) : les courbes de coupe sont projetées le long de la vue."""
-        mx, my = event.mouse_x - region.x, event.mouse_y - region.y
+    def surface_at(self, context, region, rv3d, graphs, mx, my, skip=()):
+        """Trim de la surface (maillage à faces) sous le point écran (mx, my) : les courbes de coupe sont projetées dessus.
+        Retourne (True, objet) si une partie a été retirée, (message, objet) sinon ; (None, None) s'il n'y a pas de surface."""
         ro = region_2d_to_origin_3d(region, rv3d, Vector((mx, my)))
         rd = region_2d_to_vector_3d(region, rv3d, Vector((mx, my)))
         best = None
         for obj in context.visible_objects:
-            if obj.type != 'MESH' or not len(obj.data.polygons) or obj in graphs or obj.hide_select:
+            if obj.type != 'MESH' or not len(obj.data.polygons) or obj in graphs or obj.hide_select or obj in skip:
                 continue
             inv = obj.matrix_world.inverted()
             ok, loc, _nor, _idx = obj.ray_cast(inv @ ro, inv.to_3x3() @ rd)[:4]
@@ -485,8 +492,7 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 if best is None or dist < best[0]:
                     best = (dist, obj, loc)
         if best is None:
-            self.report({'INFO'}, fallback_msg)
-            return {'CANCELLED'}
+            return None, None
         _d, target, loc = best
         self.fill_overlapping(graphs, target)
         cutter_objs = [o for o in context.selected_objects if o in graphs] or list(graphs)
@@ -497,13 +503,40 @@ class DESSIN_OT_trim(bpy.types.Operator):
                 if len(path) >= 2:
                     paths.append(([verts[j] for j in path], closed))
         if not paths:
-            self.report({'INFO'}, "Select the curve(s) that cut the surface (or draw one in front of it)")
-            return {'CANCELLED'}
-        msg = surface_trim(target, paths, np.array(rv3d.perspective_matrix, dtype=np.float64), loc)
-        if msg:
-            self.report({'INFO'}, msg)
-            return {'CANCELLED'}
-        return {'FINISHED'}
+            return "Select the curve(s) that cut the surface (or draw one in front of it)", target
+        msg = surface_trim(target, paths, trim_projection(paths, rv3d), loc)
+        return (msg, target) if msg else (True, target)
+
+    def try_surface(self, context, event, region, rv3d, graphs, fallback_msg):
+        """Trim d'une surface (maillage à faces) au point cliqué."""
+        res, _target = self.surface_at(context, region, rv3d, graphs, event.mouse_x - region.x, event.mouse_y - region.y)
+        if res is True:
+            return {'FINISHED'}
+        self.report({'INFO'}, res or fallback_msg)
+        return {'CANCELLED'}
+
+    def surface_samples(self, context, samples):
+        """Fence / Crossing sur des surfaces : chaque point d'échantillon retire la partie de surface qu'il touche
+        (les courbes de coupe la délimitent). Retourne le nombre de parties retirées."""
+        region = self.region
+        rv3d = region_rv3d(region, self.area)
+        done = 0
+        dead = set()                 # surfaces que les courbes de coupe ne partagent pas : inutile d'y revenir
+        t_end = time.monotonic() + 8.0
+        for x, y in samples:
+            if time.monotonic() > t_end:
+                break
+            try:
+                _dg, graphs = self.graphs_now(context)
+                res, target = self.surface_at(context, region, rv3d, graphs, x, y, skip=dead)
+            except (RuntimeError, ReferenceError, ValueError):
+                continue
+            if res is True:
+                done += 1
+                context.view_layer.update()
+            elif target is not None:
+                dead.add(target)
+        return done
 
 
 class DESSIN_OT_trim_mode(bpy.types.Operator):
@@ -613,7 +646,7 @@ def _edit_variant(cls, mode='EDIT_MESH'):
 
 
 class DESSIN_OT_bar_click(bpy.types.Operator):
-    """Clic sur une puce de la barre du bas (Quick Type, OSnap, Gumball...) avec un outil de sélection natif de Blender."""
+    """Clic sur une puce de la barre du bas (Quick Type, OSnap, Gizmo...) avec un outil de sélection natif de Blender."""
     bl_idname = "dessin.bar_click"
     bl_label = "Command bar click"
     bl_options = {'INTERNAL'}

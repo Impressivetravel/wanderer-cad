@@ -10,9 +10,12 @@ from gpu_extras.batch import batch_for_shader
 from mathutils import Matrix, Vector, geometry
 
 from .core import (
-    AXES3, IDLE_TOOL, TAU, copy_held, copy_key_name, copy_mod_event, copy_shift, copy_update, lock_held, lock_key_name, pref,
+    has_lt, obj_visible,
+    AXES3, IDLE_TOOL, TAU, alt_left_navigates, copy_held, copy_key_name, copy_mod_event, copy_shift, copy_update, lock_held,
+    lock_key_name, pref,
 )
 from .snapping import _BBOX, _GEOM, _geom_ver, edit_selection
+from .linetypes import base_wire_world
 from .drawing import _HOVER, _same_region, find_window_region, get_shader, over_nav_gizmo, px_scale, region_rv3d
 from .base import DessinBase
 from .subd import drag_copy_commit, ghost_for_edit, ghost_for_objects, ghost_hide, ghost_show
@@ -156,6 +159,30 @@ def objects_near_rect(objs, persp, region, rect, margin=2.0):
     out = ok & ((sx.max(1) < xmin - margin) | (sx.min(1) > xmax + margin)
                 | (sy.max(1) < ymin - margin) | (sy.min(1) > ymax + margin))
     return [objs[i] for i in np.nonzero(~out)[0].tolist()]
+
+
+def objects_rect_classes(objs, persp, region, rect, margin=0.0):
+    """Pour chaque objet : -1 (boîte englobante entièrement hors du rectangle écran), 1 (entièrement dedans) ou 0 (on ne
+    peut pas conclure sans la géométrie). Calcul groupé sur la table des boîtes (une boîte de sélection dans une scène de
+    milliers d'objets ne relit plus les boîtes une par une)."""
+    objs = list(objs)
+    res = np.zeros(len(objs), dtype=np.int8)
+    if not objs:
+        return res
+    w, good = _world_bboxes(objs)
+    hom = np.concatenate((w, np.ones(w.shape[:2] + (1,))), axis=2) @ persp.T
+    ww = hom[..., 3]
+    ok = good & (ww > 1e-9).all(axis=1) & np.isfinite(hom).all(axis=(1, 2))
+    ws = np.where(ww > 1e-9, ww, 1.0)
+    sx = (hom[..., 0] / ws * 0.5 + 0.5) * region.width
+    sy = (hom[..., 1] / ws * 0.5 + 0.5) * region.height
+    xmin, ymin, xmax, ymax = rect
+    out = ok & ((sx.max(1) < xmin - margin) | (sx.min(1) > xmax + margin)
+                | (sy.max(1) < ymin - margin) | (sy.min(1) > ymax + margin))
+    inn = ok & (sx.min(1) >= xmin) & (sx.max(1) <= xmax) & (sy.min(1) >= ymin) & (sy.max(1) <= ymax)
+    res[out] = -1
+    res[inn & ~out] = 1
+    return res
 
 
 def objects_under_cursor(context, region, rv3d, mx, my, radius, kinds=('MESH',), with_area=False):
@@ -330,11 +357,76 @@ def bbox_outside_rect(obj, persp, region, rect, margin=2.0):
             or sy.max() < ymin - margin or sy.min() > ymax + margin)
 
 
+_INST_GEOM = {"epoch": None, "defs": {}}
+
+
+def _definition_geom(obj, dg):
+    """Géométrie (points, arêtes, 8 coins de sa boîte) de la définition d'un bloc, dans le repère de l'instance : lue une
+    fois par définition, puis gardée tant qu'aucune forme ni position ne change dans la scène (une sélection ne compte
+    pas). Avant, chaque clic relisait les maillages de toutes les instances (palmiers, chaises...) : jusqu'à 0,5 s."""
+    coll = obj.instance_collection
+    ep = _GEOM["epoch"]
+    if _INST_GEOM["epoch"] != ep:
+        _INST_GEOM["epoch"], _INST_GEOM["defs"] = ep, {}
+    key = coll.as_pointer()
+    got = _INST_GEOM["defs"].get(key)
+    if got is not None:
+        return got
+    P, E, off = [], [], 0
+    for sub, W in instance_parts(obj, M=Matrix.Identity(4)):
+        if sub.type not in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META'}:
+            continue
+        try:
+            ev = sub.evaluated_get(dg)
+            me = ev.to_mesh()
+        except (RuntimeError, ReferenceError):
+            continue
+        try:
+            nv = len(me.vertices)
+            if nv:
+                Wn = np.array(W, dtype=np.float64)
+                co = np.empty(nv * 3, dtype=np.float32)
+                me.vertices.foreach_get('co', co)
+                P.append(co.reshape(-1, 3).astype(np.float64) @ Wn[:3, :3].T + Wn[:3, 3])
+                ne = len(me.edges)
+                if ne:
+                    e = np.empty(ne * 2, dtype=np.int32)
+                    me.edges.foreach_get('vertices', e)
+                    E.append(e.reshape(-1, 2) + off)
+                off += nv
+        finally:
+            ev.to_mesh_clear()
+    if P:
+        pts = np.vstack(P)
+        lo, hi = pts.min(axis=0), pts.max(axis=0)
+        corners = np.array([[x, y, z] for x in (lo[0], hi[0]) for y in (lo[1], hi[1]) for z in (lo[2], hi[2])])
+        got = (pts, np.vstack(E) if E else None, corners)
+    else:
+        got = (None, None, None)
+    _INST_GEOM["defs"][key] = got
+    return got
+
+
+def _is_instance(obj):
+    return (obj.type == 'EMPTY' and getattr(obj, "instance_type", None) == 'COLLECTION'
+            and obj.instance_collection is not None)
+
+
 def object_hit_box(obj, dg, persp, region, rect, crossing):
     """L'objet est-il entièrement dans la boîte (fenêtre) ou touché par elle (capture) ?"""
     if obj.type not in {'EMPTY', 'LIGHT', 'CAMERA', 'SPEAKER', 'LIGHT_PROBE'} and bbox_outside_rect(obj, persp, region, rect):
         return False
     xmin, ymin, xmax, ymax = rect
+    if _is_instance(obj):                  # bloc : sa boîte d'abord (les blocs loin du clic ne sont pas lus)
+        try:
+            _p, _e, corners = _definition_geom(obj, dg)
+            if corners is not None:
+                mw = np.array(obj.matrix_world, dtype=np.float64)
+                sx, sy, ok = _project_region(corners @ mw[:3, :3].T + mw[:3, 3], persp, region)
+                if ok.all() and (sx.max() < xmin - 2 or sx.min() > xmax + 2 or sy.max() < ymin - 2 or sy.min() > ymax + 2):
+                    return False
+        except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+            pass
     return object_hit_shape(obj, dg, persp, region,
                             lambda sx, sy: (sx >= xmin) & (sx <= xmax) & (sy >= ymin) & (sy <= ymax),
                             lambda ax, ay, bx, by: _segments_hit_rect(ax, ay, bx, by, xmin, ymin, xmax, ymax),
@@ -395,7 +487,17 @@ def object_hit_shape(obj, dg, persp, region, inside_fn, seg_fn, crossing):
     mw = np.array(obj.matrix_world, dtype=np.float64)
     edges = None
     pts = None
-    if obj.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META'}:
+    if _is_instance(obj):                  # bloc : la géométrie de sa définition (gardée en cache), placée par l'instance
+        try:
+            L, E0, _c = _definition_geom(obj, dg)
+        except (AttributeError, ReferenceError, RuntimeError, TypeError, ValueError):
+            L, E0 = None, None
+        if L is not None:
+            pts = L @ mw[:3, :3].T + mw[:3, 3]
+            edges = E0
+    elif obj.type in {'MESH', 'CURVE'} and has_lt(obj) and base_wire_world(obj) is not None:
+        pts, edges = base_wire_world(obj)          # trait à tirets : on le touche aussi entre deux tirets
+    elif obj.type in {'MESH', 'CURVE', 'SURFACE', 'FONT', 'META'}:
         try:
             ev = obj.evaluated_get(dg)
             me = ev.to_mesh()
@@ -523,7 +625,7 @@ def ray_cast_opaque(context, ro, rv, skip_locked=False):
         if not ok or obj is None:
             return res
         try:
-            skip = obj.display_type in {'WIRE', 'BOUNDS'} or not obj.visible_get() or (skip_locked and obj.hide_select)
+            skip = obj.display_type in {'WIRE', 'BOUNDS'} or not obj_visible(obj, getattr(context, "space_data", None)) or (skip_locked and obj.hide_select)
         except (RuntimeError, ReferenceError):
             skip = False
         if not skip:
@@ -546,25 +648,32 @@ def _wire_pick_before(context, area, region, rv3d, mx, my, ro, rdir, max_dist, s
     cands = [o for o in context.view_layer.objects if o is not skip and o.type in {'MESH', 'CURVE', 'FONT'}]
     for o in objects_near_rect(cands, persp, region, rect):
         try:
-            if o.hide_select or not o.visible_get() or not type_selectable(area.spaces.active, o) or o.get("cad_noGrab"):
+            if o.hide_select or not obj_visible(o, area.spaces.active) or not type_selectable(area.spaces.active, o) or o.get("cad_noGrab"):
                 continue
-            ev = o.evaluated_get(dg)
-            me = ev.to_mesh()
+            bw = base_wire_world(o) if has_lt(o) else None
         except (RuntimeError, ReferenceError):
             continue
-        try:
-            if me is None or len(me.polygons) or not len(me.edges):
+        if bw is not None:
+            pts, e = bw                 # trait à tirets : on le touche aussi entre deux tirets
+        else:
+            try:
+                ev = o.evaluated_get(dg)
+                me = ev.to_mesh()
+            except (RuntimeError, ReferenceError):
                 continue
-            nv = len(me.vertices)
-            co = np.empty(nv * 3, dtype=np.float32)
-            me.vertices.foreach_get('co', co)
-            e = np.empty(len(me.edges) * 2, dtype=np.int32)
-            me.edges.foreach_get('vertices', e)
-        finally:
-            ev.to_mesh_clear()
-        mw = np.array(o.matrix_world, dtype=np.float64)
-        pts = co.reshape(-1, 3).astype(np.float64) @ mw[:3, :3].T + mw[:3, 3]
-        e = e.reshape(-1, 2)
+            try:
+                if me is None or len(me.polygons) or not len(me.edges):
+                    continue
+                nv = len(me.vertices)
+                co = np.empty(nv * 3, dtype=np.float32)
+                me.vertices.foreach_get('co', co)
+                e = np.empty(len(me.edges) * 2, dtype=np.int32)
+                me.edges.foreach_get('vertices', e)
+            finally:
+                ev.to_mesh_clear()
+            mw = np.array(o.matrix_world, dtype=np.float64)
+            pts = co.reshape(-1, 3).astype(np.float64) @ mw[:3, :3].T + mw[:3, 3]
+            e = e.reshape(-1, 2)
         sx, sy, okp = _project_region(pts, persp, region)
         good = okp[e[:, 0]] & okp[e[:, 1]]
         if not good.any():
@@ -581,6 +690,52 @@ def _wire_pick_before(context, area, region, rv3d, mx, my, ro, rdir, max_dist, s
         if best is None or key < best[0]:
             best = (key, o)
     return best[1] if best else None
+
+
+def instance_parts(obj, depth=0, M=None):
+    """Objets dessinés par une instance de collection (bloc), avec leur matrice monde : [(objet, matrice 4x4)].
+    Les blocs imbriqués sont parcourus (4 niveaux au plus)."""
+    out = []
+    try:
+        coll = obj.instance_collection if obj.instance_type == 'COLLECTION' else None
+    except (AttributeError, ReferenceError):
+        coll = None
+    if coll is None or depth > 4:
+        return out
+    if M is None:
+        M = obj.matrix_world
+    base = M @ Matrix.Translation(-Vector(coll.instance_offset))
+    for o in coll.all_objects:
+        W = base @ o.matrix_world
+        out.append((o, W))
+        if o.instance_type == 'COLLECTION' and o.instance_collection is not None:
+            out.extend(instance_parts(o, depth + 1, W))
+    return out
+
+
+def instance_owner(context, hit_obj, hit_mat, tol=1e-4):
+    """Instance visible (bloc) qui dessine l'objet touché par un lancer de rayon (scene.ray_cast renvoie l'objet
+    d'origine, rangé dans la définition cachée du bloc, et la matrice de la copie)."""
+    try:
+        name = hit_obj.original.name if hasattr(hit_obj, "original") else hit_obj.name
+        H = np.array(hit_mat, dtype=np.float64)
+    except (AttributeError, ReferenceError, TypeError):
+        return None
+    for o in context.view_layer.objects:
+        try:
+            if o.type != 'EMPTY' or o.instance_type != 'COLLECTION' or o.instance_collection is None:
+                continue
+            if not obj_visible(o, getattr(context, "space_data", None)):
+                continue
+            if name not in o.instance_collection.all_objects:
+                if not any(c.instance_type == 'COLLECTION' for c in o.instance_collection.all_objects):
+                    continue
+            for sub, W in instance_parts(o):
+                if sub.name == name and np.abs(np.array(W, dtype=np.float64) - H).max() <= tol * max(1.0, float(np.abs(H).max())):
+                    return o
+        except (AttributeError, ReferenceError, RuntimeError):
+            continue
+    return None
 
 
 def pick_object_at(context, area, region, mx, my):
@@ -606,7 +761,14 @@ def pick_object_at(context, area, region, mx, my):
             if not ok or obj is None:
                 break
             try:
-                skip = (obj.hide_select or not obj.visible_get() or not type_selectable(area.spaces.active, obj)
+                if not obj_visible(obj, area.spaces.active):          # objet d'un bloc : c'est l'instance (la copie visible) qui est touchée
+                    owner = instance_owner(context, obj, _mat)
+                    if owner is not None:
+                        obj = owner
+            except (RuntimeError, ReferenceError, AttributeError):
+                pass
+            try:
+                skip = (obj.hide_select or not obj_visible(obj, area.spaces.active) or not type_selectable(area.spaces.active, obj)
                         or obj.display_type in {'WIRE', 'BOUNDS'})
             except (RuntimeError, ReferenceError):
                 skip = True
@@ -618,7 +780,7 @@ def pick_object_at(context, area, region, mx, my):
         ok, obj = False, None
     if ok and obj is not None:
         try:
-            if not obj.hide_select and obj.visible_get() and type_selectable(area.spaces.active, obj):
+            if not obj.hide_select and obj_visible(obj, area.spaces.active) and type_selectable(area.spaces.active, obj):
                 try:   # une courbe (sans faces) devant la surface touchée reste prioritaire : le rayon la traverse
                     w = _wire_pick_before(context, area, region, rv3d, mx, my, ro, rv.normalized(), float((loc - ro).dot(rv.normalized())), obj)
                 except (RuntimeError, ValueError, AttributeError, TypeError, ReferenceError):
@@ -635,7 +797,8 @@ def pick_object_at(context, area, region, mx, my):
         rect = (mx - r, my - r, mx + r, my + r)
         for o in objects_near_rect(context.view_layer.objects, persp, region, rect):
             try:
-                if o.hide_select or not o.visible_get() or o.type == 'EMPTY' or not type_selectable(area.spaces.active, o):
+                if (o.hide_select or not obj_visible(o, area.spaces.active) or not type_selectable(area.spaces.active, o)
+                        or (o.type == 'EMPTY' and not (o.instance_type == 'COLLECTION' and o.instance_collection))):
                     continue
             except RuntimeError:
                 continue
@@ -990,7 +1153,7 @@ class DESSIN_OT_select_loop(bpy.types.Operator):
 
     def invoke(self, context, event):
         region = find_window_region(context.area, event.mouse_x, event.mouse_y)
-        if region is None or event.oskey or (event.alt and pref("view_button") == 'ALT_LEFT'):
+        if region is None or event.oskey or (event.alt and alt_left_navigates()):
             return {'CANCELLED', 'PASS_THROUGH'}
         for r in context.area.regions:
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
@@ -1144,7 +1307,7 @@ def subobject_box(context, area, region, inside_fn):
     bvhs = []
     for obj in context.view_layer.objects:
         try:
-            if obj.type not in {'MESH', 'CURVE'} or obj.hide_select or not obj.visible_get() or not type_selectable(space, obj):
+            if obj.type not in {'MESH', 'CURVE'} or obj.hide_select or not obj_visible(obj, space) or not type_selectable(space, obj):
                 continue
         except RuntimeError:
             continue
@@ -1539,13 +1702,28 @@ def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, eve
     dg = bpy.context.evaluated_depsgraph_get()
     hit = []
     space = area.spaces.active
+    cands = []
     for obj in context.view_layer.objects:
         try:
-            if obj.hide_select or not obj.visible_get() or not type_selectable(space, obj):
+            if obj.hide_select or not obj_visible(obj, space) or not type_selectable(space, obj):
                 continue
         except RuntimeError:
             continue
-        if rect is not None:     # boîte : test rapide sur la boîte englobante avant la géométrie
+        cands.append(obj)
+    cls = None
+    if rect is not None:         # boîte : test rapide groupé sur les boîtes englobantes avant la géométrie
+        try:
+            cls = objects_rect_classes(cands, persp, region, rect, 0.0)
+        except (ValueError, TypeError, RuntimeError, ReferenceError, AttributeError):
+            cls = None
+    for i, obj in enumerate(cands):
+        if cls is not None:
+            if cls[i] < 0:
+                continue
+            if cls[i] > 0:
+                hit.append(obj)
+                continue
+        elif rect is not None:
             q = bbox_vs_rect(obj, persp, region, rect, 0.0)
             if q == 'out':
                 continue
@@ -1555,11 +1733,12 @@ def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, eve
         if object_hit_shape(obj, dg, persp, region, inside_fn, seg_fn, crossing):
             hit.append(obj)
     if not (event.shift or event.ctrl):
-        for obj in context.view_layer.objects:
+        keep = {o.as_pointer() for o in hit}
+        for obj in context.selected_objects:        # (seuls les objets sélectionnés sont à relâcher)
             try:
-                if obj.select_get() and obj not in hit:
+                if obj.as_pointer() not in keep:
                     obj.select_set(False)
-            except RuntimeError:
+            except (RuntimeError, ReferenceError):
                 pass
     for obj in hit:
         try:
@@ -1599,14 +1778,14 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
                 return {'CANCELLED', 'PASS_THROUGH'}
         if over_nav_gizmo(self.area, event.mouse_x, event.mouse_y):
             return {'CANCELLED', 'PASS_THROUGH'}
-        if event.oskey or (event.alt and pref("view_button") == 'ALT_LEFT'):
+        if event.oskey or (event.alt and alt_left_navigates()):
             return {'CANCELLED', 'PASS_THROUGH'}
         self.start = (event.mouse_x - self.region.x, event.mouse_y - self.region.y)
         self.start_abs = (event.mouse_x, event.mouse_y)
         self.sub = bool(event.ctrl and event.shift and not event.alt)      # Ctrl+Maj + zone : sommets (Rhino)
         shift_copy = copy_shift()
         if copy_held(event) and not (event.ctrl or (event.shift if not shift_copy else event.alt)):
-            # Alt (ou Maj, selon les préférences) + poignée du Gumball : on lance nous-mêmes la transformation (avec copie)
+            # Alt (ou Maj, selon les préférences) + poignée du Gizmo : on lance nous-mêmes la transformation (avec copie)
             try:
                 with context.temp_override(area=self.area, region=self.region):
                     handle = gumball_handle_at(context, self.start[0], self.start[1], self.region,
@@ -1694,7 +1873,7 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
             return False
         self.p0 = p0
         self.moving = True
-        gumball_freeze(context, pivot, "DESSIN_OT_selection")      # repère de départ ; le Gumball suit ensuite l'objet (Rhino)
+        gumball_freeze(context, pivot, "DESSIN_OT_selection")      # repère de départ ; le Gizmo suit ensuite l'objet (Rhino)
         return True
 
     def begin_move_edit(self, context):
@@ -1755,7 +1934,7 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
         if shift:                       # Maj : on garde l'axe dominant
             a = max(range(3), key=lambda i: abs(d[i]))
             d = AXES3[a] * d[a]
-        gumball_drag_xform(Matrix.Translation(d))      # le Gumball suit l'objet glissé (comme Rhino)
+        gumball_drag_xform(Matrix.Translation(d))      # le Gizmo suit l'objet glissé (comme Rhino)
         if self.edit_mode:
             self.edit_translate(d)
             self.move_delta = d

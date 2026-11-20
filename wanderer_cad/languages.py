@@ -176,6 +176,7 @@ Unroll Surface|Fläche abwickeln|Desarrollar superficie|Sviluppa superficie|Plan
 Rebuild Surface|Fläche neu aufbauen|Reconstruir superficie|Ricostruisci superficie|Reconstruir superfície|Перестроить поверхность|Yüzeyi yeniden oluştur|重建曲面|サーフェスをリビルド|곡면 재생성
 Orient|Orientieren|Orientar|Orienta|Orientar|Ориентировать|Yönlendir|定位|配置（2点）|방향 맞추기
 Orient 3 Points|Orientieren 3 Punkte|Orientar 3 puntos|Orienta 3 punti|Orientar 3 pontos|Ориентировать по 3 точкам|3 noktayla yönlendir|三点定位|配置（3点）|3점 방향 맞추기
+Slice|Schneiden|Rebanar|Affetta|Fatiar|Разрезать|Dilimle|切片|スライス|슬라이스
 Extend Curve|Kurve verlängern|Alargar curva|Estendi curva|Estender curva|Удлинить кривую|Eğriyi uzat|延伸曲线|曲線を延長|곡선 연장
 Layout|Layout|Presentación|Layout|Layout|Лист|Pafta|布局|レイアウト|배치
 Viewport|Ansichtsfenster|Ventana gráfica|Finestra|Viewport|Видовой экран|Görünüm penceresi|视口|ビューポート|뷰포트

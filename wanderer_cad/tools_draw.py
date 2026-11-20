@@ -8,7 +8,7 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from mathutils import Vector, geometry
 
 from .core import (
-    AXES3, SNAP_RADIUS, TAU, _link_object, arc_samples, build_plane, build_polyline, build_shape_mesh,
+    oneshot_keys, AXES3, SNAP_RADIUS, TAU, _link_object, arc_samples, build_plane, build_polyline, build_shape_mesh,
     circle_through_origin, drawing_axis, edit_add_geometry, idle_tool, plane_axes, plane_origin,
 )
 from .drawing import _TAN, find_window_region, project_px, px_scale, region_rv3d
@@ -148,7 +148,13 @@ class PolylineBase(DessinBase):
         rv3d = region_rv3d(region, self.area)
         m = Vector((event.mouse_x - region.x, event.mouse_y - region.y))
         best, best_d = None, SNAP_RADIUS * px_scale()
+        try:                 # OSnap coupé (F3) : seul le premier point attire encore le curseur, pour fermer la forme
+            first_only = bool(context.scene.dessin.osnap_disable) and not oneshot_keys()
+        except (AttributeError, ReferenceError):
+            first_only = False
         for i, q in enumerate(self.points):
+            if first_only and (i or len(self.points) < 3):
+                continue
             sp = project_px(rv3d, region, q)
             if sp is None:
                 continue

@@ -46,131 +46,123 @@ from .lights import (
 )
 
 
+# Menu Wanderer (Add > Wanderer) rangé en sous-menus : une seule longue liste dépassait la hauteur de l'écran et
+# Blender la faisait défiler. (titre, icône, [opérateur ou "dessin.xxx", icône] ; None = séparateur)
+_S = None
+WANDERER_SUBMENUS = (
+    ("Curves", 'CURVE_DATA', [
+        (DESSIN_OT_polyligne, 'CURVE_PATH'), (DESSIN_OT_xline, 'CURVE_PATH'), (DESSIN_OT_curve_cp, 'CURVE_NCURVE'),
+        (DESSIN_OT_curve_interp, 'CURVE_NCURVE'), (DESSIN_OT_pen, 'CURVE_BEZCURVE'), (DESSIN_OT_sketch, 'GREASEPENCIL'),
+        (DESSIN_OT_point, 'DOT'), _S,
+        (DESSIN_OT_rectangle, 'MESH_PLANE'), (DESSIN_OT_cercle, 'MESH_CIRCLE'), (DESSIN_OT_cercle_diametre, 'MESH_CIRCLE'),
+        (DESSIN_OT_arc_cse, 'SPHERECURVE'), (DESSIN_OT_arc_3pts, 'SPHERECURVE'), _S,
+        (DESSIN_OT_ellipse_centre, 'MESH_CIRCLE'), (DESSIN_OT_ellipse_diametre, 'MESH_CIRCLE'),
+        (DESSIN_OT_ellipse_foyers, 'MESH_CIRCLE'), (DESSIN_OT_ellipse_coin, 'MESH_CIRCLE'), _S,
+        (DESSIN_OT_poly_center, 'MESH_CIRCLE'), (DESSIN_OT_poly_circ, 'MESH_CIRCLE'), (DESSIN_OT_poly_area, 'MESH_CIRCLE'),
+        (DESSIN_OT_poly_edge, 'MESH_CIRCLE'), (DESSIN_OT_poly_star, 'MESH_CIRCLE'),
+    ]),
+    ("Curve Tools", 'MOD_CURVE', [
+        (DESSIN_OT_trim, 'AREA_JOIN'), (DESSIN_OT_join, 'AUTOMERGE_ON'), (DESSIN_OT_explode, 'MOD_EXPLODE'),
+        (DESSIN_OT_fillet_curve, 'MOD_BEVEL'), (DESSIN_OT_chamfer_curve, 'MOD_BEVEL'), ("dessin.extend_crv", 'FULLSCREEN_ENTER'),
+        (DESSIN_OT_stretch, 'FULLSCREEN_ENTER'), (DESSIN_OT_divide, 'SNAP_MIDPOINT'), (DESSIN_OT_overkill, 'BRUSH_DATA'), ("dessin.break_crv", 'MOD_DECIM'), ("dessin.match_props", 'BRUSH_DATA'), _S,
+        (DESSIN_OT_project_curve, 'MOD_SHRINKWRAP'), ("dessin.intersect", 'SELECT_INTERSECT'), ("dessin.section", 'MOD_BOOLEAN'),
+        ("dessin.contour", 'ALIGN_JUSTIFY'), (DESSIN_OT_make2d, 'MESH_PLANE'), _S,
+        ("dessin.dup_border", 'MOD_OUTLINE'), ("dessin.dup_face_border", 'FACESEL'), ("dessin.dup_edge", 'EDGESEL'),
+    ]),
+    ("Surfaces", 'SURFACE_DATA', [
+        (DESSIN_OT_plan, 'MESH_PLANE'), (DESSIN_OT_srf_corners, 'MESH_PLANE'), (DESSIN_OT_planar_srf, 'MESH_PLANE'),
+        (DESSIN_OT_edge_srf, 'MESH_GRID'), (DESSIN_OT_patch, 'MESH_GRID'), _S,
+        (DESSIN_OT_revolve, 'MOD_SCREW'), (DESSIN_OT_rail_revolve, 'MOD_SCREW'), (DESSIN_OT_loft, 'MOD_MULTIRES'),
+        (DESSIN_OT_sweep1, 'CURVE_PATH'), (DESSIN_OT_sweep2, 'CURVE_PATH'), _S,
+        (DESSIN_OT_blend_srf, 'MOD_SMOOTH'), (DESSIN_OT_match_srf, 'SNAP_EDGE'), ("dessin.rebuild_srf", 'MESH_GRID'),
+        ("dessin.extract_srf", 'FACESEL'), (DESSIN_OT_split_face, 'MOD_EDGESPLIT'), ("dessin.merge_faces", 'MOD_DECIM'),
+        ("dessin.unroll", 'UV'), (DESSIN_OT_offset_surface, 'MOD_OFFSET'),
+    ]),
+    ("Solids", 'MESH_CUBE', [
+        (DESSIN_OT_boite, 'MESH_CUBE'), (DESSIN_OT_cylindre, 'MESH_CYLINDER'), (DESSIN_OT_tube, 'MESH_CYLINDER'),
+        (DESSIN_OT_cone, 'MESH_CONE'), (DESSIN_OT_cone_tronque, 'MESH_CONE'), (DESSIN_OT_pyramide, 'MESH_CONE'),
+        (DESSIN_OT_pyramide_tronquee, 'MESH_CONE'), (DESSIN_OT_sphere, 'MESH_UVSPHERE'), (DESSIN_OT_ellipsoide, 'MESH_UVSPHERE'),
+        (DESSIN_OT_sphere_tronquee, 'MESH_UVSPHERE'), (DESSIN_OT_tore, 'MESH_TORUS'), ("dessin.pipe", 'MESH_CYLINDER'), _S,
+        (DESSIN_OT_thicken, 'MOD_SOLIDIFY'), (DESSIN_OT_shell, 'MOD_SOLIDIFY'), (DESSIN_OT_cap, 'MESH_CIRCLE'),
+        ("dessin.pushpull", 'FULLSCREEN_ENTER'), _S,
+        (DESSIN_OT_bool_union, 'SELECT_EXTEND'), (DESSIN_OT_bool_difference, 'SELECT_SUBTRACT'),
+        (DESSIN_OT_bool_intersection, 'SELECT_INTERSECT'), (DESSIN_OT_bool_split, 'SELECT_DIFFERENCE'), _S,
+        (DESSIN_OT_fillet_edge, 'MOD_BEVEL'), (DESSIN_OT_chamfer_edge, 'MOD_BEVEL'), (DESSIN_OT_offset_edge, 'MOD_OFFSET'),
+    ]),
+    ("Transform", 'ORIENTATION_GLOBAL', [
+        (DESSIN_OT_deplacer, 'ARROW_LEFTRIGHT'), (DESSIN_OT_copier, 'DUPLICATE'), (DESSIN_OT_rotation, 'FILE_REFRESH'),
+        (DESSIN_OT_miroir, 'MOD_MIRROR'), _S,
+        (DESSIN_OT_echelle, 'FULLSCREEN_ENTER'), (DESSIN_OT_echelle_2d, 'FULLSCREEN_ENTER'),
+        (DESSIN_OT_echelle_1d, 'FULLSCREEN_ENTER'), (DESSIN_OT_echelle_taille, 'FULLSCREEN_ENTER'), _S,
+        (DESSIN_OT_array_linear, 'MOD_ARRAY'), (DESSIN_OT_array_rect, 'MOD_ARRAY'), (DESSIN_OT_array_polar, 'MOD_ARRAY'), _S,
+        (DESSIN_OT_align, 'ALIGN_CENTER'), ("dessin.orient", 'ORIENTATION_GIMBAL'), ("dessin.orient3pt", 'ORIENTATION_GIMBAL'),
+        (DESSIN_OT_cut, 'MOD_BOOLEAN'), ("dessin.slice", 'MOD_EDGESPLIT'),
+    ]),
+    ("Dimensions and Hatches", 'DRIVER_DISTANCE', [
+        (DESSIN_OT_cotation, 'DRIVER_DISTANCE'), (DESSIN_OT_cotation_rayon, 'MESH_CIRCLE'),
+        (DESSIN_OT_cotation_angle, 'DRIVER_ROTATIONAL_DIFFERENCE'), (DESSIN_OT_annotation, 'FONT_DATA'),
+        (DESSIN_OT_mesure_aire, 'SNAP_FACE'), _S,
+        ("dessin.hatch", 'MOD_LATTICE'), ("dessin.hatch_region", 'MOD_LATTICE'), ("dessin.boundary", 'MESH_PLANE'), _S,
+        ("dessin.block", 'OUTLINER_COLLECTION'), ("dessin.block_insert", 'OUTLINER_OB_GROUP_INSTANCE'),
+    ]),
+    ("Lights and Cameras", 'LIGHT', [
+        (DESSIN_OT_light_point, 'LIGHT_POINT'), (DESSIN_OT_light_spot, 'LIGHT_SPOT'), (DESSIN_OT_light_sun, 'LIGHT_SUN'),
+        (DESSIN_OT_light_area, 'LIGHT_AREA'), _S, (DESSIN_OT_camera, 'CAMERA_DATA'),
+        (DESSIN_OT_camera_target, 'OUTLINER_OB_EMPTY'),
+    ]),
+    ("Layout", 'FILE', [
+        ("dessin.layout_new", 'FILE'), ("dessin.layout_detail", 'SELECT_SET'), ("dessin.detail_callout", 'ZOOM_SELECTED'),
+        ("dessin.layout_export_pdf", 'FILE'), _S, (DESSIN_OT_clip_plane, 'MOD_BOOLEAN'),
+    ]),
+)
+
+
+def _op_id(it):
+    return it if isinstance(it, str) else it.bl_idname
+
+
+def _draw_items(layout, items):
+    for it in items:
+        if it is None:
+            layout.separator()
+            continue
+        op, icon = it
+        idn = _op_id(op)
+        try:
+            layout.operator(idn, icon=icon)
+        except (RuntimeError, TypeError):          # opérateur absent (version de Blender) : ligne sautée
+            pass
+
+
+def _make_submenu(i, title, items):
+    def draw(self, context):
+        _draw_items(self.layout, items)
+    return type(f"DESSIN_MT_menu_{i}", (bpy.types.Menu,),
+                {"bl_idname": f"DESSIN_MT_menu_{i}", "bl_label": title, "draw": draw})
+
+
+SUBMENU_CLASSES = tuple(_make_submenu(i, t, items) for i, (t, _ic, items) in enumerate(WANDERER_SUBMENUS))
+
+
 class DESSIN_MT_menu(bpy.types.Menu):
     bl_idname = "DESSIN_MT_menu"
     bl_label = "Wanderer"
 
     def draw(self, context):
         layout = self.layout
-        layout.operator(DESSIN_OT_rectangle.bl_idname, icon='MESH_PLANE')
-        layout.operator(DESSIN_OT_plan.bl_idname, icon='MESH_PLANE')
-        layout.operator(DESSIN_OT_srf_corners.bl_idname, icon='MESH_PLANE')
-        layout.operator(DESSIN_OT_polyligne.bl_idname, icon='CURVE_PATH')
-        layout.operator(DESSIN_OT_xline.bl_idname, icon='CURVE_PATH')
-        layout.operator(DESSIN_OT_curve_cp.bl_idname, icon='CURVE_NCURVE')
-        layout.operator(DESSIN_OT_curve_interp.bl_idname, icon='CURVE_NCURVE')
-        layout.operator(DESSIN_OT_pen.bl_idname, icon='CURVE_BEZCURVE')
-        layout.operator(DESSIN_OT_sketch.bl_idname, icon='GREASEPENCIL')
-        layout.operator(DESSIN_OT_point.bl_idname, icon='DOT')
-        layout.operator(DESSIN_OT_stretch.bl_idname, icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_divide.bl_idname, icon='SNAP_MIDPOINT')
-        layout.operator(DESSIN_OT_overkill.bl_idname, icon='BRUSH_DATA')
-        layout.operator(DESSIN_OT_fillet_curve.bl_idname, icon='MOD_BEVEL')
-        layout.operator(DESSIN_OT_chamfer_curve.bl_idname, icon='MOD_BEVEL')
-        layout.operator(DESSIN_OT_trim.bl_idname, icon='AREA_JOIN')
-        layout.operator(DESSIN_OT_join.bl_idname, icon='AUTOMERGE_ON')
-        layout.operator(DESSIN_OT_explode.bl_idname, icon='MOD_EXPLODE')
-        layout.operator(DESSIN_OT_make2d.bl_idname, icon='MESH_PLANE')
-        layout.operator("dessin.layout_new", icon='FILE')
-        layout.operator("dessin.layout_detail", icon='SELECT_SET')
-        layout.operator("dessin.detail_callout", icon='ZOOM_SELECTED')
-        layout.operator("dessin.layout_export_pdf", icon='FILE')
-        layout.operator(DESSIN_OT_clip_plane.bl_idname, icon='MOD_BOOLEAN')
-        layout.operator(DESSIN_OT_align.bl_idname, icon='ALIGN_CENTER')
-        layout.operator(DESSIN_OT_light_point.bl_idname, icon='LIGHT_POINT')
-        layout.operator(DESSIN_OT_light_spot.bl_idname, icon='LIGHT_SPOT')
-        layout.operator(DESSIN_OT_light_sun.bl_idname, icon='LIGHT_SUN')
-        layout.operator(DESSIN_OT_light_area.bl_idname, icon='LIGHT_AREA')
-        layout.operator(DESSIN_OT_camera.bl_idname, icon='CAMERA_DATA')
-        layout.operator(DESSIN_OT_camera_target.bl_idname, icon='OUTLINER_OB_EMPTY')
-        layout.operator(DESSIN_OT_revolve.bl_idname, icon='MOD_SCREW')
-        layout.operator(DESSIN_OT_loft.bl_idname, icon='MOD_MULTIRES')
-        layout.operator(DESSIN_OT_sweep1.bl_idname, icon='CURVE_PATH')
-        layout.operator(DESSIN_OT_sweep2.bl_idname, icon='CURVE_PATH')
-        layout.operator(DESSIN_OT_planar_srf.bl_idname, icon='MESH_PLANE')
-        layout.operator(DESSIN_OT_edge_srf.bl_idname, icon='MESH_GRID')
-        layout.operator(DESSIN_OT_thicken.bl_idname, icon='MOD_SOLIDIFY')
-        layout.operator(DESSIN_OT_cap.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_split_face.bl_idname, icon='MOD_EDGESPLIT')
-        layout.operator(DESSIN_OT_project_curve.bl_idname, icon='MOD_SHRINKWRAP')
-        layout.operator(DESSIN_OT_patch.bl_idname, icon='MESH_GRID')
-        layout.operator(DESSIN_OT_blend_srf.bl_idname, icon='MOD_SMOOTH')
-        layout.operator(DESSIN_OT_match_srf.bl_idname, icon='SNAP_EDGE')
-        layout.operator(DESSIN_OT_rail_revolve.bl_idname, icon='MOD_SCREW')
-        layout.operator(DESSIN_OT_shell.bl_idname, icon='MOD_SOLIDIFY')
-        layout.operator("dessin.pipe", icon='MESH_CYLINDER')
-        layout.operator("dessin.intersect", icon='SELECT_INTERSECT')
-        layout.operator("dessin.section", icon='MOD_BOOLEAN')
-        layout.operator("dessin.contour", icon='ALIGN_JUSTIFY')
-        layout.operator("dessin.extract_srf", icon='FACESEL')
-        layout.operator("dessin.extend_crv", icon='FULLSCREEN_ENTER')
-        layout.operator("dessin.dup_border", icon='MOD_OUTLINE')
-        layout.operator("dessin.dup_face_border", icon='FACESEL')
-        layout.operator("dessin.dup_edge", icon='EDGESEL')
-        layout.operator("dessin.merge_faces", icon='MOD_DECIM')
-        layout.operator("dessin.unroll", icon='UV')
-        layout.operator("dessin.rebuild_srf", icon='MESH_GRID')
-        layout.operator("dessin.orient", icon='ORIENTATION_GIMBAL')
-        layout.operator("dessin.orient3pt", icon='ORIENTATION_GIMBAL')
-        layout.operator("dessin.pushpull", icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_selection_boite.bl_idname, icon='RESTRICT_SELECT_OFF')
-        layout.operator(DESSIN_OT_poly_center.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_poly_circ.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_poly_area.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_poly_edge.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_poly_star.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_cercle.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_cercle_diametre.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_ellipse_centre.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_ellipse_diametre.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_ellipse_foyers.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_ellipse_coin.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_arc_cse.bl_idname, icon='SPHERECURVE')
-        layout.operator(DESSIN_OT_arc_3pts.bl_idname, icon='SPHERECURVE')
-        layout.separator()
-        layout.operator(DESSIN_OT_boite.bl_idname, icon='MESH_CUBE')
-        layout.operator(DESSIN_OT_cylindre.bl_idname, icon='MESH_CYLINDER')
-        layout.operator(DESSIN_OT_cone.bl_idname, icon='MESH_CONE')
-        layout.operator(DESSIN_OT_cone_tronque.bl_idname, icon='MESH_CONE')
-        layout.operator(DESSIN_OT_pyramide.bl_idname, icon='MESH_CONE')
-        layout.operator(DESSIN_OT_pyramide_tronquee.bl_idname, icon='MESH_CONE')
-        layout.operator(DESSIN_OT_tube.bl_idname, icon='MESH_CYLINDER')
-        layout.operator(DESSIN_OT_sphere.bl_idname, icon='MESH_UVSPHERE')
-        layout.operator(DESSIN_OT_ellipsoide.bl_idname, icon='MESH_UVSPHERE')
-        layout.operator(DESSIN_OT_sphere_tronquee.bl_idname, icon='MESH_UVSPHERE')
-        layout.operator(DESSIN_OT_tore.bl_idname, icon='MESH_TORUS')
-        layout.separator()
-        layout.operator(DESSIN_OT_cotation.bl_idname, icon='DRIVER_DISTANCE')
-        layout.operator(DESSIN_OT_cotation_rayon.bl_idname, icon='MESH_CIRCLE')
-        layout.operator(DESSIN_OT_cotation_angle.bl_idname, icon='DRIVER_ROTATIONAL_DIFFERENCE')
-        layout.operator(DESSIN_OT_annotation.bl_idname, icon='FONT_DATA')
-        layout.operator(DESSIN_OT_mesure_aire.bl_idname, icon='SNAP_FACE')
-        layout.separator()
-        layout.operator(DESSIN_OT_deplacer.bl_idname, icon='ARROW_LEFTRIGHT')
-        layout.operator(DESSIN_OT_copier.bl_idname, icon='DUPLICATE')
-        layout.operator(DESSIN_OT_rotation.bl_idname, icon='FILE_REFRESH')
-        layout.operator(DESSIN_OT_echelle.bl_idname, icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_echelle_2d.bl_idname, icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_echelle_1d.bl_idname, icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_echelle_taille.bl_idname, icon='FULLSCREEN_ENTER')
-        layout.operator(DESSIN_OT_miroir.bl_idname, icon='MOD_MIRROR')
-        layout.operator(DESSIN_OT_array_linear.bl_idname, icon='MOD_ARRAY')
-        layout.operator(DESSIN_OT_array_rect.bl_idname, icon='MOD_ARRAY')
-        layout.operator(DESSIN_OT_array_polar.bl_idname, icon='MOD_ARRAY')
-        layout.operator(DESSIN_OT_cut.bl_idname, icon='MOD_BOOLEAN')
-        layout.operator(DESSIN_OT_bool_union.bl_idname, icon='SELECT_EXTEND')
-        layout.operator(DESSIN_OT_bool_difference.bl_idname, icon='SELECT_SUBTRACT')
-        layout.operator(DESSIN_OT_bool_intersection.bl_idname, icon='SELECT_INTERSECT')
-        layout.operator(DESSIN_OT_bool_split.bl_idname, icon='SELECT_DIFFERENCE')
-        layout.operator(DESSIN_OT_fillet_edge.bl_idname, icon='MOD_BEVEL')
-        layout.operator(DESSIN_OT_chamfer_edge.bl_idname, icon='MOD_BEVEL')
-        layout.operator(DESSIN_OT_offset_edge.bl_idname, icon='MOD_OFFSET')
-        layout.operator(DESSIN_OT_offset_surface.bl_idname, icon='MOD_OFFSET')
+        for cls, (_t, icon, _items) in zip(SUBMENU_CLASSES, WANDERER_SUBMENUS):
+            layout.menu(cls.bl_idname, icon=icon)
 
 
 def menu_add(self, context):
+    """« Wanderer » tout en haut du menu Add, avec le W du logo."""
+    from .hatch_patterns import logo_icon
+    icon = logo_icon()
+    if icon:
+        self.layout.menu(DESSIN_MT_menu.bl_idname, icon_value=icon)
+    else:
+        self.layout.menu(DESSIN_MT_menu.bl_idname, icon='GREASEPENCIL')
     self.layout.separator()
-    self.layout.menu(DESSIN_MT_menu.bl_idname, icon='GREASEPENCIL')
 
 
 def _late_imports():

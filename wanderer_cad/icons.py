@@ -157,14 +157,15 @@ def _svg_arc(x1, y1, rx, ry, phi, fa, fs, x2, y2, n=18):
 
 
 def _svg_path(d):
-    """Chemin SVG (M L H V C A Z, absolus et relatifs) -> [(points, fermé)]."""
+    """Chemin SVG (M L H V C S Q T A Z, absolus et relatifs) -> [(points, fermé)]."""
     import re
-    toks = re.findall(r"([MmLlHhVvCcSsAaZz])|(-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?)", d)
+    toks = re.findall(r"([MmLlHhVvCcSsQqTtAaZz])|(-?(?:\d+\.?\d*|\.\d+)(?:e-?\d+)?)", d)
     items = [t[0] if t[0] else float(t[1]) for t in toks]
     subs, cur, i = [], [], 0
     x = y = sx = sy = 0.0
     cmd = None
     last_c = None
+    last_q = None
 
     def num(n):
         nonlocal i
@@ -176,6 +177,8 @@ def _svg_path(d):
             cmd = items[i]
             i += 1
             if cmd in "Zz":
+                if len(cur) > 1 and abs(cur[-1][0] - cur[0][0]) < 1e-9 and abs(cur[-1][1] - cur[0][1]) < 1e-9:
+                    cur = cur[:-1]               # point de fermeture répété : il fausse le découpage en triangles
                 if cur:
                     subs.append((cur, True))
                 cur, x, y = [], sx, sy
@@ -184,6 +187,8 @@ def _svg_path(d):
         c = cmd.upper()
         if c not in "CS":
             last_c = None
+        if c not in "QT":
+            last_q = None
         if c == "M":
             a, b = num(2)
             x, y = (x + a, y + b) if rel else (a, b)
@@ -221,6 +226,23 @@ def _svg_path(d):
                 cur.append((u ** 3 * p0[0] + 3 * u * u * t * v[0] + 3 * u * t * t * v[2] + t ** 3 * v[4],
                             u ** 3 * p0[1] + 3 * u * u * t * v[1] + 3 * u * t * t * v[3] + t ** 3 * v[5]))
             x, y = v[4], v[5]
+        elif c in "QT":
+            if c == "Q":
+                v = num(4)
+                if rel:
+                    v = [v[0] + x, v[1] + y, v[2] + x, v[3] + y]
+            else:
+                w = num(2)
+                if rel:
+                    w = [w[0] + x, w[1] + y]
+                v = ([2 * x - last_q[0], 2 * y - last_q[1]] if last_q else [x, y]) + list(w)
+            p0 = (x, y)
+            last_q = (v[0], v[1])
+            for k in range(1, 9):
+                t = k / 8.0
+                u = 1 - t
+                cur.append((u * u * p0[0] + 2 * u * t * v[0] + t * t * v[2], u * u * p0[1] + 2 * u * t * v[1] + t * t * v[3]))
+            x, y = v[2], v[3]
         elif c == "A":
             rx, ry, phi, fa, fs, a, b = num(7)
             ex, ey = (x + a, y + b) if rel else (a, b)
@@ -407,6 +429,14 @@ def _svg_to_pen(g, shapes):
             continue
         col = {"n": SVG_N, "a": SVG_A, "af": SVG_A, "g": SVG_G}.get(cls, SVG_N)
         col = mul(col, op)
+        if cls in ("nf", "pf"):
+            # aplat sans contour (pictogrammes) : nf = couleur du trait, pf = couleur de la famille
+            fill = mul(SVG_N if cls == "nf" else SVG_A, op)
+            for pts, closed in subs:
+                if len(pts) >= 3:
+                    for t in _svg_ear_clip(pts):
+                        g.tris.append((g._pt(P(t[0])), g._pt(P(t[1])), g._pt(P(t[2])), fill))
+            continue
         if cls == "g" and dash is None:
             dash = (2.0, 2.4)
         for pts, closed in subs:
@@ -526,6 +556,16 @@ ICON_SVG["poly_s"] = '<path class="n" d="%s"/><circle class="a" cx="12" cy="12.5
 ICON_SVG['dim_chain'] = '<path class="n" d="M3 7v12M11 7v12M21 7v12"/><path class="a" d="M3.60 10.00L10.40 10.00"/><path class="af" d="M3.60 10.00L5.80 9.08L5.80 10.92zM10.40 10.00L8.20 10.92L8.20 9.08z"/><path class="a" d="M11.60 10.00L20.40 10.00"/><path class="af" d="M11.60 10.00L13.80 9.08L13.80 10.92zM20.40 10.00L18.20 10.92L18.20 9.08z"/>'
 ICON_SVG['dim_ord'] = '<path class="g" d="M2.5 20.5h19M4.5 18.5v4"/><circle class="n" cx="4.5" cy="20.5" r="1.3"/><path class="a" d="M11 18.5V12l2-2V5M18 18.5V5"/><circle class="n" cx="11" cy="20.5" r="1"/><circle class="n" cx="18" cy="20.5" r="1"/><path class="af" d="M11.5 3.2h3v1.4h-3zM16.5 3.2h3v1.4h-3z"/>'
 ICON_SVG['dim_arc'] = '<path class="n" d="M18.93 16.00L18.55 15.41L18.13 14.86L17.66 14.34L17.14 13.87L16.59 13.45L16.00 13.07L15.38 12.75L14.74 12.48L14.07 12.27L13.39 12.12L12.70 12.03L12.00 12.00L11.30 12.03L10.61 12.12L9.93 12.27L9.26 12.48L8.62 12.75L8.00 13.07L7.41 13.45L6.86 13.87L6.34 14.34L5.87 14.86L5.45 15.41L5.07 16.00"/><path class="n" d="M19.62 15.60L23.69 13.25M4.38 15.60L0.31 13.25"/><path class="a" d="M22.83 13.75L22.24 12.83L21.58 11.97L20.84 11.16L20.03 10.42L19.17 9.76L18.25 9.17L17.28 8.67L16.28 8.25L15.24 7.93L14.17 7.69L13.09 7.55L12.00 7.50L10.91 7.55L9.83 7.69L8.76 7.93L7.72 8.25L6.72 8.67L5.75 9.17L4.83 9.76L3.97 10.42L3.16 11.16L2.42 11.97L1.76 12.83L1.17 13.75"/><path class="af" d="M22.83 13.75L21.04 12.51L22.46 11.61zM1.17 13.75L1.54 11.61L2.96 12.51z"/>'
+ICON_SVG["boundary"] = '<path class="g" d="M2 6h20M2 18h20M6 2v20M18 2v20"/><path class="a" d="M6 6h12v12H6z"/><circle class="af" cx="12" cy="12" r="1.7"/>'
+# Walk : silhouette « directions_walk » de Material Symbols (Google, licence Apache 2.0, voir THIRD_PARTY_NOTICES.md),
+# en aplat de la couleur de la famille
+ICON_SVG["walk"] = ('<path class="pf" d="M7,23L9.8,8.9L8,9.6V13H6V8.3l5.05-2.15Q11.4,6 11.79,5.97t0.74,0.1t0.66,0.35T13.7,7'
+                    'l1,1.6q0.65,1.05 1.76,1.72T19,11v2q-1.75,0-3.13-0.73t-2.35-1.85L12.9,13.5l2.1,2V23H13V16.5l-2.1-1.6'
+                    'L9.1,23H7Z"/>'
+                    '<path class="pf" d="M12.09,4.91Q11.5,4.32 11.5,3.5q0-0.83 0.59-1.41T13.5,1.5t1.41,0.59T15.5,3.5'
+                    'q0,0.82-0.59,1.41T13.5,5.5T12.09,4.91Z"/>')
+ICON_SVG["break"] = '<path class="n" d="M2 12h7M15 12h7"/><path class="g" d="M10.5 12h3"/><circle class="af" cx="9" cy="12" r="1.7"/><circle class="af" cx="15" cy="12" r="1.7"/>'
+ICON_SVG["match_props"] = '<rect class="n" x="2.5" y="4.5" width="7" height="7"/><rect class="af" x="14.5" y="12.5" width="7" height="7"/><path class="a" d="M9.5 8L15 8L18 10.5"/><path class="af" d="M18.9 11.6L15.9 11.2L17.6 9.2z"/>'
 ICON_SVG['dim_edit'] = '<path class="n" d="M3 13v8M21 13v8"/><path class="a" d="M3.60 16.00L20.40 16.00"/><path class="af" d="M3.60 16.00L5.80 15.08L5.80 16.92zM20.40 16.00L18.20 16.92L18.20 15.08z"/><path class="n" d="M12 3v9"/><path class="n" d="M9.5 5.5 12 3l2.5 2.5M9.5 9.5 12 12l2.5-2.5"/>'
 ICON_SVG['fillet_srf'] = '<path class="g" d="M4 4v16h16" stroke-dasharray="1.6 1.6"/><path class="n" d="M4 3v8M13 20h8"/><path class="a" d="M4 11a9 9 0 0 0 9 9"/><circle class="n" cx="4" cy="11" r="1.4"/><circle class="n" cx="13" cy="20" r="1.4"/>'
 ICON_SVG['chamfer_srf'] = '<path class="g" d="M4 4v16h16" stroke-dasharray="1.6 1.6"/><path class="n" d="M4 3v8M13 20h8"/><path class="a" d="M4 11l9 9"/><circle class="n" cx="4" cy="11" r="1.4"/><circle class="n" cx="13" cy="20" r="1.4"/>'
@@ -579,6 +619,7 @@ ICON_SVG.update({
     'unroll': '<ellipse class="n" cx="8" cy="6" rx="4" ry="1.8"/><path class="n" d="M4 6V16C4 18.4 12 18.4 12 16V6"/><path class="n" d="M14 11H16.6M15.3 9.6L16.7 11L15.3 12.4"/><rect class="af" x="17.6" y="5" width="4.9" height="12" rx="0.8"/><rect class="a" x="17.6" y="5" width="4.9" height="12" rx="0.8"/>',
     'rebuild_srf': '<path class="g" d="M3 17L7 7L12 11L17 5L21 14" stroke-dasharray="1.4 1.4"/><path class="a" d="M3 17C5 12 8 9 12 9C16 9 19 11 21 14"/><circle class="a" cx="3" cy="17" r="1.4"/><circle class="a" cx="9" cy="10" r="1.4"/><circle class="a" cx="15" cy="10" r="1.4"/><circle class="a" cx="21" cy="14" r="1.4"/>',
     'orient': '<rect class="n" x="3" y="12" width="7" height="7" rx="1"/><path class="g" d="M6.5 12V8M3 15.5H1" stroke-dasharray="1.4 1.4"/><path class="a" d="M14 11L18 6M14 11L20 12"/><g transform="rotate(-30 17 15)"><rect class="af" x="13.5" y="13" width="7" height="7" rx="1"/></g><path class="n" d="M11 15L13 14M12.3 12.5L13.8 14.2L11.9 15"/>',
+    'slice': '<rect class="n" x="3.5" y="6.5" width="17" height="12" rx="1.5"/><path class="a" d="M12 6.5V18.5"/><path class="g" d="M12 2.5V5M12 20V22" stroke-dasharray="1.6 1.4"/><circle class="af" cx="12" cy="6.5" r="1.3"/><circle class="af" cx="12" cy="18.5" r="1.3"/>',
     'orient3pt': '<path class="n" d="M2 19L6 12L11 16Z"/><circle class="g" cx="2" cy="19" r="1.2"/><circle class="g" cx="6" cy="12" r="1.2"/><circle class="g" cx="11" cy="16" r="1.2"/><path class="a" d="M12 10L16 6M12 10L17.5 10.5"/><path class="af" d="M14 21L18.5 11.5L22 19Z"/><path class="a" d="M14 21L18.5 11.5L22 19Z"/>',
 })
 
@@ -1122,9 +1163,9 @@ def _icon_bytes(kind="move"):
 ICON_FAMILY_COLORS = ((169, 185, 209), (224, 144, 122), (169, 189, 126), (227, 184, 99),
                       (185, 154, 196), (217, 168, 140), (201, 163, 107), (143, 194, 189), (214, 140, 170))
 ICON_FAMILIES = (
-    ("select", "sel_box", "sel_circle", "lasso", "stretch", "move", "copy", "rotate", "scale", "scale_2d", "scale_1d", "scale_size", "mirror", "array_l", "array_r", "array_p", "align", "orient", "orient3pt"),
+    ("select", "sel_box", "sel_circle", "lasso", "stretch", "move", "copy", "rotate", "scale", "scale_2d", "scale_1d", "scale_size", "mirror", "array_l", "array_r", "array_p", "align", "orient", "orient3pt", "walk"),
     ("join", "explode", "trim", "cut", "divide", "overkill", "split_face", "bool_u", "bool_d", "bool_i", "bool_s", "fillet", "chamfer", "fillet_c", "chamfer_c", "offset_srf", "offset",
-     "block", "block_insert", "extend_crv", "merge_faces"),
+     "block", "block_insert", "extend_crv", "merge_faces", "slice", "break", "match_props"),
     ("polyline", "xline", "curve_cp", "curve_i", "pen", "sketch", "point", "rect", "circle", "circle_d", "ellipse_c", "ellipse_d", "ellipse_f", "ellipse_k",
      "poly_c", "poly_k", "poly_a", "poly_e", "poly_s", "arc", "arc3", "project_curve",
      "blend_crv", "match_crv", "rebuild_crv", "simplify_crv", "change_degree", "insert_point", "remove_point", "intersect", "section", "contour", "dup_border", "dup_edge", "dup_face_border"),
@@ -1132,7 +1173,7 @@ ICON_FAMILIES = (
     ("blend_srf", "match_srf", "fillet_srf", "chamfer_srf", "extend_srf", "split_iso", "untrim", "untrim_holes", "thicken", "cap", "shell", "extract_srf", "unroll", "rebuild_srf"),
     ("box", "cylinder", "cone", "tcone", "pyramid", "tpyramid", "tube", "sphere", "ellipsoid", "tsphere", "torus", "pipe"),
     ("light_point", "light_spot", "light_sun", "light_area", "camera", "camera_target"),
-    ("dim", "dim_chain", "dim_ord", "dim_arc", "dim_r", "dim_a", "note", "text", "center_mark", "dim_edit", "hatch", "hatch_region", "area", "dist", "id_point", "make2d", "clip_plane", "layout", "detail", "callout"),
+    ("dim", "dim_chain", "dim_ord", "dim_arc", "dim_r", "dim_a", "note", "text", "center_mark", "dim_edit", "hatch", "hatch_region", "area", "dist", "id_point", "make2d", "clip_plane", "boundary", "layout", "detail", "callout"),
     ("subd_box", "subd_sphere", "subd_cylinder", "subd_cone", "subd_torus", "subd_plane", "subdc_to_subd", "subdc_to_mesh",
      "subdc_loft", "subdc_sweep1", "subdc_sweep2", "subdc_revolve",
      "subdc_multipipe", "subdc_display", "subdc_sym_x", "subdc_sym_y", "subdc_sym_z", "subdc_crease", "subdc_uncrease",
@@ -1181,16 +1222,23 @@ def ensure_icon(kind, fallback):
             folder = bpy.utils.extension_path_user(__package__, path="icons", create=True)
         except (AttributeError, ValueError, RuntimeError, TypeError):
             folder = bpy.utils.user_resource('CONFIG', path="wanderer_icons", create=True)
-        base = os.path.join(folder, kind + icon_suffix())  # nom versionné : Blender garde les icônes en cache jusqu'au redémarrage
+        import zlib
         data = _family_recolor(kind, _icon_bytes(kind))
+        # Blender garde une icône en mémoire sous son nom de fichier jusqu'au redémarrage : le nom change avec le dessin
+        # (sinon une icône redessinée n'apparaît qu'après avoir relancé Blender)
+        stem = kind + icon_suffix()
+        base = os.path.join(folder, "%s_%08x" % (stem, zlib.crc32(data) & 0xFFFFFFFF))
         path = base + ".dat"
-        current = None
-        if os.path.exists(path):
-            with open(path, "rb") as f:
-                current = f.read()
-        if current != data:
+        if not os.path.exists(path):
             with open(path, "wb") as f:
                 f.write(data)
+            try:          # anciennes versions de cette icône (même famille de couleurs)
+                for name in os.listdir(folder):
+                    if name.endswith(".dat") and name != os.path.basename(path) and (
+                            name == stem + ".dat" or (name.startswith(stem + "_") and len(name) == len(stem) + 13)):
+                        os.remove(os.path.join(folder, name))
+            except OSError:
+                pass
         return base
     except Exception:
         return fallback
