@@ -139,7 +139,10 @@ You can also click **Get Add-on** on the [Wanderer CAD page](https://extensions.
 
 If you installed an older version from a zip, remove it first and restart Blender before installing from Blender Extensions, so that only one copy is enabled.
 
-**Themes (optional).** The six Wanderer themes come in one separate file, `wanderer_themes-x.y.z.zip`, next to the add-on on each release: Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light). Install it the same way (*Install from Disk...*, or drag it into Blender), then choose a theme in *Preferences > Themes*. It is also on the Blender Extensions website.
+**Themes (optional).** Six Wanderer themes, each on Blender Extensions: [Blueprint](https://extensions.blender.org/themes/wanderer-theme-blueprint/), [Carbon](https://extensions.blender.org/themes/wanderer-theme-carbon/) and [Midnight](https://extensions.blender.org/themes/wanderer-theme-midnight/) (dark), [Graphite](https://extensions.blender.org/themes/wanderer-theme-graphite/), [Vellum](https://extensions.blender.org/themes/wanderer-theme-vellum/) and [Ivory](https://extensions.blender.org/themes/wanderer-theme-ivory/) (light). All of them are on [my author page](https://extensions.blender.org/author/97222/).
+
+- **From Blender:** *Edit > Preferences > Get Extensions*, search for **Wanderer**, and click **Install** on the themes you want. Then choose one in *Preferences > Themes*.
+- **From the zip:** the six themes also come in one file, `wanderer_themes-x.y.z.zip`, next to the add-on on each release. Install it with *Install from Disk...* (or drag it into Blender).
 
 ## What changed
 
