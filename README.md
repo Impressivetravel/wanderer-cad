@@ -3,6 +3,8 @@
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
 > **Status: stable (2.96.129).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+>
+> **Now on [Blender Extensions](https://extensions.blender.org/add-ons/wanderer/):** install and update it from inside Blender.
 
 [![Support Wanderer CAD on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/hostylmatic)
 
@@ -121,9 +123,21 @@ The right-click menu gained a **Display As** submenu (Bounds, Wire, Solid, Textu
 
 Requires **Blender 4.2 or newer**. Developed and tested on Blender 5.1 and 5.2.
 
+**From Blender (recommended).** Wanderer CAD is on [Blender Extensions](https://extensions.blender.org/add-ons/wanderer/).
+
+1. In Blender: *Edit > Preferences > Get Extensions*. If asked, allow online access.
+2. Search for **Wanderer CAD** and click **Install**.
+3. Updates then appear in the same place: click **Update** when a new version is out.
+
+You can also click **Get Add-on** on the [Wanderer CAD page](https://extensions.blender.org/add-ons/wanderer/) and drag the button into Blender.
+
+**From the zip.** For a version not yet on Blender Extensions, or a computer without internet access:
+
 1. Download the latest `wanderer-x.y.z.zip` from the [Releases](../../releases) page.
 2. In Blender: *Edit > Preferences > Get Extensions*, open the drop-down menu at the top right and choose **Install from Disk...**, then select the zip.
-3. Enable **Wanderer CAD**. If you have an older version installed, remove it first and restart Blender.
+3. Enable **Wanderer CAD**.
+
+If you installed an older version from a zip, remove it first and restart Blender before installing from Blender Extensions, so that only one copy is enabled.
 
 **Themes (optional).** The six Wanderer themes come in one separate file, `wanderer_themes-x.y.z.zip`, next to the add-on on each release: Blueprint, Carbon and Midnight (dark), Graphite, Vellum and Ivory (light). Install it the same way (*Install from Disk...*, or drag it into Blender), then choose a theme in *Preferences > Themes*. It is also on the Blender Extensions website.
 
