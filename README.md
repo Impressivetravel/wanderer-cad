@@ -2,7 +2,7 @@
 
 Precision drawing and modeling tools for Blender, with a workflow that feels familiar if you come from other CAD software: a command line, object snaps, tracking, dimensions, hatches, blocks and layers.
 
-> **Status: stable (2.96.129).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
+> **Status: stable (2.96.130).** Free and open source (GPL-3.0-or-later). Feedback and bug reports are very welcome.
 >
 > **Now on [Blender Extensions](https://extensions.blender.org/add-ons/wanderer/):** install and update it from inside Blender.
 

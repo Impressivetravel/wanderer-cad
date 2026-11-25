@@ -11,7 +11,7 @@ from gpu_extras.batch import batch_for_shader
 from .core import (
     FR_ACTION_ALIASES, FR_ALIASES, GRID_SNAP_PRESETS, ONESHOT_KEYS, TAU, _redraw_all_areas, grid_snap_shown, grid_snap_store,
     lang, mouse_over_statusbar, oneshot_clear, oneshot_hold, oneshot_hold_set, oneshot_keys, oneshot_reset, oneshot_shown, shift_held, shift_held_set,
-    oneshot_toggle, osnap_shown, pref, redraw_bars, tr_label, tr_text, unit_info,
+    idle_tool, oneshot_toggle, osnap_shown, pref, redraw_bars, tr_label, tr_text, unit_info,
 )
 from .drawing import bars_frame, find_window_region, get_shader
 from .base import DessinBase
@@ -19,14 +19,14 @@ from .selection import DESSIN_OT_esc_select
 from .objects import _act_invoke
 from .gumball import DESSIN_MT_gumball
 from .gumball_handles import OSNAP_BAR
-from .toolbar import DESSIN_TT_selection_boite, _SELECT_TOOL_IDS
+from .toolbar import DESSIN_TT_selection_boite, PICK_RUN_TOOLS, _SELECT_TOOL_IDS
 from .navigation import BASE_VIEWS, DESSIN_OT_mouse_track, MOUSE_KEYMAPS, _update_view_keymap
 from .languages import LANG_ALIASES, LANG_LABELS
 from .core import language_caches_clear, pref_applied_language
 from .views import CMD_ALIASES, CMD_KEY_ITEMS, DESSIN_MT_named_views, _CMD, current_view_name, tab_names, view_label
 from .layout import bar_tabs, is_layout, layout_zoom_page, tab_click
 from .quadview import (
-    _QUAD, _win_region, quad_area_at, quad_bars, quad_click, quad_column_watch, quad_focus, quad_focus_set, quad_grid_of,
+    _QUAD, _win_region, quad_area_at, quad_bars, quad_click, quad_seams, quad_column_watch, quad_focus, quad_focus_set, quad_grid_of,
     quad_extra_kind, quad_guard_soon, quad_is_column, quad_peers, quad_title,
 )
 from .cplane import (
@@ -80,12 +80,47 @@ def _act_auto_cplane(context):
     return "Auto CPlane " + ("on" if st.auto_cplane else "off")
 
 
+# Blender a un opérateur par mode pour une même commande (Separate, Delete, Select All, Hide...) : mesh.* en Édition de
+# maillage, curve.* en Édition de courbe... La ligne de commande prend celui du mode courant.
+MODE_OPS = {'OBJECT': "object", 'EDIT_MESH': "mesh", 'EDIT_CURVE': "curve", 'EDIT_SURFACE': "curve", 'EDIT_CURVES': "curves",
+            'EDIT_LATTICE': "lattice", 'EDIT_METABALL': "mball", 'EDIT_ARMATURE': "armature", 'POSE': "pose"}
+_MODE_MODS = set(MODE_OPS.values())
+
+
+def mode_native(context, mod, op):
+    """Module de l'opérateur `op` à utiliser dans le mode courant : `mod` s'il convient, sinon son équivalent du mode
+    (mesh.separate en Édition de courbe -> curve.separate, object.delete -> curve.delete...)."""
+    tgt = MODE_OPS.get(getattr(context, "mode", ""))
+    if not tgt or tgt == mod or mod not in _MODE_MODS:
+        return mod
+    # l'équivalent du mode passe d'abord : certains polls acceptent un autre mode (mesh.separate en Édition de courbe)
+    # puis l'opérateur échoue
+    grp = getattr(bpy.ops, tgt, None)
+    try:
+        if grp is not None and op in dir(grp) and getattr(grp, op).poll():
+            return tgt
+    except (AttributeError, RuntimeError, TypeError):
+        pass
+    return mod
+
+
 def _act_delete(context):
     if is_layout(context.scene):
         bpy.ops.dessin.layout_erase()        # mise en page : un détail part avec ses traits et ses cotes, en un seul pas
+    elif context.mode != 'OBJECT' and mode_native(context, "object", "delete") != "object":
+        # Édition : le menu Delete de Blender pour ce mode (Vertices / Segments pour une courbe, Vertices / Edges / Faces...)
+        getattr(bpy.ops, mode_native(context, "object", "delete")).delete('INVOKE_DEFAULT')
     else:
         bpy.ops.object.delete()
     return ""
+
+
+def _act_select_all(action):
+    def run(context):
+        mod = mode_native(context, "object", "select_all")
+        getattr(bpy.ops, mod).select_all(action=action)
+        return ""
+    return run
 
 
 def _act_zoom_extents(context):
@@ -112,12 +147,12 @@ CMD_ACTIONS = (
     ("CPlane Redo", "cplredo cplaneredo", "", "Next construction plane", _act_cplane_redo),
     ("Undo", "undo", "ed.undo", "Undo the last action", _act_op("ed.undo")),
     ("Redo", "redo", "ed.redo", "Redo the last undone action", _act_op("ed.redo")),
-    ("Delete", "e del delete erase", "", "Delete the selected objects", _act_delete),
+    ("Delete", "e del delete erase", "", "Delete the selected objects (in Edit Mode: the selected points, edges or faces)", _act_delete),
     ("Alias Editor", "aliasedit alias aliases", "", "Create your own command aliases, like AliasEdit in AutoCAD and the aliases of Rhino", _act_invoke("dessin.alias_edit")),
     ("Import AutoCAD Aliases", "importpgp pgpimport pgp", "", "Add the aliases of an AutoCAD alias file (acad.pgp) to yours, for the commands Wanderer has", _act_invoke("dessin.alias_import_pgp")),
-    ("Select All", "sa all selectall", "", "Select every object", _act_op("object.select_all", action='SELECT')),
-    ("Select None", "sn none deselect selnone", "", "Deselect everything", _act_op("object.select_all", action='DESELECT')),
-    ("Invert Selection", "si invert selinvert", "", "Invert the selection", _act_op("object.select_all", action='INVERT')),
+    ("Select All", "sa all selectall", "", "Select every object (in Edit Mode: every point)", _act_select_all('SELECT')),
+    ("Select None", "sn none deselect selnone", "", "Deselect everything", _act_select_all('DESELECT')),
+    ("Invert Selection", "si invert selinvert", "", "Invert the selection", _act_select_all('INVERT')),
     ("Hide", "hi hide hideobjects", "", "Hide the selected objects (Show shows them back)", _act_op("dessin.hide")),
     ("Isolate", "isolate iso isolateobjects", "", "Hide everything except the selected objects (Unisolate shows them back)", _act_op("dessin.isolate")),
     ("Unisolate", "unisolate uniso unisolateobjects", "", "Show the objects hidden by Isolate (objects hidden with Hide stay hidden)", _act_op("dessin.unisolate")),
@@ -453,6 +488,7 @@ def cmd_native_ok(e):
     """Le poll de l'opérateur natif est-il satisfait dans le contexte actuel ?"""
     mod, op = e["ref"][0], e["ref"][1]
     try:
+        mod = mode_native(bpy.context, mod, op)
         return bool(getattr(getattr(bpy.ops, mod), op).poll())
     except (AttributeError, RuntimeError, TypeError):
         return False
@@ -574,6 +610,9 @@ def run_on_selection(context, tool_id):
 
     def _go():
         try:
+            if tool_id in PICK_RUN_TOOLS:          # lancée sur la sélection : l'outil ne reste pas armé (issue #42)
+                with bpy.context.temp_override(window=window, area=area, region=region):
+                    idle_tool()
             op_invoke_in(window, area, region, name)
         except (RuntimeError, TypeError, AttributeError, ReferenceError):
             pass
@@ -600,6 +639,7 @@ def cmd_run(context, entry):
             bpy.ops.dessin.view_restore(name=entry["ref"])
         elif entry["kind"] == "native":
             mod, op, kw, invoke = entry["ref"]
+            mod = mode_native(context, mod, op)          # Separate, Hide... : l'opérateur du mode courant
             fn = getattr(getattr(bpy.ops, mod), op)
             if invoke:
                 fn('INVOKE_DEFAULT', **kw)
@@ -1039,6 +1079,11 @@ def _cmd_theme():
         acc = tuple(ui.wcol_menu_item.inner_sel)
     except (AttributeError, IndexError, TypeError):
         bg, fg, sel, sel_t, acc = (0.15, 0.15, 0.15, 1.0), (0.9, 0.9, 0.9, 1.0), (0.28, 0.45, 0.7, 1.0), (1, 1, 1, 1), (0.42, 0.65, 1.0, 1.0)
+    try:                     # champ de saisie : celui des champs de texte du thème (clair dans un thème clair)
+        ui = bpy.context.preferences.themes[0].user_interface
+        field, field_t = tuple(ui.wcol_text.inner_sel), tuple(ui.wcol_text.text_sel)
+    except (AttributeError, IndexError, TypeError):
+        field, field_t = (0.07, 0.07, 0.08, 1.0), (0.9, 0.9, 0.9, 1.0)
 
     def mix(a, b, k):
         return (a[0] * k + b[0] * (1 - k), a[1] * k + b[1] * (1 - k), a[2] * k + b[2] * (1 - k))
@@ -1046,7 +1091,8 @@ def _cmd_theme():
     return {"bg": (*bg[:3], 0.93), "fg": (*fg[:3], 1.0), "dim": (*mix(fg, bg, 0.58), 1.0), "faint": (*mix(fg, bg, 0.38), 1.0),
             "sel": (*sel[:3], 1.0), "sel_t": (*sel_t[:3], 1.0), "acc": (*accent, 1.0),
             "chip": (*mix(fg, bg, 0.14), 1.0), "line": (*mix(fg, bg, 0.22), 1.0),
-            "warn": (*mix((1.0, 0.62, 0.22), fg, 0.8), 1.0)}
+            "warn": (*mix((1.0, 0.62, 0.22), fg, 0.8), 1.0),
+            "field": (*field[:3], 1.0), "field_t": (*field_t[:3], 1.0)}
 
 
 def _blend_on():
@@ -1186,18 +1232,19 @@ def value_bubble_draw():
         blf.draw(0, t)
         x += tw
     _cmd_bold(False)
-    # champ : fond sombre, contour de la couleur de sélection, valeur tapée et curseur
+    # champ : couleurs d'un champ de texte en cours de saisie du thème, contour de la couleur de sélection, valeur tapée
+    # et curseur
     fx0, fy0, fx1, fy1 = x0 + padx, y0 + pady, x1 - padx, y0 + pady + field_h
     fill(th["sel"], _cmd_rrect(fx0 - 1, fy0 - 1, fx1 + 1, fy1 + 1, 8 * sc + 1))
-    fill((0.07, 0.07, 0.08, 1.0), _cmd_rrect(fx0, fy0, fx1, fy1, 8 * sc))
+    fill(th["field"], _cmd_rrect(fx0, fy0, fx1, fy1, 8 * sc))
     _cmd_font(size * 1.1)
-    blf.color(0, *th["fg"])
+    blf.color(0, *th["field_t"])
     tx = fx0 + 9 * sc
     tyy = fy0 + (field_h - size * 1.1) / 2.0 + size * 0.15
     blf.position(0, tx, tyy, 0)
     blf.draw(0, text)
     cx = tx + (W(text) if text else 0.0) + 2 * sc
-    fill(th["fg"], _cmd_quad(cx, fy0 + field_h * 0.22, cx + max(1.0, 1.2 * sc), fy1 - field_h * 0.22))
+    fill(th["field_t"], _cmd_quad(cx, fy0 + field_h * 0.22, cx + max(1.0, 1.2 * sc), fy1 - field_h * 0.22))
 
 
 def _cmd_rrect(x0, y0, x1, y1, r, n=7):
@@ -1271,7 +1318,37 @@ def cmd_parse_prompt(txt):
     return title, rest, details, out, extras
 
 
-def bar_layout(ptr, region_w, left, right, sc, vw, cw, mw, hc, mh=0.0):
+def dodge_seams(row, xs, seams, lo, hi, m):
+    """4 vues : décale les pastilles d'une ligne pour qu'aucune ne soit coupée par la séparation entre les deux vues du
+    bas. row : [(clé, largeur)] ; xs : leur bord gauche ; seams : [(x0, x1)] des séparations ; lo / hi : limites de la
+    place libre ; m : marge de chaque côté de la séparation. La ligne se coupe en deux entre deux pastilles (le moins
+    de déplacement possible), ou glisse d'un seul bloc d'un côté ; si rien ne tient, elle reste telle quelle."""
+    xs = list(xs)
+    for s0, s1 in seams:
+        a, b = s0 - m, s1 + m
+        if not any(x < b and x + w > a for x, (_k, w) in zip(xs, row)):
+            continue
+        n = len(row)
+        best = None
+        for i in range(n + 1):                         # i pastilles à gauche de la séparation, les autres à droite
+            sl = (a - (xs[i - 1] + row[i - 1][1])) if i > 0 else None
+            sr = (b - xs[i]) if i < n else None
+            if sl is None:
+                sl = sr
+            if sr is None:
+                sr = sl
+            new = [x + (sl if j < i else sr) for j, x in enumerate(xs)]
+            if new[0] < lo - 0.5 or new[-1] + row[-1][1] > hi + 0.5:
+                continue
+            cost = max(abs(sl), abs(sr))
+            if best is None or cost < best[0]:
+                best = (cost, new)
+        if best is not None:
+            xs = best[1]
+    return xs
+
+
+def bar_layout(ptr, region_w, left, right, sc, vw, cw, mw, hc, mh=0.0, seams=()):
     """Position des trois pastilles du bas (onglets de vue, ligne de commande, boutons de mode).
     Une seule ligne si tout tient entre la barre d'outils et la barre latérale ; sinon la ligne de commande passe
     au-dessus, seule, et les onglets + modes restent côte à côte en bas (leur forme réduite, choisie par bars_compact,
@@ -1284,11 +1361,18 @@ def bar_layout(ptr, region_w, left, right, sc, vw, cw, mw, hc, mh=0.0):
     parts = [(k, w) for k, w in (("views", vw), ("cmd", cw), ("modes", mw)) if w > 0]
     out = {}
     total = sum(w for _k, w in parts) + G * max(0, len(parts) - 1)
+    lo, hi, mg = left + 12 * sc, region_w - right - 12 * sc, 6 * sc
+
+    def place(row, x):
+        xs = []
+        for _k, w in row:
+            xs.append(x)
+            x += w + G
+        return dodge_seams(row, xs, seams, lo, hi, mg) if seams else xs
     if not (_GROUP["cmd_row"].get(ptr) and cw > 0) and total <= avail:
         x = group_center(region_w, left, right, total, sc) - total / 2.0
-        for k, w in parts:
+        for (k, w), x in zip(parts, place(parts, x)):
             out[k] = (x, 16 * sc + (0.0 if k == "cmd" else max(0.0, (hc - hp) / 2.0)))
-            x += w + G
         return out
     rows = []
     low = [(k, w) for k, w in parts if k != "cmd"]
@@ -1303,9 +1387,8 @@ def bar_layout(ptr, region_w, left, right, sc, vw, cw, mw, hc, mh=0.0):
         total = sum(w for _k, w in row) + G * (len(row) - 1)
         x = group_center(region_w, left, right, total, sc) - total / 2.0
         rowh = max(heights[k] for k, _w in row)
-        for k, w in row:
+        for (k, w), x in zip(row, place(row, x)):
             out[k] = (x, y + (rowh - heights[k]) / 2.0)     # (vues à côté de deux rangées d'icônes : centrées en hauteur)
-            x += w + G
         y += rowh + 8 * sc
     return out
 
@@ -1357,10 +1440,11 @@ def bars_hidden(context, ptr, busy, views=False):
 class BarsFrame:
     """Cadre des barres quand il n'est pas une région : l'ensemble des 4 vues. clear : aucun panneau ne recouvre le bas
     du cadre (4 vues séparées : la barre d'outils n'est que dans la vue du haut) ; ptrs : les vues qui se le partagent."""
-    __slots__ = ("x", "y", "width", "height", "clear", "ptrs")
+    __slots__ = ("x", "y", "width", "height", "clear", "ptrs", "seams")
 
-    def __init__(self, x, y, width, height, clear=False, ptrs=()):
+    def __init__(self, x, y, width, height, clear=False, ptrs=(), seams=()):
         self.x, self.y, self.width, self.height, self.clear, self.ptrs = x, y, width, height, clear, ptrs
+        self.seams = seams           # 4 vues : séparations entre les vues du bas, (x0, x1) dans le cadre
 
 
 class BarsContext:
@@ -1495,7 +1579,7 @@ def bars_draw(draw):
         return
     if q is not None:                           # 4 vues séparées : les barres de la vue active
         owner, fr, ptrs = q
-        frame = BarsFrame(*fr, clear=True, ptrs=ptrs)
+        frame = BarsFrame(*fr, clear=True, ptrs=ptrs, seams=quad_seams(area, fr))
         with gpu.matrix.push_pop():
             gpu.matrix.translate((float(fr[0] - region.x), float(fr[1] - region.y)))
             draw(BarsContext(context, owner), owner, frame)
@@ -1722,7 +1806,7 @@ def cmd_bar_draw(context, area, region):
     vw = _GROUP["views"].get(ptr, 0.0)
     mw_raw = modes_layout(context, ptr, sc)[2] if mw0 else 0.0
     x0, y0 = bar_layout(ptr, region.width, left, right, sc, vw, width, mw_raw, h,
-                        modes_height(sc, _GROUP["compact"].get(ptr) or 0))["cmd"]
+                        modes_height(sc, _GROUP["compact"].get(ptr) or 0), getattr(region, "seams", ()))["cmd"]
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')
 
@@ -2573,7 +2657,8 @@ def views_bar_draw(context, area, region):
     hc = _GROUP["cmd_h"].get(ptr, 0.0) if pref("cmd_line") else 0.0
     cw_ = _GROUP["cmd"].get(ptr, 0.0) if pref("cmd_line") else 0.0
     mw_ = modes_layout(context, ptr, sc)[2] if modes_visible(context, ptr) else 0.0
-    lay = bar_layout(ptr, region.width, left, right, sc, total if len(names) > 1 else 0.0, cw_, mw_, hc, modes_height(sc, compact))
+    lay = bar_layout(ptr, region.width, left, right, sc, total if len(names) > 1 else 0.0, cw_, mw_, hc, modes_height(sc, compact),
+                     getattr(region, "seams", ()))
     y0 = 16 * sc
     shader = get_shader('2D')
     gpu.state.blend_set('ALPHA')
@@ -3007,3 +3092,47 @@ def _update_icon_palette(self, context):
 
 def _late_imports():
     pass
+
+
+# ---- Project : n'a de sens qu'en vue orthogonale (on projette sur le plan de construction vu de face). En passant une vue
+# en perspective, Project se désactive tout seul ; il ne se réactive pas en revenant en ortho.
+_PROJ_PERSP = {"views": {}}
+
+
+def project_persp_check():
+    """Relevé des vues 3D : une vue qui passe d'ortho à perspective désactive Project. Retourne True si désactivé."""
+    off = False
+    seen = {}
+    try:
+        for win in bpy.context.window_manager.windows:
+            st = win.scene.dessin
+            for area in win.screen.areas:
+                if area.type != 'VIEW_3D':
+                    continue
+                sp = area.spaces.active
+                rvs = list(getattr(sp, "region_quadviews", None) or []) + [sp.region_3d]
+                for rv in rvs:
+                    if rv is None:
+                        continue
+                    k = rv.as_pointer()
+                    persp = rv.view_perspective != 'ORTHO'          # (is_perspective ne change qu'au dessin suivant)
+                    seen[k] = persp
+                    if persp and _PROJ_PERSP["views"].get(k) is False and st.osnap_project:
+                        st.osnap_project = False
+                        off = True
+    except (AttributeError, ReferenceError, RuntimeError):
+        pass
+    _PROJ_PERSP["views"] = seen
+    if off:
+        cmd_log("Project off: the view is in perspective")
+        try:
+            redraw_bars()
+        except (AttributeError, RuntimeError, TypeError):
+            pass
+    return off
+
+
+def project_persp_timer():
+    project_persp_check()
+    return 0.25
+

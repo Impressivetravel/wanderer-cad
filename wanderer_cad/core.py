@@ -26,7 +26,7 @@ GB_SNAP_FROM_ITEMS = (
     ('ORIGIN', "Origin", "The origin of the active object lands on the snapped point (furniture or blocks with their origin "
                          "on the floor or at a corner)"),
 )
-PREF_DEFAULTS = {"quad_shared_bars": True, "light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_type_ortho": False, "ortho_wire": True, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "copy_key": 'ALT', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "gumball_reach": True, "gumball_snap_from": 'CLOSEST', "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_persp_mods": 'ALT', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
+PREF_DEFAULTS = {"quad_shared_bars": True, "toolbar_blender": False, "toolbar_hidden": "", "toolbar_open": "", "light_preview": True, "curve_points": True, "rclick_enter": True, "cmd_line": True, "cmd_type": False, "cmd_type_ortho": False, "ortho_wire": True, "cmd_size": 100, "mode_icons": False, "cmd_key": 'SPACE', "copy_key": 'ALT', "esc_deselect": True, "enter_last": True, "auto_idle": True, "smart_tracks": True, "gumball_rot90": True, "gumball_step": '90', "gumball_line": 3.0, "gumball_reach": True, "gumball_snap_from": 'CLOSEST', "icon_palette": 'EARTH', "language": 'EN', "rich_tooltips": True, "remap_grs": False, "view_pan": True, "view_persp": True, "view_persp_mods": 'ALT', "mouse_orbit": 'DEFAULT', "mouse_menu": 'DEFAULT', "mouse_middle": 'DEFAULT', "mouse_menu_tol": 6, "mouse_middle_op": "", "cursor_style": 'AUTOCAD', "cursor_size": 8, "cursor_pick": 2.0, "cursor_color": (1.0, 1.0, 1.0),
                  "nav_style": 'BLENDER', "nav_zoom_cursor": False, "nav_invert_zoom": False,
                  "nav_auto_depth": False, "nav_dblclick_all": False,
                  "show_tool_annotate": False, "show_tool_measure": False, "show_tool_cube": False, "show_tool_select": False, "show_tool_cursor": False, "show_tool_move": False,
@@ -550,10 +550,15 @@ def language_caches_clear():
     _TR_CACHE.clear()
 
 
+def idle_tool_id():
+    """Outil de repos : Select de Wanderer, ou la sélection de Blender quand la barre montre les outils de Blender."""
+    return IDLE_FALLBACK if pref("toolbar_blender") else IDLE_TOOL
+
+
 def idle_tool():
     """Retrouve l'outil Select / Move (sauf si le réglage « Return to Select / Move » est désactivé)."""
     if pref("auto_idle"):
-        bpy.ops.wm.tool_set_by_id(name=IDLE_TOOL)
+        bpy.ops.wm.tool_set_by_id(name=idle_tool_id())
 
 # 0 = Fin, 1 = Milieu, 2 = Centre, 3 = Origine
 TRACK_RADIUS = 10.0     # px : distance d'attraction vers une ligne de repérage
@@ -1060,11 +1065,36 @@ def circle_through_origin(b, p):
 # Création des objets courbe
 # --------------------------------------------------------------------------
 
+# Objets créés par une même commande (issue #38) : Boundary, Offset sur plusieurs courbes... créent plusieurs objets d'un
+# coup. Ils restent tous sélectionnés (le dernier actif), au lieu du seul dernier. Le lot se referme dès que Blender reprend
+# la main (minuteur au prochain tour de la boucle d'évènements), ou après une seconde sans création.
+_LINK_BATCH = {"names": set(), "t": 0.0, "armed": False}
+
+
+def _link_batch_close():
+    _LINK_BATCH["names"].clear()
+    _LINK_BATCH["armed"] = False
+    return None
+
+
 def _link_object(context, name, curve_data):
+    import time
     obj = bpy.data.objects.new(name, curve_data)
     context.view_layer.active_layer_collection.collection.objects.link(obj)
+    now = time.monotonic()
+    batch = _LINK_BATCH["names"]
+    if not _LINK_BATCH["armed"] or now - _LINK_BATCH["t"] > 1.0:
+        batch.clear()                       # nouvelle commande : la sélection d'avant est relâchée, comme avant
+        try:
+            bpy.app.timers.register(_link_batch_close, first_interval=0.0)
+            _LINK_BATCH["armed"] = True
+        except (ValueError, RuntimeError, AttributeError):
+            _LINK_BATCH["armed"] = False
     for o in context.selected_objects:
-        o.select_set(False)
+        if o.name not in batch:
+            o.select_set(False)
+    batch.add(obj.name)
+    _LINK_BATCH["t"] = now
     obj.select_set(True)
     context.view_layer.objects.active = obj
     return obj

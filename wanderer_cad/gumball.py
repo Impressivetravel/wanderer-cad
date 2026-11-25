@@ -244,11 +244,15 @@ def _rot_indicator_draw():
     end = pts[-1]
     d = end - c
     d = d.normalized() if d.length > 1e-6 else Vector((1.0, 0.0))
-    size = int(13 * sc)
-    blf.size(0, size)
+    tsc = px_scale(0.5)          # texte : agrandissement atténué sur écran Retina, comme la barre de commande
+    size = int(13 * tsc)
+    try:
+        blf.size(0, size)
+    except TypeError:
+        blf.size(0, size, 72)
     w, h = blf.dimensions(0, txt)
-    pos = end + d * (14.0 * sc) + Vector((-w / 2.0, -h / 2.0)) + Vector((d.x * w / 2.0, 0.0))
-    pad = 4.0 * sc
+    pos = end + d * (12.0 * tsc) + Vector((-w / 2.0, -h / 2.0)) + Vector((d.x * w / 2.0, 0.0))
+    pad = 4.0 * tsc
     box = [(pos.x - pad, pos.y - pad), (pos.x + w + pad, pos.y - pad), (pos.x + w + pad, pos.y + h + pad),
            (pos.x - pad, pos.y - pad), (pos.x + w + pad, pos.y + h + pad), (pos.x - pad, pos.y + h + pad)]
     sh.uniform_float("color", (0.07, 0.07, 0.08, 0.85))
@@ -1332,12 +1336,17 @@ def mirror_plane_cleanup(obj, bm, tol=1e-5):
 class DESSIN_OT_gumball_extrude(GumballBase):
     bl_idname = "dessin.gumball_extrude"
     bl_label = "Extrude"
-    bl_description = ("Extrudes the selected faces (or edges) along their normal: drag, or click without dragging, "
-                      "type the distance and press Enter")
+    bl_description = ("Extrudes the selected faces (or edges) along their normal (Extrude Manifold): drag, or click without "
+                      "dragging, type the distance and press Enter. Shift: normal extrusion with new side faces")
 
     NO_COPY = True
     kind = 'MOVE'
     axis = 0
+
+    use_manifold: bpy.props.BoolProperty(
+        name="Extrude Manifold", default=True, options={'SKIP_SAVE'},
+        description="Extrude Manifold: the sides already in the extrusion direction are stretched, and pushing inward cuts "
+                    "the volume. Shift held on the round handle: a normal extrusion with new side faces")
 
     @classmethod
     def poll(cls, context):
@@ -1346,7 +1355,9 @@ class DESSIN_OT_gumball_extrude(GumballBase):
     def setup_selection(self, context):
         self.backups = []
         self.manifold = False
-        if self.setup_manifold(context):
+        # poignée ronde : Extrude Manifold ; Maj : extrusion normale (nouvelles faces de côté). Les autres outils qui
+        # partagent cette fonction (sans la propriété) gardent Extrude Manifold.
+        if getattr(self, "use_manifold", True) and self.setup_manifold(context):
             return True
         items = []
         dsum = Vector()

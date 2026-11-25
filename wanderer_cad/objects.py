@@ -752,6 +752,8 @@ POLY_EDIT_ACTIONS = (
     ('CURVE_FIT', "Curve Fit", "Smooth curve passing through every vertex"),
     ('SPLINE_FIT', "Spline Fit", "Smooth spline that follows the vertices (they become control points)"),
     ('DECURVE', "Decurve", "Back to straight segments between the vertices"),
+    ('TOGGLE_TYPE', "Toggle Spline Type", "Polyline <-> Bezier curve: a polyline becomes a smooth Bezier curve through its points "
+     "(automatic handles), a Bezier or NURBS curve becomes a polyline through its points"),
     ('WIDTH', "Width", "Gives the polyline a thickness"),
 )
 
@@ -802,6 +804,11 @@ class DESSIN_OT_poly_edit(bpy.types.Operator):
     def poll(cls, context):
         return context.mode == 'OBJECT' and any(o.type == 'CURVE' for o in context.selected_objects)
 
+    @classmethod
+    def description(cls, context, props):
+        # sans elle, les entrées du menu Polyline affichaient « (undocumented operator) » au survol
+        return next((d for a, _n, d in POLY_EDIT_ACTIONS if a == props.action), "Edit the selected polylines")
+
     def invoke(self, context, event):
         if self.action == 'WIDTH':
             return context.window_manager.invoke_props_dialog(self)
@@ -840,6 +847,13 @@ class DESSIN_OT_poly_edit(bpy.types.Operator):
                         co = [tuple(p.co) for p in sp.points]
                         for p, c in zip(sp.points, reversed(co)):
                             p.co = c
+            elif a == 'TOGGLE_TYPE':
+                # chaque spline bascule : polyligne -> Bézier (poignées automatiques), Bézier / NURBS -> polyligne
+                old = [(_spline_points(sp), sp.use_cyclic_u, 'BEZIER' if sp.type == 'POLY' else 'POLY') for sp in cu.splines]
+                cu.splines.clear()
+                for pts, closed, kind in old:
+                    if len(pts) >= 2:
+                        _rebuild_spline(cu, kind, pts, closed)
             else:       # CURVE_FIT / SPLINE_FIT / DECURVE : on reconstruit les splines
                 kind = {'CURVE_FIT': 'BEZIER', 'SPLINE_FIT': 'NURBS', 'DECURVE': 'POLY'}[a]
                 old = [(_spline_points(sp), sp.use_cyclic_u) for sp in cu.splines]
@@ -869,6 +883,9 @@ class DESSIN_MT_ctx_polyline(bpy.types.Menu):
         layout.operator(DESSIN_OT_poly_edit.bl_idname, text="Curve Fit").action = 'CURVE_FIT'
         layout.operator(DESSIN_OT_poly_edit.bl_idname, text="Spline Fit").action = 'SPLINE_FIT'
         layout.operator(DESSIN_OT_poly_edit.bl_idname, text="Decurve").action = 'DECURVE'
+        layout.separator()
+        layout.operator("dessin.simplify_crv", text="Simplify Curve")          # issue #43
+        layout.operator(DESSIN_OT_poly_edit.bl_idname, text="Toggle Spline Type").action = 'TOGGLE_TYPE'
 
 
 # ---- Lock / Unlock All / Unlock Selected (Rhino ; Freeze / Unfreeze dans 3ds Max) ----

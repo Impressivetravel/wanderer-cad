@@ -4,12 +4,12 @@ import bpy
 import time
 
 from .core import (
-    CPLANES, _CPLANE, _LANG_APPLIED, addon_globals, apply_language, lang, oneshot_clear, oneshot_keys, oneshot_reset, pref,
+    CPLANES, _CPLANE, _LANG_APPLIED, addon_globals, apply_language, lang, idle_tool_id, oneshot_clear, oneshot_keys, oneshot_reset, pref,
 )
 from .snapping import _LOD, _lod_timer, _perf_caches_clear
 from .drawing import (
     _apply_dimension_settings, _on_depsgraph_update, _on_load_clear, _on_load_post, _on_undo_redo, ensure_idle_tool,
-    ensure_statusbar_osnap, find_window_region,
+    ensure_statusbar_osnap, find_window_region, ui_mask_register, ui_mask_unregister,
 )
 from .base import DessinBase
 from .tools_draw import (
@@ -86,7 +86,7 @@ from .gumball import (
 from .offset_extrude import DESSIN_OT_extrude, DESSIN_OT_offset_surface
 from .trim import _CURVE_PTS, _TRIM_HL, curve_points_cb, trim_highlight_cb
 from .join_explode import (
-    DESSIN_OT_bar_click, DESSIN_OT_explode, DESSIN_OT_join, DESSIN_OT_pick_object, DESSIN_OT_rclick_run,
+    DESSIN_OT_bar_click, DESSIN_OT_explode, DESSIN_OT_join, DESSIN_OT_pick_object, DESSIN_OT_pick_run, DESSIN_OT_rclick_run,
     DESSIN_OT_show_edges, DESSIN_OT_tool_exit, DESSIN_OT_tool_from_edit, DESSIN_OT_trim, DESSIN_OT_trim_mode,
     _SHOWEDGES, _edit_variant, showedges_cb,
 )
@@ -170,6 +170,7 @@ from .views import (
 )
 from .cplane import DESSIN_OT_cplane, DESSIN_OT_cplane_elevation, _CP_DRAW, cplane_draw_cb
 from .pushpull import DESSIN_OT_pushpull, _AUTOCP, autocp_timer
+from .command_line import project_persp_timer
 from .rhino_commands import (
     DESSIN_OT_contour, DESSIN_OT_dup_border, DESSIN_OT_dup_edge, DESSIN_OT_dup_face_border, DESSIN_OT_extract_srf, DESSIN_OT_intersect,
     DESSIN_OT_merge_faces, DESSIN_OT_orient, DESSIN_OT_orient3pt, DESSIN_OT_pipe, DESSIN_OT_rebuild_srf, DESSIN_OT_section,
@@ -183,7 +184,7 @@ from .command_line import (
 )
 from .preferences import (
     DESSIN_AP_prefs, DESSIN_OT_alias_add, DESSIN_OT_alias_import_pgp, DESSIN_OT_alias_edit, DESSIN_OT_alias_remove, DESSIN_OT_apply_preset,
-    DESSIN_OT_prefs_reset, DESSIN_PG_alias, aliases_restore_soon,
+    DESSIN_OT_prefs_reset, DESSIN_OT_toolbar_fold, DESSIN_OT_toolbar_show, DESSIN_PG_alias, aliases_restore_soon,
 )
 from .command_line import alias_changed
 from .core import language_caches_clear
@@ -317,6 +318,7 @@ classes = (
     DESSIN_OT_trim,
     DESSIN_OT_tool_exit,
     DESSIN_OT_rclick_run,
+    DESSIN_OT_pick_run,
     DESSIN_OT_bar_click,
     DESSIN_OT_esc_select,
     DESSIN_OT_poly_edit,
@@ -489,7 +491,7 @@ classes = (
     DESSIN_PT_hatch,
     DESSIN_PT_blocks,
     DESSIN_OT_shortcuts_clear,
-    DESSIN_OT_prefs_reset,
+    DESSIN_OT_prefs_reset, DESSIN_OT_toolbar_fold, DESSIN_OT_toolbar_show,
     DESSIN_OT_alias_add,
     DESSIN_OT_alias_import_pgp,
     DESSIN_OT_alias_remove,
@@ -515,13 +517,18 @@ def _tool_list(mode):
     return ToolSelectPanelHelper._tool_class_from_space_type('VIEW_3D')._tools[mode]
 
 
+def _nav_flat(nav):
+    """Outils de `nav` : une classe, ou une liste de classes (un menu déroulant, comme Box et ses variantes)."""
+    return [x for c in nav for x in (c if isinstance(c, (list, tuple)) else (c,))]
+
+
 def _arrange_tools(mode, chain, head=(), nav=()):
     """Place nos outils juste après « Transformer », dans l'ordre voulu, avec leurs séparateurs.
     `head` (Select / Move + Lasso) va dans le même bloc que « Cursor », juste avant lui ; `nav` (Walk) juste après
     le menu de Select."""
     from bl_ui.space_toolsystem_common import ToolDef
     tools = _tool_list(mode)
-    ours = {id(cls._bl_tool) for cls, _ in list(chain) + list(head)} | {id(c._bl_tool) for c in nav}
+    ours = {id(cls._bl_tool) for cls, _ in list(chain) + list(head)} | {id(c._bl_tool) for c in _nav_flat(nav)}
     tools[:] = [t for t in tools if id(t) not in ours]
     if head:
         group = tuple(cls._bl_tool for cls, _ in head)
@@ -537,7 +544,7 @@ def _arrange_tools(mode, chain, head=(), nav=()):
                     break
         tools.insert(pos, group)
         for k, c in enumerate(nav):
-            tools.insert(pos + 1 + k, c._bl_tool)
+            tools.insert(pos + 1 + k, tuple(x._bl_tool for x in c) if isinstance(c, (list, tuple)) else c._bl_tool)
     idx = len(tools) - 1
     for k, t in enumerate(tools):
         if isinstance(t, ToolDef) and t.idname == "builtin.transform":
@@ -605,12 +612,75 @@ def _native_tool_hidden(idname):
 
 
 _TB_FILTER = {"orig": None, "cls": None}
+# outils retirés de la barre d'outils seulement : la ligne de commande et le panneau des outils les gardent
+TOOLBAR_HIDDEN = {"dessin.pipe_tool", "dessin.layout_tool"}    # Layout : la commande et les onglets sous la vue suffisent
+
+
+SWITCH_TOOL = "dessin.toolbar_switch"      # le W : barre des outils Wanderer / barre des outils de Blender
+_SWITCH = {"pending": False}
 
 
 def _toolbar_wanderer_ids():
     keep = set(_SELECT_TOOL_IDS)
     ids = {c.bl_idname for n, c in addon_globals().items() if n.startswith("DESSIN_TT_") and isinstance(c, type) and hasattr(c, "bl_idname")}
-    return ids - keep
+    return ids - keep - {SWITCH_TOOL}
+
+
+def toolbar_hidden_ids():
+    """Outils Wanderer décochés dans les préférences (Toolbar) : retirés de la barre seulement."""
+    raw = pref("toolbar_hidden") or ""
+    return {t for t in raw.split(",") if t}
+
+
+def _toolbar_ours_hidden():
+    """Outils Wanderer à ne pas montrer dans la barre : tous (barre de Blender, ou outils Wanderer désactivés), sinon ceux
+    décochés dans les préférences. Le W reste toujours, pour revenir."""
+    if pref("toolbar_blender"):
+        return _toolbar_wanderer_ids() | set(_SELECT_TOOL_IDS)
+    if not pref("show_toolbar_tools"):
+        return _toolbar_wanderer_ids()
+    return toolbar_hidden_ids() - {SWITCH_TOOL}
+
+
+def _toolbar_switch_fire():
+    """Le W vient d'être cliqué : la barre passe aux outils de l'autre jeu, et l'outil de repos de ce jeu devient actif."""
+    _SWITCH["pending"] = False
+    try:
+        prefs = bpy.context.preferences.addons[__package__].preferences
+        prefs.toolbar_blender = not prefs.toolbar_blender
+    except (KeyError, AttributeError, ReferenceError):
+        return None
+    wm = bpy.context.window_manager
+    for win in wm.windows:
+        for area in win.screen.areas:
+            if area.type != 'VIEW_3D':
+                continue
+            region = next((r for r in area.regions if r.type == 'WINDOW'), None)
+            try:
+                with bpy.context.temp_override(window=win, area=area, region=region):
+                    tool = win.workspace.tools.from_space_view3d_mode(bpy.context.mode, create=False)
+                    if tool is not None and tool.idname == SWITCH_TOOL:
+                        for name in (idle_tool_id(), "builtin.select_box"):
+                            try:
+                                bpy.ops.wm.tool_set_by_id(name=name, space_type='VIEW_3D')
+                                break
+                            except (RuntimeError, TypeError):
+                                continue
+            except (RuntimeError, TypeError, AttributeError, ReferenceError):
+                continue
+    _update_toolbar_filter()
+    return None
+
+
+def _toolbar_switch_watch(context):
+    """Appelé au dessin de la barre : si le W est l'outil actif (on vient de cliquer dessus), la bascule est lancée."""
+    try:
+        tool = context.workspace.tools.from_space_view3d_mode(context.mode, create=False)
+    except (AttributeError, ReferenceError, RuntimeError, TypeError):
+        return
+    if tool is not None and tool.idname == SWITCH_TOOL and not _SWITCH["pending"]:
+        _SWITCH["pending"] = True
+        bpy.app.timers.register(_toolbar_switch_fire, first_interval=0.0)
 
 
 def _install_toolbar_filter():
@@ -629,10 +699,15 @@ def _install_toolbar_filter():
             caller = inspect.currentframe().f_back
             if caller is None or caller.f_code.co_name != "draw_cls":
                 return items
-            ours = set() if pref("show_toolbar_tools") else _toolbar_wanderer_ids()
+            _toolbar_switch_watch(context)
+            ours = _toolbar_ours_hidden()
+            blender = pref("toolbar_blender")
         except (ValueError, AttributeError, KeyError):
             return items
-        hide = lambda n: n in ours or _native_tool_hidden(n)
+        if blender:                # barre de Blender : tous ses outils (sauf ceux d'animation), aucun outil Wanderer sauf le W
+            hide = lambda n: (bool(n) and n.startswith("dessin.") and n != SWITCH_TOOL) or n in {"builtin.breakdowner", "builtin.push", "builtin.relax"}
+        else:
+            hide = lambda n: n in ours or n in TOOLBAR_HIDDEN or _native_tool_hidden(n)
         out = []
         for it in items:
             if type(it) is tuple:      # un groupe ; un ToolDef est lui aussi un tuple nommé : ne pas le confondre
@@ -1197,7 +1272,7 @@ def register():
         if selection_cls is not None:
             lasso_cls._in_group = True        # Select / Move, Select Box, Select Circle et Lasso partagent un menu déroulant
             head = [(selection_cls, False)] + [(c, False) for c in extra] + [(lasso_cls, False)]
-        for cls, _sep in head + list(chain) + [(c, False) for c in nav]:
+        for cls, _sep in head + list(chain) + [(c, False) for c in _nav_flat(nav)]:
             bpy.utils.register_tool(cls, after={"builtin.transform"}, separator=False, group=False)
         _arrange_tools(mode, list(chain), head, nav)
 
@@ -1214,7 +1289,7 @@ def register():
          DESSIN_TT_rail_revolve, DESSIN_TT_loft, DESSIN_TT_sweep1, DESSIN_TT_sweep2],                                  # surfaces
         [DESSIN_TT_blend_srf, DESSIN_TT_match_srf, DESSIN_TT_fillet_srf, DESSIN_TT_chamfer_srf, DESSIN_TT_extend_srf, DESSIN_TT_split_iso,
          DESSIN_TT_untrim, DESSIN_TT_untrim_holes, DESSIN_TT_thicken, DESSIN_TT_cap, DESSIN_TT_shell],  # édition de surfaces
-        _between(DESSIN_TT_boite, DESSIN_TT_tore),                                                  # solides
+        _between(DESSIN_TT_boite, DESSIN_TT_tore),                  # solides : menus Box et Sphere (juste sous les courbes)
         _between(DESSIN_TT_subd_box, DESSIN_TT_subd_plane),                                         # SubD
         [DESSIN_TT_light_point, DESSIN_TT_light_spot, DESSIN_TT_light_sun, DESSIN_TT_light_area,
          DESSIN_TT_camera, DESSIN_TT_camera_target],                                                # lumières / caméras
@@ -1225,7 +1300,8 @@ def register():
     _groups[-1] = list(_groups[-1]) + RHINO_TOOLS.get("annotation", []) + LAYOUT_TOOLS     # Boundary... puis Layout, Detail
     # ordre dans la barre d'outils : les outils de déplacement (Move, Copy, Rotate, Scale, Mirror...) tout en haut,
     # juste sous les outils de sélection, puis les courbes, la modification, les surfaces...
-    _order = [1, 0] + list(range(2, len(_groups)))
+    # puis les solides (Box, Sphere : groupe 5), remontés juste sous Duplicate Border, avant la modification
+    _order = [1, 0, 5, 2, 3, 4] + list(range(6, len(_groups)))
     obj_chain = []
     for g in (_groups[i] for i in _order):
         for i, c in enumerate(g):
@@ -1240,12 +1316,14 @@ def register():
     edit_chain = [(_edit_of[c], sep) for c, sep in obj_chain if c in _edit_of]
     # commandes SubD : après les primitives SubD (outils propres au mode Objet / au mode Édition)
     _ko = [c for c, _s in obj_chain].index(DESSIN_TT_subd_plane) + 1
-    obj_chain[_ko:_ko] = [(c, i == 0 and gi == 0) for gi, grp in enumerate(_SUBD_OBJ_LIST) for i, c in enumerate(grp)]
+    # To SubD juste à côté de SubD Box, puis (séparateur) SubD Loft à côté de Symmetry
+    obj_chain[_ko:_ko] = [(c, i == 0 and gi == 1) for gi, grp in enumerate(_SUBD_OBJ_LIST) for i, c in enumerate(grp)]
     _ke = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_subd_plane]) + 1
     _sub_edit = [(c, i == 0 and gi == 0) for gi, grp in enumerate(_SUBD_EDIT_LIST) for i, c in enumerate(grp)]
     edit_chain[_ke:_ke] = _sub_edit
-    k_mir = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_miroir]) + 1
-    edit_chain.insert(k_mir, (DESSIN_TT_extrude, False))            # Extrude : mode édition seulement
+    # Extrude (faces du maillage, mode édition seulement) : à la place de l'extrusion du mode Objet, en tête du groupe des surfaces
+    k_ext = [c for c, _s in edit_chain].index(_edit_of[DESSIN_TT_extrude_crv])
+    edit_chain.insert(k_ext, (DESSIN_TT_extrude, False))
     _nav_edit = [_edit_variant(c) for c in RHINO_TOOLS["nav"]]           # Walk : aussi en mode édition
     register_set('OBJECT', DESSIN_TT_selection_boite, DESSIN_TT_selection_lasso, obj_chain, extra=(DESSIN_TT_selection_rect, DESSIN_TT_selection_cercle),
                  nav=RHINO_TOOLS["nav"])
@@ -1298,6 +1376,7 @@ def register():
     aliases_restore_soon()          # alias de l'utilisateur gardés d'une installation précédente
     register_sel_filter_keys()
     register_osnap_hold_keys()
+    ui_mask_register()                       # barre latérale : zones transparentes sous ses panneaux (#40)
     if _CMD["handle"] is None:
         _CMD["handle"] = bpy.types.SpaceView3D.draw_handler_add(cmd_bar_cb, (), 'WINDOW', 'POST_PIXEL')
     if _VBAR["handle"] is None:
@@ -1316,6 +1395,8 @@ def register():
     header_bars.register()                       # bouton des barres du bas, dans l'en-tête de la vue 3D
     if not bpy.app.timers.is_registered(autocp_timer):
         bpy.app.timers.register(autocp_timer, first_interval=0.5, persistent=True)
+    if not bpy.app.timers.is_registered(project_persp_timer):
+        bpy.app.timers.register(project_persp_timer, first_interval=0.5, persistent=True)
     from .gumball_handles import tool_gizmo_timer
     if not bpy.app.timers.is_registered(tool_gizmo_timer):
         bpy.app.timers.register(tool_gizmo_timer, first_interval=0.5, persistent=True)
@@ -1338,6 +1419,7 @@ def unregister():
     unregister_osnap_hold_keys()
     oneshot_reset()
     quad_reset()
+    ui_mask_unregister()
     if _CMD["handle"] is not None:
         try:
             bpy.types.SpaceView3D.draw_handler_remove(_CMD["handle"], 'WINDOW')
@@ -1390,6 +1472,8 @@ def unregister():
         _CP_DRAW["handle"] = None
     if bpy.app.timers.is_registered(autocp_timer):
         bpy.app.timers.unregister(autocp_timer)
+    if bpy.app.timers.is_registered(project_persp_timer):
+        bpy.app.timers.unregister(project_persp_timer)
     from . import header_bars
     header_bars.unregister()
     from .gumball_handles import tool_gizmo_timer, tool_gizmo_restore

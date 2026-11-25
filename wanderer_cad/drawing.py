@@ -990,7 +990,7 @@ def ensure_idle_tool():
                     if mode not in ('OBJECT', 'EDIT_MESH'):
                         continue
                     tool = win.workspace.tools.from_space_view3d_mode(mode, create=False)
-                    if tool is not None and tool.idname in _NATIVE_SELECT:
+                    if tool is not None and tool.idname in _NATIVE_SELECT and not pref("toolbar_blender"):
                         bpy.ops.wm.tool_set_by_id(name=IDLE_TOOL)
     except Exception:
         pass
@@ -1112,6 +1112,76 @@ def find_window_region(area, x, y):
         if r.type == 'WINDOW' and r.x <= x < r.x + r.width and r.y <= y < r.y + r.height:
             return r
     return None
+
+
+# ---- barre latérale (N) avec « Region Overlap » : seules les zones où des panneaux sont dessinés comptent comme interface
+# (issue #40). La région UI couvre toute la hauteur de la vue, mais sous ses panneaux elle est transparente : on y dessine
+# et on y clique comme dans la vue. À chaque dessin de la barre, on lit l'opacité de quelques colonnes de pixels.
+_UI_MASK = {"handle": None, "areas": {}}
+UI_MASK_COLS = (0.1, 0.3, 0.5, 0.7, 0.9)
+UI_MASK_STEP = 2
+
+
+def _ui_mask_cb():
+    try:
+        context = bpy.context
+        region, area = context.region, context.area
+        if region is None or area is None or not context.preferences.system.use_region_overlap:
+            return
+        w, h = region.width, region.height
+        if w < 4 or h < 4:
+            return
+        fb = gpu.state.active_framebuffer_get()
+        cols = []
+        for fx in UI_MASK_COLS:
+            x = min(w - 1, max(0, int(w * fx)))
+            buf = fb.read_color(x, 0, 1, h, 4, 0, 'UBYTE')
+            a = np.asarray(buf.to_list(), dtype=np.uint8).reshape(h, 4)[:, 3]
+            cols.append(a[::UI_MASK_STEP] > 8)
+        mask = np.stack(cols)
+        if mask.all():
+            # tout est opaque : la région n'a pas sa propre image transparente (dessin direct dans la fenêtre) ;
+            # on ne sait rien : la région entière reste de l'interface, comme avant
+            _UI_MASK["areas"].pop(area.as_pointer(), None)
+            return
+        _UI_MASK["areas"][area.as_pointer()] = (region.x, region.y, w, h, mask)
+    except Exception:
+        pass
+
+
+def ui_opaque_at(area, region, x, y):
+    """La souris (pixels de la fenêtre) est-elle sur un panneau de la barre latérale ? None : on ne sait pas."""
+    try:
+        m = _UI_MASK["areas"].get(area.as_pointer())
+    except (AttributeError, ReferenceError):
+        return None
+    if m is None:
+        return None
+    rx, ry, w, h, mask = m
+    if (rx, ry, w, h) != (region.x, region.y, region.width, region.height):
+        return None
+    lx, ly = x - rx, y - ry
+    if not (0 <= lx < w and 0 <= ly < h):
+        return False
+    ci = min(range(len(UI_MASK_COLS)), key=lambda i: abs(UI_MASK_COLS[i] * w - lx))
+    row = int(ly) // UI_MASK_STEP
+    lo, hi = max(0, row - 2), min(mask.shape[1], row + 3)          # quelques pixels de marge autour des panneaux
+    return bool(mask[ci, lo:hi].any())
+
+
+def ui_mask_register():
+    if _UI_MASK["handle"] is None:
+        _UI_MASK["handle"] = bpy.types.SpaceView3D.draw_handler_add(_ui_mask_cb, (), 'UI', 'POST_PIXEL')
+
+
+def ui_mask_unregister():
+    if _UI_MASK["handle"] is not None:
+        try:
+            bpy.types.SpaceView3D.draw_handler_remove(_UI_MASK["handle"], 'UI')
+        except (ValueError, RuntimeError):
+            pass
+        _UI_MASK["handle"] = None
+    _UI_MASK["areas"].clear()
 
 
 def main_window_region(area):

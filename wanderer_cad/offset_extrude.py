@@ -9,7 +9,7 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
-from .core import IDLE_FALLBACK, IDLE_TOOL, fmt_typed, last_typed, pref, typed_length, unit_info
+from .core import IDLE_FALLBACK, IDLE_TOOL, fmt_typed, idle_tool_id, last_typed, pref, typed_length, unit_info
 from .units_text import typing_add
 from .drawing import area_over_ui, find_window_region, get_shader, line_px, project_px, px_scale
 from .base import DessinBase
@@ -21,10 +21,41 @@ from .gumball import DESSIN_OT_gumball_extrude, GumballBase
 # Offset Surface (objet) et Extrude (mode édition)
 # --------------------------------------------------------------------------
 
-def offset_coords(obj, dist):
+def has_surface(o):
+    """Objet maillage avec des faces, y compris celles produites par ses modificateurs (extrusion avec History :
+    un profil en arêtes + Screw, sans aucune face dans le maillage lui-même)."""
+    if o.type != 'MESH':
+        return False
+    if len(o.data.polygons):
+        return True
+    if not o.modifiers:
+        return False
+    try:
+        return len(o.evaluated_get(bpy.context.evaluated_depsgraph_get()).data.polygons) > 0
+    except (AttributeError, RuntimeError, ReferenceError):
+        return False
+
+
+def surface_source(obj):
+    """(maillage à décaler, temporaire ?) : le maillage de l'objet, ou le résultat de ses modificateurs s'il en a
+    (ce que l'on voit à l'écran). Un maillage temporaire est à supprimer après usage."""
+    if not obj.modifiers:
+        return obj.data, False
+    try:
+        dg = bpy.context.evaluated_depsgraph_get()
+        me = bpy.data.meshes.new_from_object(obj.evaluated_get(dg), depsgraph=dg)
+    except (AttributeError, RuntimeError, ReferenceError):
+        return obj.data, False
+    if not len(me.polygons):
+        bpy.data.meshes.remove(me)
+        return obj.data, False
+    return me, True
+
+
+def offset_coords(obj, dist, me=None):
     """(coordonnées locales d'origine, coordonnées décalées de dist monde le long des normales).
     Chaque sommet est placé à la distance dist de toutes les faces qui l'entourent (angles vifs respectés)."""
-    me = obj.data
+    me = me if me is not None else obj.data
     nv, npoly = len(me.vertices), len(me.polygons)
     co = np.empty(nv * 3)
     me.vertices.foreach_get('co', co)
@@ -54,15 +85,23 @@ def offset_coords(obj, dist):
 
 
 def offset_surface_mesh(obj, dist, solid, both=False):
-    """Nouveau maillage : la surface de obj décalée de dist (signe = sens). solid : fermé en épaisseur ;
-    both + solid : épaisseur centrée sur la surface (de -|dist| à +|dist|)."""
-    me = obj.data
+    """Nouveau maillage : la surface de obj (telle qu'affichée, modificateurs compris) décalée de dist (signe = sens).
+    solid : fermé en épaisseur ; both + solid : épaisseur centrée sur la surface (de -|dist| à +|dist|)."""
+    me, temp = surface_source(obj)
+    try:
+        return _offset_surface_mesh(obj, me, dist, solid, both)
+    finally:
+        if temp:
+            bpy.data.meshes.remove(me)
+
+
+def _offset_surface_mesh(obj, me, dist, solid, both):
     if solid and both:
-        co, newco = offset_coords(obj, abs(dist))
-        _c, co = offset_coords(obj, -abs(dist))
+        co, newco = offset_coords(obj, abs(dist), me)
+        _c, co = offset_coords(obj, -abs(dist), me)
         dist = abs(dist)
     else:
-        co, newco = offset_coords(obj, dist)
+        co, newco = offset_coords(obj, dist, me)
     if not solid:
         out = me.copy()
         out.name = "Offset " + me.name
@@ -106,9 +145,11 @@ def offset_arrows(targets, limit=8):
     """[(position monde, normale monde)] : quelques flèches réparties sur les plus grandes faces."""
     cands = []
     for obj in targets:
-        me = obj.data
+        me, temp = surface_source(obj)
         n = len(me.polygons)
         if not n:
+            if temp:
+                bpy.data.meshes.remove(me)
             continue
         areas = np.empty(n)
         me.polygons.foreach_get('area', areas)
@@ -117,6 +158,8 @@ def offset_arrows(targets, limit=8):
         nor = np.empty(n * 3)
         me.polygons.foreach_get('normal', nor)
         cen, nor = cen.reshape(-1, 3), nor.reshape(-1, 3)
+        if temp:
+            bpy.data.meshes.remove(me)
         idx = np.where(areas >= 0.3 * areas.max())[0]
         if len(idx) > 300:
             idx = idx[::len(idx) // 300 + 1]
@@ -147,7 +190,7 @@ def back_to_idle():
     """Retour à Select / Move (Échap dans un outil de la barre)."""
     if not pref("auto_idle"):
         return
-    for name in (IDLE_TOOL, IDLE_FALLBACK):
+    for name in (idle_tool_id(), IDLE_FALLBACK):
         try:
             bpy.ops.wm.tool_set_by_id(name=name)
             return
@@ -213,12 +256,12 @@ class DESSIN_OT_offset_surface(bpy.types.Operator):
                 ro = region_2d_to_origin_3d(region, rv3d, m)
                 rv = region_2d_to_vector_3d(region, rv3d, m)
                 ok, _loc, _nor, _idx, ob, _mat = ray_cast_opaque(context, ro, rv, True)
-                hit = ob if ok and ob is not None and ob.type == 'MESH' else None
+                hit = ob if ok and ob is not None and has_surface(ob) else None
             except (AttributeError, RuntimeError, TypeError):
                 hit = None
         if hit is not None:
             return [hit]
-        return [o for o in context.selected_objects if o.type == 'MESH' and len(o.data.polygons)]
+        return [o for o in context.selected_objects if has_surface(o)]
 
     def header(self, context):
         unit = self.unit_label

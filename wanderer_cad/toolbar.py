@@ -421,6 +421,7 @@ DESSIN_TT_pyramide._in_group = True
 DESSIN_TT_pyramide_tronquee._in_group = True
 DESSIN_TT_tube._in_group = True
 DESSIN_TT_ellipsoide._in_group = True
+DESSIN_TT_sphere._in_group = True          # Sphere et ses variantes : dans le menu déroulant de Box
 DESSIN_TT_sphere_tronquee._in_group = True
 DESSIN_TT_tore._in_group = True
 
@@ -683,15 +684,22 @@ def _trim_tool_settings(context, layout, tool):
 
 
 DESSIN_TT_trim.draw_settings = _trim_tool_settings
+PICK_RUN_TOOLS = set()        # outils « désigner puis Entrée » : ils rendent la main à Select une fois la commande lancée
+
+
 def _pick_then_run_tool(name, idname, op, label, desc, hint):
     """Outil « on désigne les objets (clics), puis Entrée / Espace » : Join, Explode."""
     cls = _draw_tool_cls(name, idname, op, label, desc, hint, hover=False)
+    cmd = {"properties": [("cmd", op.split(".", 1)[1])]}
+    # Entrée / Espace / clic droit lancent la commande puis rendent la main à Select (issue #42) : l'outil ne reste pas armé,
+    # sinon le clic droit suivant relançait la commande au lieu d'ouvrir le menu contextuel
     cls.bl_keymap = (("dessin.pick_object", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
-                     (op, {"type": 'RET', "value": 'PRESS'}, None),
-                     (op, {"type": 'NUMPAD_ENTER', "value": 'PRESS'}, None),
-                     (op, {"type": 'SPACE', "value": 'PRESS'}, None),
-                     ("dessin.rclick_run", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, {"properties": [("cmd", op.split(".", 1)[1])]}),
+                     ("dessin.pick_run", {"type": 'RET', "value": 'PRESS'}, cmd),
+                     ("dessin.pick_run", {"type": 'NUMPAD_ENTER', "value": 'PRESS'}, cmd),
+                     ("dessin.pick_run", {"type": 'SPACE', "value": 'PRESS'}, cmd),
+                     ("dessin.rclick_run", {"type": 'RIGHTMOUSE', "value": 'PRESS'}, cmd),
                      ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None))
+    PICK_RUN_TOOLS.add(idname)
     return cls
 
 
@@ -735,7 +743,7 @@ for _t, _k in ((DESSIN_TT_subd_loft, "subdc_loft"), (DESSIN_TT_subd_sweep1, "sub
                (DESSIN_TT_subd_revolve, "subdc_revolve")):
     _t.dessin_icon = _k
     _t._in_group = _t is not DESSIN_TT_subd_loft
-_SUBD_OBJ_LIST.insert(0, [DESSIN_TT_subd_loft, DESSIN_TT_subd_sweep1, DESSIN_TT_subd_sweep2, DESSIN_TT_subd_revolve])
+_SUBD_OBJ_LIST.insert(1, [DESSIN_TT_subd_loft, DESSIN_TT_subd_sweep1, DESSIN_TT_subd_sweep2, DESSIN_TT_subd_revolve])   # barre : SubD Box | To SubD, puis SubD Loft | Symmetry
 DESSIN_TT_loft = _pick_then_run_tool(
     "DESSIN_TT_loft", "dessin.loft_tool", "dessin.loft", "Loft",
     "Creates a surface through curves: click them in order, then Enter (options: closed, straight / smooth, cap)",
@@ -900,8 +908,12 @@ DESSIN_TT_planar_srf = _pick_then_run_tool(
     "Click the closed planar curves (or select them first)  ·  Enter / Space: create  ·  Esc: leave")
 DESSIN_TT_edge_srf = _pick_then_run_tool(
     "DESSIN_TT_edge_srf", "dessin.edge_srf_tool", "dessin.edge_srf", "Edge Surface",
-    "Creates a surface from 2, 3 or 4 curves touching end to end: click the curves, then Enter / Space",
-    "Click 2, 3 or 4 curves  ·  Enter / Space: create  ·  Esc: leave")
+    "Creates a surface from 2, 3 or 4 edges, like EdgeSrf in Rhino: click curves or edges of surfaces; "
+    "it is made after the 4th edge, or press Enter / Space after 2 or 3",
+    "Click 2, 3 or 4 curves or surface edges  ·  Enter / Space: create  ·  C: whole border  ·  Backspace: undo  ·  Esc: leave")
+DESSIN_TT_edge_srf.bl_keymap = (("dessin.edge_srf", {"type": 'LEFTMOUSE', "value": 'PRESS'}, None),
+                                ("dessin.edge_srf", {"type": 'MOUSEMOVE', "value": 'ANY'}, None),
+                                ("dessin.tool_exit", {"type": 'ESC', "value": 'PRESS'}, None))
 DESSIN_TT_thicken = _pick_then_run_tool(
     "DESSIN_TT_thicken", "dessin.thicken_tool", "dessin.thicken", "Thicken",
     "Gives a thickness to surfaces, making solids: click the surfaces, Enter / Space, then the thickness and direction",
@@ -1114,11 +1126,17 @@ for _t, _k in ((DESSIN_TT_pipe, "pipe"), (DESSIN_TT_intersect, "intersect"), (DE
                (DESSIN_TT_orient, "orient"), (DESSIN_TT_orient3pt, "orient3pt"), (DESSIN_TT_slice, "slice"),
                (DESSIN_TT_walk, "walk")):
     _t.dessin_icon = _k
+DESSIN_TT_toolbar_switch = type("DESSIN_TT_toolbar_switch", (bpy.types.WorkSpaceTool,), {
+    "bl_space_type": 'VIEW_3D', "bl_context_mode": 'OBJECT', "bl_idname": "dessin.toolbar_switch",
+    "bl_label": "Wanderer / Blender Tools",
+    "bl_description": "Switches the toolbar between the Wanderer tools and Blender's own tools. Click again to come back",
+    "bl_icon": "ops.generic.select_box", "bl_widget": None, "bl_keymap": (), "dessin_icon": "wanderer",
+    "dessin_hint": "Click: Wanderer tools / Blender tools"})
 # famille de la barre d'outils -> boutons ajoutés à la fin de cette famille
 RHINO_TOOLS = {
     "curves": [DESSIN_TT_intersect, DESSIN_TT_section, DESSIN_TT_contour, DESSIN_TT_dup_border, DESSIN_TT_dup_face_border, DESSIN_TT_dup_edge],
     "transform": [DESSIN_TT_orient, DESSIN_TT_orient3pt],      # dans le menu déroulant d'Align
-    "nav": [DESSIN_TT_walk],                                  # juste à côté de Select
+    "nav": [DESSIN_TT_toolbar_switch, DESSIN_TT_walk],         # juste à côté de Select : outils Wanderer / Blender, Walk
     "modify": [DESSIN_TT_extend_crv, DESSIN_TT_break, DESSIN_TT_match_props, DESSIN_TT_merge_faces, DESSIN_TT_slice],
     "srf_edit": [DESSIN_TT_extract_srf, DESSIN_TT_unroll, DESSIN_TT_rebuild_srf],
     "solids": [DESSIN_TT_pipe],

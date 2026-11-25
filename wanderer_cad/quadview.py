@@ -55,7 +55,7 @@ QUAD_DISPLAY_ITEMS = (
 QUAD_COL_MAX = 0.25          # la colonne de la barre d'outils fait au plus ce quart de la largeur des 4 vues
 QUAD_STRIP_MAX = 0.2         # la bande de l'en-tête fait au plus ce cinquième de la hauteur des 4 vues
 QUAD_STRIP_PAD = 4           # pixels de vue laissés sous l'en-tête, dans la bande
-QUAD_UI_KEYS = ("show_region_header", "show_region_tool_header", "show_region_toolbar", "show_region_ui")
+QUAD_UI_KEYS = ("show_region_header", "show_region_tool_header", "show_region_toolbar", "show_region_ui", "show_gizmo_navigate")
 
 _QUAD = {"job": None, "hit": {}, "ui": {}, "shade": {}, "home": {}, "click": (None, 0.0), "cache": (None, {}),
          "focus": {}, "drawn": {}, "sync": {}, "colw": {}, "fit": None, "set": {}, "repair": None}
@@ -382,6 +382,25 @@ def quad_frame(screen, grid):
     return (x0, y0, max(r.x + r.width for r in rs) - x0, max(r.y + r.height for r in rs) - y0)
 
 
+def quad_seams(area, fr):
+    """Séparation entre les deux vues du bas des 4 vues, (x0, x1) dans le cadre des barres fr : les barres du bas, posées
+    sur l'ensemble des quatre, ne doivent pas être coupées là. () si on ne la trouve pas."""
+    grid = quad_grid_of(area)
+    if grid is None or fr is None:
+        return ()
+    try:
+        screen = area.id_data
+        bl, br = _area_by_ptr(screen, grid.get('BL')), _area_by_ptr(screen, grid.get('BR'))
+        rl = _win_region(bl) if bl is not None else None
+        rr = _win_region(br) if br is not None else None
+        if rl is None or rr is None:
+            return ()
+        x0, x1 = rl.x + rl.width - fr[0], rr.x - fr[0]
+    except (AttributeError, ReferenceError, RuntimeError):
+        return ()
+    return ((float(x0), float(x1)),) if x1 >= x0 else ()
+
+
 def quad_bars(area):
     """(vue active, cadre des barres, pointeurs des 4 vues) quand cette vue 3D fait partie de 4 vues ; None sinon."""
     grid = quad_grid_of(area)
@@ -594,6 +613,8 @@ def quad_ui_for(pos, orig, column=False, strip=False):
             "show_region_tool_header": pos == QUAD_HEADER and not strip and orig.get("show_region_tool_header", True),
             "show_region_toolbar": pos == QUAD_HEADER and not column and orig.get("show_region_toolbar", True),
             "show_region_ui": pos == QUAD_SIDEBAR and orig.get("show_region_ui", False),
+            # boutons de navigation (axes, zoom, main, caméra, grille) : masqués dans les 4 vues pour leur laisser la place
+            "show_gizmo_navigate": False,
             "show_text": False}
 
 

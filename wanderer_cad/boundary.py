@@ -144,6 +144,7 @@ class DESSIN_OT_boundary(DessinBase):
         self._mouse = None
         self.hilite = []
         self._made = 0
+        self._objs = []           # contours créés pendant la commande : ils restent tous sélectionnés (issue #38)
         self._rf = None
         return super().invoke(context, event)
 
@@ -173,6 +174,11 @@ class DESSIN_OT_boundary(DessinBase):
             rg = rg[:4] + ([rg[4][0]],) + rg[5:]
         made = region_to_curves(context, rg)
         self._made += len(made)
+        self._objs += [o.name for o in made]
+        for nm in self._objs:                  # clics successifs : les contours des zones précédentes restent sélectionnés
+            ob = bpy.data.objects.get(nm)
+            if ob is not None and ob.name in context.view_layer.objects:
+                ob.select_set(True)
         if made:
             try:
                 bpy.ops.ed.undo_push(message="Boundary")

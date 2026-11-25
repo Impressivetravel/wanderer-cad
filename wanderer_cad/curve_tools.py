@@ -94,6 +94,12 @@ class DESSIN_OT_simplify_crv(bpy.types.Operator):
 
     tolerance: bpy.props.FloatProperty(name="Tolerance", default=0.001, min=0.0, subtype='DISTANCE', unit='LENGTH',
                                        description="Largest distance allowed between the old and the new curve")
+    output: bpy.props.EnumProperty(
+        name="Result", default='KEEP',
+        items=(('KEEP', "Same type", "A smooth curve stays a smooth Bezier curve, a polyline stays a polyline"),
+               ('BEZIER', "Bezier", "Smooth Bezier curve with as few points as the tolerance allows"),
+               ('POLY', "Polyline", "Polyline with as few points as the tolerance allows")),
+        description="Type of the simplified curve (issue #43: the offset of a smooth curve can be turned back into a Bezier curve)")
 
     @classmethod
     def poll(cls, context):
@@ -105,16 +111,32 @@ class DESSIN_OT_simplify_crv(bpy.types.Operator):
             return {'CANCELLED'}
         return context.window_manager.invoke_props_dialog(self, width=260)
 
+    def draw(self, context):
+        col = self.layout.column()
+        col.prop(self, "tolerance")
+        col.prop(self, "output")
+
+    @staticmethod
+    def _smooth(o):
+        return any(sp.type == 'BEZIER' or (sp.type == 'NURBS' and sp.order_u > 2) for sp in o.data.splines)
+
     def execute(self, context):
+        from .edges import fit_bezier_path
         objs = _curve_targets(context)
         dg = context.evaluated_depsgraph_get()
         before = after = 0
         for o in objs:
             paths = object_paths(o, dg)
-            out = []
+            bez = self.output == 'BEZIER' or (self.output == 'KEEP' and o.type == 'CURVE' and self._smooth(o))
+            out, fits = [], []
             for P, closed in paths:
                 P = np.asarray(P, dtype=np.float64)
                 before += len(P)
+                fit = fit_bezier_path(P, closed, max(self.tolerance, 1e-7)) if bez else None
+                if fit:
+                    fits.append((fit, closed))
+                    after += len(fit)
+                    continue
                 if closed:
                     Q = np.vstack([P, P[:1]])
                     idx = _rdp(Q, self.tolerance)
@@ -125,10 +147,31 @@ class DESSIN_OT_simplify_crv(bpy.types.Operator):
                     keep = P
                 after += len(keep)
                 out.append((keep, closed))
-            if out:
-                _write_paths_as(o, out, 'POLY')
+            if out or fits:
+                if o.type == 'CURVE':
+                    _write_paths_as(o, out, 'POLY')
+                    _append_beziers(o, fits)
+                elif out:
+                    _write_paths_as(o, out, 'POLY')
         self.report({'INFO'}, f"{before} points -> {after} points")
         return {'FINISHED'}
+
+
+def _append_beziers(obj, fits):
+    """Ajoute à la courbe les Béziers ajustées [(points de fit_bezier_path, fermée)] (coordonnées monde)."""
+    inv = obj.matrix_world.inverted()
+    for fit, closed in fits:
+        sp = obj.data.splines.new('BEZIER')
+        sp.bezier_points.add(len(fit) - 1)
+        for bp, (co, hl, hr, sharp) in zip(sp.bezier_points, fit):
+            bp.handle_left_type = bp.handle_right_type = 'FREE'
+            bp.co = inv @ Vector(tuple(co))
+            bp.handle_left = inv @ Vector(tuple(hl))
+            bp.handle_right = inv @ Vector(tuple(hr))
+            if not sharp:
+                bp.handle_left_type = bp.handle_right_type = 'ALIGNED'
+        sp.use_cyclic_u = closed
+        sp.resolution_u = 12
 
 
 class DESSIN_OT_change_degree(bpy.types.Operator):

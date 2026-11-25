@@ -16,7 +16,7 @@ from .base import DessinBase
 from .subd import subd_modifier
 from .edges import build_edge_object
 from .selection import _project_region
-from .offset_extrude import back_to_idle, offset_surface_mesh
+from .offset_extrude import back_to_idle, has_surface, offset_surface_mesh
 from .trim import wire_paths
 from .surfaces import (
     _ProfileOp, _RevolveBody, _plane_of, align_sections, delete_objects, deselect_all_objects, grid_mesh,
@@ -447,98 +447,374 @@ class DESSIN_OT_subd_revolve(_RevolveBody):
         return None
 
 
-def edge_surface(curves, segments=24):
-    """2 courbes : surface réglée ; 3 ou 4 courbes bout à bout : carreau de Coons. Retourne ((V, F), message)."""
+def _chain_edges(curves, tol):
+    """Met les courbes bout à bout. Retourne (liste d'indices, liste de sens inversés, chaîne fermée ?) ou None.
+    On essaie chaque courbe comme départ : une chaîne en U commence par une de ses branches, pas par le milieu."""
+    k = len(curves)
+    best = None
+    for start in range(k):
+        for flip0 in (False, True):
+            order, flips = [start], [flip0]
+            ok = True
+            while len(order) < k:
+                c0 = curves[order[-1]]
+                end = c0[0] if flips[-1] else c0[-1]
+                cand = None
+                for j in range(k):
+                    if j in order:
+                        continue
+                    for fl in (False, True):
+                        c = curves[j]
+                        d = float(np.linalg.norm((c[-1] if fl else c[0]) - end))
+                        if cand is None or d < cand[0]:
+                            cand = (d, j, fl)
+                if cand[0] > tol:
+                    ok = False
+                    break
+                order.append(cand[1])
+                flips.append(cand[2])
+            if not ok:
+                continue
+            first = curves[order[0]]
+            last = curves[order[-1]]
+            gap = float(np.linalg.norm((first[-1] if flips[0] else first[0]) - (last[0] if flips[-1] else last[-1])))
+            closed = gap <= tol
+            if closed:
+                return order, flips, True
+            if best is None or gap < best[0]:
+                best = (gap, order, flips)
+    if best is None:
+        return None
+    return best[1], best[2], False
+
+
+def _side_points(c, exact, n):
+    """Points d'un côté : ceux du bord de surface tel quel (les arêtes se rejoignent ensuite exactement), sinon n+1 points
+    régulièrement répartis."""
+    return np.asarray(c, dtype=np.float64) if exact else resample_path(c, n)
+
+
+def _fit(P, n):
+    return P if len(P) == n + 1 else resample_path(P, n)
+
+
+def edge_surface(curves, segments=24, exact=None):
+    """Surface à partir de 2, 3 ou 4 bords, comme EdgeSrf de Rhino. Les bords sont des courbes ou des arêtes de surfaces
+    (exact[i] : on garde leurs points, pour que la nouvelle surface rejoigne exactement l'ancienne).
+    2 bords : surface réglée entre eux ; 3 bords bout à bout : triangle, ou, s'ils forment un U ouvert, le quatrième côté
+    est le segment droit qui ferme le U ; 4 bords bout à bout : carreau de Coons. Retourne ((V, F), message)."""
     curves = [np.asarray(c, dtype=np.float64) for c in curves]
+    exact = list(exact) if exact is not None else [False] * len(curves)
     k = len(curves)
     lens = [path_length(c, False) for c in curves]
     if min(lens) < 1e-9:
         return None, "A curve is too short"
     if k == 2:
         a, b = curves
+        ea, eb = exact
         if np.linalg.norm(a[0] - b[0]) + np.linalg.norm(a[-1] - b[-1]) > np.linalg.norm(a[0] - b[-1]) + np.linalg.norm(a[-1] - b[0]):
             b = b[::-1]
-        A, C = resample_path(a, segments), resample_path(b, segments)
+        if ea:
+            A = a
+            nu = len(a) - 1
+            C = b if eb and len(b) == len(a) else resample_path(b, nu)
+        elif eb:
+            C = b
+            nu = len(b) - 1
+            A = resample_path(a, nu)
+        else:
+            nu = segments
+            A, C = resample_path(a, nu), resample_path(b, nu)
         rows = np.stack([(1 - v) * A + v * C for v in np.linspace(0.0, 1.0, 3)])
         return grid_mesh(rows, False, False, False), ""
     if k not in (3, 4):
-        return None, "Edge Surface needs 2, 3 or 4 curves"
+        return None, "Edge Surface needs 2, 3 or 4 edges"
     tol = 0.02 * max(lens)
-    chain = [curves[0]]
-    left = list(range(1, k))
-    while left:
-        end = chain[-1][-1]
-        best = None
-        for j in left:
-            for flip in (False, True):
-                c = curves[j][::-1] if flip else curves[j]
-                d = float(np.linalg.norm(c[0] - end))
-                if best is None or d < best[0]:
-                    best = (d, j, c)
-        if best[0] > tol:
-            return None, "The curves must touch end to end"
-        chain.append(best[2])
-        left.remove(best[1])
-    if float(np.linalg.norm(chain[-1][-1] - chain[0][0])) > tol:
-        return None, "The curves must form a closed chain of 3 or 4 edges"
-    la = (path_length(chain[0], False) + (path_length(chain[2], False) if k == 4 else 0.0)) / (2 if k == 4 else 1)
-    lb = (path_length(chain[1], False) + (path_length(chain[3], False) if k == 4 else 0.0)) / (2 if k == 4 else 1)
+    found = _chain_edges(curves, tol)
+    if found is None:
+        return None, "The edges must touch end to end"
+    order, flips, closed = found
+    chain = [curves[i][::-1] if f else curves[i] for i, f in zip(order, flips)]
+    ex = [exact[i] for i in order]
+    if not closed:
+        if k == 4:
+            return None, "The 4 edges must form a closed loop"
+        # U ouvert : le segment droit entre les deux bouts libres ferme le carreau (4 côtés)
+        chain.append(np.array([chain[-1][-1], chain[0][0]]))
+        ex.append(False)
+        k = 4
     if k == 3:
-        lb = max(lb, path_length(chain[2], False))
-    nu = int(max(2, segments))
-    nv = int(min(400, max(2, round(segments * lb / max(la, 1e-9)))))
-    A = resample_path(chain[0], nu)
-    B = resample_path(chain[1], nv)
-    if k == 4:
-        C = resample_path(chain[2][::-1], nu)
-        D = resample_path(chain[3][::-1], nv)
-    else:
+        la = path_length(chain[0], False)
+        lb = max(path_length(chain[1], False), path_length(chain[2], False))
+        nu = len(chain[0]) - 1 if ex[0] else int(max(2, segments))
+        nv = (len(chain[1]) - 1 if ex[1] else len(chain[2]) - 1 if ex[2] else
+              int(min(400, max(2, round(nu * lb / max(la, 1e-9))))))
+        A = _side_points(chain[0], ex[0], nu)
+        B = _fit(_side_points(chain[1], ex[1], nv), nv)
+        D = _fit(_side_points(chain[2][::-1], ex[2], nv), nv)
         C = np.tile(B[-1], (nu + 1, 1))
-        D = resample_path(chain[2][::-1], nv)
+    else:
+        la = 0.5 * (path_length(chain[0], False) + path_length(chain[2], False))
+        lb = 0.5 * (path_length(chain[1], False) + path_length(chain[3], False))
+        if ex[0] or ex[2]:
+            nu = len(chain[0]) - 1 if ex[0] else len(chain[2]) - 1
+        else:
+            nu = int(max(2, segments))
+        if ex[1] or ex[3]:
+            nv = len(chain[1]) - 1 if ex[1] else len(chain[3]) - 1
+        else:
+            nv = int(min(400, max(2, round(nu * lb / max(la, 1e-9)))))
+        A = _fit(_side_points(chain[0], ex[0], nu), nu)
+        B = _fit(_side_points(chain[1], ex[1], nv), nv)
+        C = _fit(_side_points(chain[2][::-1], ex[2], nu), nu)
+        D = _fit(_side_points(chain[3][::-1], ex[3], nv), nv)
     p00, p10, p01, p11 = A[0], A[-1], C[0], C[-1]
-    rows = []
-    for j in range(nv + 1):
-        v = j / nv
-        row = []
-        for i in range(nu + 1):
-            u = i / nu
-            S = ((1 - v) * A[i] + v * C[i] + (1 - u) * D[j] + u * B[j]
-                 - ((1 - u) * (1 - v) * p00 + u * (1 - v) * p10 + (1 - u) * v * p01 + u * v * p11))
-            row.append(S)
-        rows.append(row)
-    return grid_mesh(np.array(rows), False, False, False), ""
+    u = np.linspace(0.0, 1.0, len(A))[None, :, None]
+    v = np.linspace(0.0, 1.0, len(B))[:, None, None]
+    S = ((1 - v) * A[None, :, :] + v * C[None, :, :] + (1 - u) * D[:, None, :] + u * B[:, None, :]
+         - ((1 - u) * (1 - v) * p00 + u * (1 - v) * p10 + (1 - u) * v * p01 + u * v * p11))
+    return grid_mesh(S, False, False, False), ""
+
+
+_EDGESRF = {"on": False, "last": None, "warned": 0.0}
+EDGESRF_COLORS = ((1.0, 0.35, 0.25, 1.0), (0.25, 0.8, 1.0, 1.0), (0.4, 0.9, 0.35, 1.0), (0.85, 0.45, 1.0, 1.0))
+
+
+def edgesrf_draw_cb(op):
+    """Surligne le bord survolé et les bords déjà choisis (une couleur par bord)."""
+    try:
+        layers = [((1.0, 0.85, 0.2, 1.0), 5.0, op.hover_pts())]
+        layers += [(EDGESRF_COLORS[i % 4], 4.0, op.pick_pts(i)) for i in range(len(op.picks))]
+    except (AttributeError, ReferenceError, RuntimeError):
+        return
+    shader = get_shader('3D')
+    shader.bind()
+    gpu.state.blend_set('ALPHA')
+    gpu.state.depth_test_set('NONE')
+    for col, w, pts in layers:
+        if not pts:
+            continue
+        gpu.state.line_width_set(w)
+        shader.uniform_float("color", col)
+        batch_for_shader(shader, 'LINES', {"pos": pts}).draw(shader)
+    gpu.state.line_width_set(1.0)
 
 
 class DESSIN_OT_edge_srf(_ProfileOp, bpy.types.Operator):
     bl_idname = "dessin.edge_srf"
     bl_label = "Edge Surface"
-    bl_description = ("Creates a surface from 2, 3 or 4 curves touching end to end: click the curves, then Enter / Space")
+    bl_description = ("Creates a surface from 2, 3 or 4 edges, like EdgeSrf in Rhino: click curves or edges of surfaces "
+                      "(one side of the border per click; C: the whole border). It is made after the 4th edge, "
+                      "or press Enter / Space after 2 or 3")
     bl_options = {'REGISTER', 'UNDO'}
 
     segments: bpy.props.IntProperty(name="Segments", default=24, min=2, max=400,
-                                    description="Number of subdivisions along the first edge")
-    delete_input: bpy.props.BoolProperty(name="Delete input", default=False)
+                                    description="Number of subdivisions along the first edge (edges of surfaces keep their own points)")
+    delete_input: bpy.props.BoolProperty(name="Delete input curves", default=False,
+                                         description="Deletes the curves used (surfaces whose edges were used are kept)")
 
+    # ---- choix des bords, un clic par bord ----
     def invoke(self, context, event):
-        return self.execute(context)
+        if _EDGESRF["on"]:
+            return {'CANCELLED', 'PASS_THROUGH'}
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS' and context.area is not None and cmd_click_idle(context, event):
+            return {'CANCELLED'}
+        region = find_window_region(context.area, event.mouse_x, event.mouse_y) if context.area else None
+        if region is None and event.type == 'MOUSEMOVE':
+            return {'CANCELLED', 'PASS_THROUGH'}
+        if context.area is None or context.area.type != 'VIEW_3D':
+            return self.execute(context)
+        self.area = context.area
+        self.region = region or next((r for r in context.area.regions if r.type == 'WINDOW'), None)
+        if self.region is None:
+            return {'CANCELLED'}
+        self.loops = _blend_collect(context)
+        if not self.loops:
+            msg = "Edge Surface: no curve or open surface edge found"
+            if event.type == 'MOUSEMOVE':
+                if time.monotonic() - _EDGESRF["warned"] > 6.0:
+                    _EDGESRF["warned"] = time.monotonic()
+                    cmd_notice(msg)
+                return {'CANCELLED', 'PASS_THROUGH'}
+            return nothing_done(self, msg)
+        self.sides = [loop_sides(l['P'], l['closed']) for l in self.loops]
+        segA, segB, lid, sid = [], [], [], []
+        for li, l in enumerate(self.loops):
+            P = np.asarray(l['P'], dtype=np.float64)
+            n = len(P)
+            nseg = n if l['closed'] else n - 1
+            segA.append(P[:nseg])
+            segB.append(P[(np.arange(nseg) + 1) % n])
+            lid.append(np.full(nseg, li))
+            sid.append(np.arange(nseg))
+        self.SA, self.SB = np.vstack(segA), np.vstack(segB)
+        self.LID, self.SID = np.concatenate(lid), np.concatenate(sid)
+        self.picks = []
+        self.chain = False
+        self.hover = None
+        self.mouse = (event.mouse_x - self.region.x, event.mouse_y - self.region.y)
+        # courbes déjà sélectionnées (2 à 4) : elles comptent comme bords choisis, comme dans Rhino
+        pre = [o.name for o in ordered_selection(context) if o.type == 'CURVE' or (o.type == 'MESH' and not len(o.data.polygons))]
+        if 2 <= len(pre) <= 4:
+            for nm in pre:
+                for li, l in enumerate(self.loops):
+                    if l['obj'] == nm and l['out'] is None:
+                        n = len(l['P'])
+                        self.picks.append({'li': li, 'segs': set(range(n if l['closed'] else n - 1))})
+                        break
+        _EDGESRF["on"] = True
+        self.handle = bpy.types.SpaceView3D.draw_handler_add(edgesrf_draw_cb, (self,), 'WINDOW', 'POST_VIEW')
+        context.window_manager.modal_handler_add(self)
+        if len(self.picks) == 4:
+            return self.build(context)
+        self.update_hover()
+        if event.type == 'LEFTMOUSE' and event.value == 'PRESS':
+            self.click(event)
+            if len(self.picks) == 4:
+                return self.build(context)
+        self.prompt()
+        return {'RUNNING_MODAL'}
+
+    def prompt(self):
+        n = len(self.picks)
+        txt = (f"Edge Surface: click edge {n + 1} of 2, 3 or 4" + ("  ·  Enter: create" if n >= 2 else "") +
+               f"   [ChainEdges (whole border): {'Yes' if self.chain else 'No'} (C)  ·  Backspace: undo the last edge  ·  Esc: cancel]")
+        set_prompt(self.area, txt)
+
+    def end_modal(self, context):
+        if getattr(self, "handle", None) is not None:
+            bpy.types.SpaceView3D.draw_handler_remove(self.handle, 'WINDOW')
+            self.handle = None
+        _EDGESRF["on"] = False
+        set_prompt(self.area, "")
+        try:
+            self.area.tag_redraw()
+        except (AttributeError, ReferenceError):
+            pass
+
+    def segs_of(self, li, si):
+        l = self.loops[li]
+        n = len(l['P'])
+        nseg = n if l['closed'] else n - 1
+        if self.chain or l['out'] is None:
+            return set(range(nseg))             # une courbe se prend entière ; ChainEdges : tout le bord
+        side = self.sides[li]
+        if si >= len(side):
+            return {si}
+        return set(np.nonzero(side == side[si])[0].tolist())
+
+    def seg_points(self, li, segs):
+        l = self.loops[li]
+        P = np.asarray(l['P'], dtype=np.float64)
+        n = len(P)
+        pts = []
+        for s_ in sorted(segs):
+            pts.append(tuple(P[s_]))
+            pts.append(tuple(P[(s_ + 1) % n]))
+        return pts
+
+    def hover_pts(self):
+        if self.hover is None:
+            return []
+        li, si = self.hover
+        return self.seg_points(li, self.segs_of(li, si))
+
+    def pick_pts(self, i):
+        p = self.picks[i]
+        return self.seg_points(p['li'], p['segs'])
+
+    def click(self, event):
+        self.mouse = (event.mouse_x - self.region.x, event.mouse_y - self.region.y)
+        self.update_hover()
+        if self.hover is None:
+            return
+        li, si = self.hover
+        segs = self.segs_of(li, si)
+        for p in self.picks:
+            if p['li'] == li and p['segs'] == segs:
+                return                          # déjà choisi
+        self.picks.append({'li': li, 'segs': set(segs)})
+
+    def modal(self, context, event):
+        et, ev = event.type, event.value
+        try:
+            self.area.tag_redraw()
+        except ReferenceError:
+            self.end_modal(context)
+            return {'CANCELLED'}
+        if et == 'ESC' and ev == 'PRESS':
+            self.end_modal(context)
+            back_to_idle()
+            return {'CANCELLED'}
+        if et == 'MOUSEMOVE':
+            self.mouse = (event.mouse_x - self.region.x, event.mouse_y - self.region.y)
+            self.update_hover()
+            return {'PASS_THROUGH'}
+        if et == 'LEFTMOUSE' and ev == 'PRESS':
+            if event.alt or event.oskey:
+                return {'PASS_THROUGH'}
+            if find_window_region(self.area, event.mouse_x, event.mouse_y) is None or cmd_hit(self.area, event.mouse_x, event.mouse_y) is not None:
+                return {'PASS_THROUGH'}
+            self.click(event)
+            if len(self.picks) == 4:
+                return self.build(context)
+            self.prompt()
+            return {'RUNNING_MODAL'}
+        if et == 'C' and ev == 'PRESS' and not (event.ctrl or event.alt or event.oskey):
+            self.chain = not self.chain
+            self.prompt()
+            return {'RUNNING_MODAL'}
+        if et == 'BACK_SPACE' and ev == 'PRESS':
+            if self.picks:
+                self.picks.pop()
+            self.prompt()
+            return {'RUNNING_MODAL'}
+        if et in {'RET', 'NUMPAD_ENTER', 'SPACE'} and ev == 'PRESS':
+            if len(self.picks) < 2:
+                self.report({'INFO'}, "Click at least 2 edges")
+                return {'RUNNING_MODAL'}
+            return self.build(context)
+        return {'PASS_THROUGH'}
+
+    def build(self, context):
+        edges = []
+        for p in self.picks:
+            l = self.loops[p['li']]
+            run = _blend_run(l, p['segs'])
+            if run is None:
+                continue
+            P = run[0]
+            if l['closed'] and len(p['segs']) == (len(l['P'])):
+                P = np.vstack([P, P[:1]]) if not np.allclose(P[0], P[-1]) else P
+            edges.append((P, l['out'] is not None, l['obj']))
+        self.end_modal(context)
+        _EDGESRF["last"] = edges
+        res = self.execute(context)
+        if 'FINISHED' in res:
+            idle_tool()
+        return res
 
     def execute(self, context):
-        dg = context.evaluated_depsgraph_get()
-        objs, profs = self.profiles(context)
-        if len(profs) < 2:
-            self.report({'INFO'}, "Click 2, 3 or 4 curves, then Enter")
+        edges = _EDGESRF["last"]
+        if not edges:
+            # sans choix interactif (lancée depuis un script) : les courbes sélectionnées, dans l'ordre des clics
+            objs, profs = self.profiles(context)
+            edges = [(np.asarray(pr[0], dtype=np.float64), False, o.name) for o, pr in zip(objs, profs)]
+        if len(edges) < 2:
+            self.report({'INFO'}, "Click 2, 3 or 4 curves or surface edges")
             return {'CANCELLED'}
-        if len(profs) > 4:
-            self.report({'WARNING'}, "Edge Surface works with 2 to 4 curves")
+        if len(edges) > 4:
+            self.report({'WARNING'}, "Edge Surface works with 2 to 4 edges")
             return {'CANCELLED'}
-        built, msg = edge_surface([p[0] for p in profs], self.segments)
+        built, msg = edge_surface([e[0] for e in edges], self.segments, [e[1] for e in edges])
         if built is None:
             self.report({'WARNING'}, msg)
             return {'CANCELLED'}
         V, F = built
         out = mesh_object_from_arrays(context, "Edge Surface", V, F, np.asarray(V).mean(axis=0), False)
         if self.delete_input:
-            delete_objects(objs)
+            curves = {e[2] for e in edges if not e[1]}
+            delete_objects([bpy.data.objects[n] for n in curves if n in bpy.data.objects and n != out.name])
         deselect_all_objects(context)
         out.select_set(True)
         context.view_layer.objects.active = out
@@ -563,7 +839,7 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
         description="Keeps the surface and adds a Solidify modifier: the thickness can be changed later in the Modifiers tab")
 
     def invoke(self, context, event):
-        if not [o for o in context.selected_objects if o.type == 'MESH' and len(o.data.polygons)]:
+        if not [o for o in context.selected_objects if has_surface(o)]:
             self.report({'INFO'}, "Click the surfaces to thicken, then Enter")
             return {'CANCELLED'}
         return context.window_manager.invoke_props_dialog(self, width=300)
@@ -576,7 +852,7 @@ class DESSIN_OT_thicken(_ProfileOp, bpy.types.Operator):
         col.prop(self, "history")
 
     def execute(self, context):
-        targets = [o for o in context.selected_objects if o.type == 'MESH' and len(o.data.polygons)]
+        targets = [o for o in context.selected_objects if has_surface(o)]
         if not targets:
             self.report({'INFO'}, "Click the surfaces to thicken, then Enter")
             return {'CANCELLED'}
@@ -1672,6 +1948,9 @@ class DESSIN_OT_blend_srf(_ProfileOp, bpy.types.Operator):
         return {'FINISHED'}
 
 
+DESSIN_OT_edge_srf.update_hover = DESSIN_OT_blend_srf.update_hover      # même survol des arêtes que Blend Surface
+
+
 def _closest_on_polyline(pt, P):
     """Point le plus proche de pt sur la polyligne P (n,3)."""
     a, b = P[:-1], P[1:]
@@ -1680,6 +1959,167 @@ def _closest_on_polyline(pt, P):
     t = np.clip(((pt - a) * ab).sum(axis=1) / ll, 0.0, 1.0)
     q = a + ab * t[:, None]
     return q[((q - pt) ** 2).sum(axis=1).argmin()]
+
+
+def _loop_sides(loop, corner_deg=40.0):
+    """Côtés d'un bord, coupé à ses angles vifs (un rectangle a quatre côtés, un disque un seul) :
+    [{'pos': positions dans loop['P'], 'P': points, 'out': direction sortante de chaque segment (ou None), 'closed': bool}]"""
+    P = loop['P']
+    n = len(P)
+    closed = loop['closed']
+    cos_thr = math.cos(math.radians(corner_deg))
+    seg_dir = []
+    nseg = n if closed else n - 1
+    for i in range(nseg):
+        d = P[(i + 1) % n] - P[i]
+        ln = float(np.linalg.norm(d))
+        seg_dir.append(d / ln if ln > 1e-12 else np.zeros(3))
+    corners = []
+    rng = range(n) if closed else range(1, n - 1)
+    for i in rng:
+        d0, d1 = seg_dir[(i - 1) % nseg], seg_dir[i % nseg]
+        if float(np.dot(d0, d1)) < cos_thr:
+            corners.append(i)
+    out = loop['out']
+
+    def side(pos, cl=False):
+        segs = pos if cl else pos[:-1]
+        return {'pos': pos, 'P': P[pos], 'closed': cl,
+                'out': (np.array([out[k % nseg] for k in segs]) if out is not None else None)}
+
+    if closed:
+        if not corners:
+            return [side(list(range(n)), True)]
+        res = []
+        for k, c in enumerate(corners):
+            e = corners[(k + 1) % len(corners)]
+            ln = (e - c) % n or n
+            res.append(side([(c + j) % n for j in range(ln + 1)]))
+        return res
+    cuts = [0] + corners + [n - 1]
+    return [side(list(range(cuts[k], cuts[k + 1] + 1))) for k in range(len(cuts) - 1)]
+
+
+def _mean_gap(A, B):
+    """Distance moyenne des points de A au plus proche point de B."""
+    tot = 0.0
+    for s in range(0, len(A), 256):
+        blk = A[s:s + 256]
+        tot += float(np.sqrt(((blk[:, None, :] - B[None, :, :]) ** 2).sum(axis=2)).min(axis=1).sum())
+    return tot / max(1, len(A))
+
+
+def _arc_params(P, closed=False):
+    """Abscisses curvilignes normalisées (0 → 1) des points d'une polyligne (fermée : le retour au départ compte)."""
+    Q = np.vstack([P, P[:1]]) if closed else P
+    s = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(Q, axis=0), axis=1))])
+    L = s[-1] if s[-1] > 1e-12 else 1.0
+    return s[:len(P)] / L, s / L
+
+
+def _point_at(Q, sq, t):
+    """Point de la polyligne Q (abscisses sq, 0 → 1) à l'abscisse t, et l'indice de son segment."""
+    k = int(np.clip(np.searchsorted(sq, t, side='right') - 1, 0, len(Q) - 2))
+    span = sq[k + 1] - sq[k]
+    u = (t - sq[k]) / span if span > 1e-12 else 0.0
+    return Q[k] + (Q[k + 1] - Q[k]) * u, k
+
+
+def match_edge_points(A, a_closed, B, b_out, b_closed, mode='EDGE'):
+    """Nouvelles positions des points A (bord à modifier) posés sur le bord cible B, et direction sortante de la cible
+    en chacun (ou None). EDGE : le bord entier va sur le bord cible entier, d'un bout à l'autre, avec le même
+    espacement relatif (comme Rhino) ; CLOSEST : chaque point va au point le plus proche de la cible."""
+    B = np.asarray(B, dtype=np.float64)
+    bo = None if b_out is None else np.asarray(b_out, dtype=np.float64)
+    if b_closed:                                   # boucle cible : on la ferme pour la parcourir
+        B = np.vstack([B, B[:1]])
+    if mode == 'EDGE':
+        if a_closed and b_closed:
+            # deux boucles : départ de la cible au plus près du premier point, sens qui suit la boucle à modifier
+            k0 = int(((B[:-1] - A[0]) ** 2).sum(axis=1).argmin())
+            core = B[:-1]
+            oc = bo
+            best = None
+            for rev in (False, True):
+                C = np.roll(core, -k0, axis=0)
+                O = None if oc is None else np.roll(oc, -k0, axis=0)
+                if rev:
+                    m = len(C)
+                    C = np.vstack([C[:1], C[1:][::-1]])
+                    O = None if O is None else O[[(-k - 1) % m for k in range(m)]]
+                Q = np.vstack([C, C[:1]])
+                _ta, _ = _arc_params(A, True)
+                _tq, sq = _arc_params(C, True)
+                probe = A[len(A) // 4]
+                q, _k = _point_at(Q, sq, _ta[len(A) // 4])
+                d = float(np.linalg.norm(probe - q))
+                if best is None or d < best[0]:
+                    best = (d, Q, sq, O)
+            _d, Q, sq, O = best
+            ta, _ = _arc_params(A, True)
+        else:
+            Q = B
+            O = bo
+            if float(np.linalg.norm(A[0] - Q[0]) + np.linalg.norm(A[-1] - Q[-1])) > \
+               float(np.linalg.norm(A[0] - Q[-1]) + np.linalg.norm(A[-1] - Q[0])):
+                Q = Q[::-1]
+                O = None if O is None else O[::-1]
+            ta, _ = _arc_params(A, False)
+            _tq, sq = _arc_params(Q, False)
+        pts, dirs = [], []
+        for t in ta:
+            q, k = _point_at(Q, sq, float(t))
+            pts.append(q)
+            dirs.append(None if O is None else O[min(k, len(O) - 1)])
+        return np.array(pts), dirs
+    a, b = B[:-1], B[1:]
+    ab = b - a
+    ll = np.maximum((ab * ab).sum(axis=1), 1e-24)
+    pts, dirs = [], []
+    for p in A:
+        t = np.clip(((p - a) * ab).sum(axis=1) / ll, 0.0, 1.0)
+        q = a + ab * t[:, None]
+        k = int(((q - p) ** 2).sum(axis=1).argmin())
+        pts.append(q[k])
+        dirs.append(None if bo is None else bo[min(k, len(bo) - 1)])
+    return np.array(pts), dirs
+
+
+def spread_displacement(me, disp, keep=()):
+    """Étend en douceur le déplacement des sommets de `disp` ({id: vecteur}) au reste du maillage : il décroît avec la
+    distance (en arêtes) jusqu'à zéro sur la partie la plus éloignée, qui ne bouge pas. Retourne {id: vecteur}."""
+    nv = len(me.vertices)
+    adj = [[] for _ in range(nv)]
+    for e in me.edges:
+        u, v = e.vertices
+        adj[u].append(v)
+        adj[v].append(u)
+    hop = [-1] * nv
+    origin = [-1] * nv
+    front = list(disp)
+    for v in front:
+        hop[v] = 0
+        origin[v] = v
+    while front:
+        nxt = []
+        for u in front:
+            for w in adj[u]:
+                if hop[w] < 0:
+                    hop[w] = hop[u] + 1
+                    origin[w] = origin[u]
+                    nxt.append(w)
+        front = nxt
+    H = max(hop) if hop else 0
+    res = {}
+    if H <= 0:
+        return res
+    for v in range(nv):
+        if hop[v] <= 0 or v in keep:
+            continue
+        x = 1.0 - hop[v] / float(H)
+        w = x * x * (3.0 - 2.0 * x)                # démarre tangent à l'ancienne surface, s'annule au bout
+        res[v] = disp[origin[v]] * w
+    return res
 
 
 class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
@@ -1692,6 +2132,14 @@ class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
     continuity: bpy.props.EnumProperty(name="Continuity", default='POSITION',
                                        items=(('POSITION', "Position", "The edge touches the target edge"),
                                               ('TANGENT', "Tangent", "The next row of points also follows the target surface")))
+    match: bpy.props.EnumProperty(name="Match", default='EDGE',
+                                  items=(('EDGE', "Whole edge", "The edge goes onto the whole target edge, end to end, "
+                                                                "keeping the spacing of its points"),
+                                         ('CLOSEST', "Closest points", "Each point of the edge goes to the closest point "
+                                                                       "of the target edge")))
+    smooth: bpy.props.BoolProperty(name="Smooth into the surface", default=True,
+                                   description="The rest of the surface follows the moved edge smoothly; the far side "
+                                               "stays in place. Off: only the edge (and the tangent row) move")
 
     def invoke(self, context, event):
         objs = ordered_selection(context)
@@ -1701,7 +2149,10 @@ class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
         return context.window_manager.invoke_props_dialog(self, width=280)
 
     def draw(self, context):
-        self.layout.prop(self, "continuity", text="")
+        col = self.layout.column()
+        col.prop(self, "continuity", text="")
+        col.prop(self, "match", text="")
+        col.prop(self, "smooth")
 
     def execute(self, context):
         objs = ordered_selection(context)
@@ -1715,26 +2166,25 @@ class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
         if not loops or not cands:
             self.report({'WARNING'}, "No open edge found")
             return {'CANCELLED'}
+        sides_a = [(li, sd) for li, l in enumerate(loops) for sd in _loop_sides(l)]
+        sides_b = [sd for l in cands for sd in _loop_sides(l)]
         allp = np.vstack([l['P'] for l in loops + cands])
         diag = float(np.linalg.norm(allp.max(axis=0) - allp.min(axis=0))) or 1.0
-        step = diag / 250.0
-        dd = [_densify(l['P'], l['closed'], step) for l in cands]
+        step = diag / 200.0
+        dA = [_densify(sd['P'], sd['closed'], step) for _li, sd in sides_a]
+        dB = [_densify(sd['P'], sd['closed'], step) for sd in sides_b]
         best = None
-        for i, l in enumerate(loops):
-            A = _densify(l['P'], l['closed'], step)
-            for j, B in enumerate(dd):
-                d = float(np.sqrt(((A[::max(1, len(A) // 120), None, :] - B[None, ::max(1, len(B) // 120), :]) ** 2).sum(axis=2)).min())
-                if best is None or d < best[0]:
-                    best = (d, i, j)
-        _d, i, j = best
-        runA = _facing_run(loops[i], dd[j], step)
-        runB = _facing_run(cands[j], _densify(loops[i]['P'], loops[i]['closed'], step), step)
-        if runA is None or runB is None:
-            self.report({'WARNING'}, "No facing edges found")
-            return {'CANCELLED'}
-        pos, _outA = runA
-        ids = [loops[i]['ids'][k] for k in pos]
-        PB, oB = cands[j]['P'][runB[0]], runB[1]
+        for i, A in enumerate(dA):
+            for j, B in enumerate(dB):
+                g = 0.5 * (_mean_gap(A, B) + _mean_gap(B, A))   # côtés qui se font face sur toute leur longueur
+                if best is None or g < best[0]:
+                    best = (g, i, j)
+        _g, i, j = best
+        li, sa = sides_a[i]
+        sb = sides_b[j]
+        ids = [loops[li]['ids'][k] for k in sa['pos']]
+        if sa['closed'] is False and len(ids) > 1 and ids[0] == ids[-1]:
+            ids = ids[:-1]
         me = src.data
         M = np.array(src.matrix_world, dtype=np.float64)
         Mi = np.linalg.inv(M)
@@ -1742,14 +2192,14 @@ class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
         me.vertices.foreach_get('co', co)
         co = co.reshape(-1, 3)
         world = co @ M[:3, :3].T + M[:3, 3]
-        new = world.copy()
+        pts, dirs = match_edge_points(world[ids], sa['closed'], sb['P'], sb['out'], sb['closed'], self.match)
+        disp = {}
         moved = {}
-        for vid in ids:
-            q = _closest_on_polyline(world[vid], PB)
+        for vid, q in zip(ids, pts):
             moved[vid] = q
-            new[vid] = q
-        if self.continuity == 'TANGENT' and oB is not None:
-            mids = (PB[:-1] + PB[1:]) * 0.5
+            disp[vid] = q - world[vid]
+        dir_of = dict(zip(ids, dirs))
+        if self.continuity == 'TANGENT' and sb['out'] is not None:
             nbr = {}
             for e in me.edges:
                 a, b = e.vertices
@@ -1759,12 +2209,17 @@ class DESSIN_OT_match_srf(_ProfileOp, bpy.types.Operator):
                     nbr.setdefault(a, []).append(b)
             for v, srcs in nbr.items():
                 s = srcs[0]
-                q = moved[s]
-                k = int(((mids - q) ** 2).sum(axis=1).argmin())
-                direction = oB[k]                      # la surface cible se prolonge dans le sens sortant de son bord
+                d = dir_of.get(s)
+                if d is None or float(np.linalg.norm(d)) < 1e-9:
+                    continue
                 length = float(np.linalg.norm(world[v] - world[s]))
-                if float(np.linalg.norm(direction)) > 1e-9:
-                    new[v] = q + direction * length
+                disp[v] = moved[s] + np.asarray(d) * length - world[v]
+        new = world.copy()
+        for v, dv in disp.items():
+            new[v] = world[v] + dv
+        if self.smooth:
+            for v, dv in spread_displacement(me, disp).items():
+                new[v] = world[v] + dv
         loc = new @ Mi[:3, :3].T + Mi[:3, 3]
         me.vertices.foreach_set('co', loc.ravel())
         me.update()

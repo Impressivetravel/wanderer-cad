@@ -683,7 +683,8 @@ class DESSIN_OT_gumball_pull(GumballBase):
     def invoke(self, context, event):
         if context.mode == 'EDIT_MESH' and self.pull == 'EXTRUDE':
             try:                                        # faces / arêtes sélectionnées : l'extrusion du mode Édition
-                bpy.ops.dessin.gumball_extrude('INVOKE_DEFAULT')
+                # point d'extrusion du Gizmo : Extrude Manifold ; Maj : extrusion normale
+                bpy.ops.dessin.gumball_extrude('INVOKE_DEFAULT', use_manifold=not event.shift)
             except RuntimeError:
                 pass
             return {'CANCELLED'}

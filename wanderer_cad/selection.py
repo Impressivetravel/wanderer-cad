@@ -11,12 +11,12 @@ from mathutils import Matrix, Vector, geometry
 
 from .core import (
     has_lt, obj_visible,
-    AXES3, IDLE_TOOL, TAU, alt_left_navigates, copy_held, copy_key_name, copy_mod_event, copy_shift, copy_update, lock_held,
+    AXES3, IDLE_TOOL, TAU, idle_tool_id, alt_left_navigates, copy_held, copy_key_name, copy_mod_event, copy_shift, copy_update, lock_held,
     lock_key_name, pref,
 )
 from .snapping import _BBOX, _GEOM, _geom_ver, edit_selection
 from .linetypes import base_wire_world
-from .drawing import _HOVER, _same_region, find_window_region, get_shader, over_nav_gizmo, px_scale, region_rv3d
+from .drawing import _HOVER, _same_region, find_window_region, get_shader, over_nav_gizmo, px_scale, region_rv3d, ui_opaque_at
 from .base import DessinBase
 from .subd import drag_copy_commit, ghost_for_edit, ghost_for_objects, ghost_hide, ghost_show
 
@@ -1157,7 +1157,8 @@ class DESSIN_OT_select_loop(bpy.types.Operator):
             return {'CANCELLED', 'PASS_THROUGH'}
         for r in context.area.regions:
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
-                    and r.y <= event.mouse_y < r.y + r.height):
+                    and r.y <= event.mouse_y < r.y + r.height
+                    and not (r.type == 'UI' and ui_opaque_at(context.area, r, event.mouse_x, event.mouse_y) is False)):
                 return {'CANCELLED', 'PASS_THROUGH'}
         try:
             hit = loop_target(context, context.area, region, event.mouse_x - region.x, event.mouse_y - region.y, ring=bool(event.alt))
@@ -1409,7 +1410,7 @@ def subobject_box(context, area, region, inside_fn):
         bpy.ops.object.mode_set(mode='EDIT')
         _SUBOBJ["objs"] = {o.name for o in keep_edit + objs}
         try:
-            bpy.ops.wm.tool_set_by_id(name=IDLE_TOOL)
+            bpy.ops.wm.tool_set_by_id(name=idle_tool_id())
         except (RuntimeError, TypeError):
             pass
         fresh = not keep_edit
@@ -1464,7 +1465,7 @@ def subobject_apply(context, obj, kind, index):
         bpy.ops.object.mode_set(mode='EDIT')
         _SUBOBJ["objs"] = {obj.name}
         try:      # en Édition, l'outil actif est propre au mode : on y met Select de Wanderer (sinon ⌘/Ctrl+Maj+clic = chemin le plus court de Blender)
-            bpy.ops.wm.tool_set_by_id(name=IDLE_TOOL)
+            bpy.ops.wm.tool_set_by_id(name=idle_tool_id())
         except (RuntimeError, TypeError):
             pass
     elif obj.mode != 'EDIT':
@@ -1622,7 +1623,7 @@ class DESSIN_OT_esc_select(bpy.types.Operator):
             return {'PASS_THROUGH'}          # une commande (ou la ligne de commande) gère elle-même Échap
         if not (pref("auto_idle") or pref("esc_deselect")):
             return {'PASS_THROUGH'}
-        if pref("auto_idle") and DessinBase.active_tool_id(context) != IDLE_TOOL:
+        if pref("auto_idle") and DessinBase.active_tool_id(context) != idle_tool_id():
             back_to_idle()
         if pref("esc_deselect"):
             try:
@@ -1751,6 +1752,30 @@ def select_objects_shape(context, area, region, inside_fn, seg_fn, crossing, eve
         sel_filter_restore(context)     # « seulement ce type » : valable pour une sélection, même si elle n'a rien trouvé
 
 
+def _edit_sel_count(context):
+    """Nombre d'éléments sélectionnés dans les objets en mode Édition (sommets, arêtes, faces / points de courbe)."""
+    n = 0
+    for o in getattr(context, "objects_in_mode", None) or ():
+        d = o.data
+        if o.type == 'MESH':
+            n += d.total_vert_sel + d.total_edge_sel + d.total_face_sel
+        elif o.type == 'CURVE':
+            for sp in d.splines:
+                pts = sp.bezier_points if sp.type == 'BEZIER' else sp.points
+                n += sum(1 for p in pts if (p.select_control_point if sp.type == 'BEZIER' else p.select))
+    return n
+
+
+def _shortest_path_pick(context, area, region):
+    """Sélection du chemin le plus court de Blender (Ctrl+clic), au point de la souris."""
+    op = bpy.ops.mesh.shortest_path_pick if context.mode == 'EDIT_MESH' else bpy.ops.curve.shortest_path_pick
+    try:
+        with context.temp_override(area=area, region=region):
+            op('INVOKE_DEFAULT')
+    except (RuntimeError, TypeError, AttributeError):
+        pass
+
+
 class DESSIN_OT_selection_boite(bpy.types.Operator):
     bl_idname = "dessin.selection_boite"
     bl_label = "Select"
@@ -1774,7 +1799,8 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
         space = self.area.spaces.active
         for r in self.area.regions:  # clic sur la barre d'outils / latérale : pas pour nous
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
-                    and r.y <= event.mouse_y < r.y + r.height):
+                    and r.y <= event.mouse_y < r.y + r.height
+                    and not (r.type == 'UI' and ui_opaque_at(self.area, r, event.mouse_x, event.mouse_y) is False)):
                 return {'CANCELLED', 'PASS_THROUGH'}
         if over_nav_gizmo(self.area, event.mouse_x, event.mouse_y):
             return {'CANCELLED', 'PASS_THROUGH'}
@@ -1795,12 +1821,13 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
                         return {'FINISHED'}
             except (RuntimeError, TypeError, AttributeError):
                 pass
-        if context.mode == 'EDIT_MESH' and not (event.shift or event.ctrl or event.alt):
+        if context.mode == 'EDIT_MESH' and not (event.ctrl or event.alt):
             try:
                 with context.temp_override(area=self.area, region=self.region):
                     on_ball = extrude_ball_hit(context, self.start[0], self.start[1], self.region, region_rv3d(self.region, self.area))
                     if on_ball:
-                        bpy.ops.dessin.gumball_extrude('INVOKE_DEFAULT')
+                        # sans Maj : Extrude Manifold ; Maj : extrusion normale (nouvelles faces de côté)
+                        bpy.ops.dessin.gumball_extrude('INVOKE_DEFAULT', use_manifold=not event.shift)
                         return {'FINISHED'}
             except (RuntimeError, TypeError, AttributeError):
                 pass
@@ -2041,6 +2068,8 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
             except (RuntimeError, ReferenceError, ValueError, TypeError):
                 pass
             return
+        path = event.ctrl and not (event.shift or event.alt) and context.mode in ('EDIT_MESH', 'EDIT_CURVE')
+        before = _edit_sel_count(context) if path else None
         try:
             with context.temp_override(area=self.area, region=self.region):
                 bpy.ops.view3d.select(location=self.start_int(),
@@ -2049,6 +2078,10 @@ class DESSIN_OT_selection_boite(bpy.types.Operator):
                                       deselect_all=not (event.shift or event.ctrl))
         except (RuntimeError, TypeError):
             pass
+        if path and _edit_sel_count(context) == before:
+            # Ctrl+clic en mode Édition : sur un élément sélectionné, il le retire (comme partout dans Wanderer) ;
+            # sur un élément non sélectionné, c'est le chemin le plus court de Blender depuis l'élément actif
+            _shortest_path_pick(context, self.area, self.region)
         if context.mode == 'OBJECT':                 # clic sur un objet groupé : le groupe entier, jusqu'au dégroupage
             try:
                 hit = pick_object_at(context, self.area, self.region, self.start[0], self.start[1])
@@ -2139,7 +2172,8 @@ class _SelShapeBase:
             return {'CANCELLED', 'PASS_THROUGH'}
         for r in self.area.regions:  # clic sur la barre d'outils / latérale : pas pour nous
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
-                    and r.y <= event.mouse_y < r.y + r.height):
+                    and r.y <= event.mouse_y < r.y + r.height
+                    and not (r.type == 'UI' and ui_opaque_at(self.area, r, event.mouse_x, event.mouse_y) is False)):
                 return {'CANCELLED', 'PASS_THROUGH'}
         if over_nav_gizmo(self.area, event.mouse_x, event.mouse_y):
             return {'CANCELLED', 'PASS_THROUGH'}
@@ -2292,7 +2326,8 @@ class DESSIN_OT_selection_cercle(bpy.types.Operator):
             return {'CANCELLED', 'PASS_THROUGH'}
         for r in self.area.regions:
             if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
-                    and r.y <= event.mouse_y < r.y + r.height):
+                    and r.y <= event.mouse_y < r.y + r.height
+                    and not (r.type == 'UI' and ui_opaque_at(self.area, r, event.mouse_x, event.mouse_y) is False)):
                 return {'CANCELLED', 'PASS_THROUGH'}
         if over_nav_gizmo(self.area, event.mouse_x, event.mouse_y):
             return {'CANCELLED', 'PASS_THROUGH'}

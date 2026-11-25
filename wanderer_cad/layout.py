@@ -16,7 +16,7 @@ from . import layout_engine as le
 from .core import cp_set, cp_state, idle_tool, lang
 from .linetypes import PATTERN as LT_PATTERN, dash_pattern_paths
 from .base import DessinBase
-from .drawing import find_window_region, get_shader, line_px, px_scale
+from .drawing import find_window_region, get_shader, line_px, px_scale, ui_opaque_at
 from .layers import draw_layer_print_table, draw_object_print_width, layer_print_width
 from .tools_draw import DESSIN_OT_rectangle
 
@@ -3419,7 +3419,8 @@ def double_click_blocked(context, event):
         return True
     for r in area.regions:
         if (r.type in {'TOOLS', 'UI', 'HEADER', 'TOOL_HEADER'} and r.x <= event.mouse_x < r.x + r.width
-                and r.y <= event.mouse_y < r.y + r.height):
+                and r.y <= event.mouse_y < r.y + r.height
+                    and not (r.type == 'UI' and ui_opaque_at(area, r, event.mouse_x, event.mouse_y) is False)):
             return True
     try:
         return cmd_hit(area, event.mouse_x, event.mouse_y) is not None

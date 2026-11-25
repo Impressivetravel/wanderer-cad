@@ -603,7 +603,7 @@ class DESSIN_OT_chamfer_edge(DessinEdgeRound):
 # Offset Edge (copie parallèle d'arêtes de maillage ou de courbes)
 # --------------------------------------------------------------------------
 
-OFFSET_STATE = {"dist": 0.05}
+OFFSET_STATE = {"dist": 0.05, "bezier": True}     # bezier : décalage d'une courbe lisse rendu en Bézier (B)
 
 
 def curve_edge_geometry(obj):
@@ -1125,7 +1125,27 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
             return (f"click the edges / a curve or drag a box ({self.total_selected()} selected), then Enter   "
                     "[click: the whole edge, Ctrl+click: one segment  |  "
                     "box to the right: inside, to the left: touching, Ctrl/Cmd: deselect]")
-        return "move the mouse to choose the side and the distance, or type the distance   (click / Enter: confirm)"
+        opt = ""
+        if self.smooth_source():
+            opt = f"   [B: Bezier = {'Yes' if self.STATE.get('bezier', True) else 'No (polyline)'}]"
+        return "move the mouse to choose the side and the distance, or type the distance   (click / Enter: confirm)" + opt
+
+    @staticmethod
+    def is_smooth_curve(obj):
+        """Courbe lisse (Bézier, ou NURBS de degré 2 et plus) : son décalage peut rester une courbe lisse (issue #43)."""
+        return (obj is not None and obj.type == 'CURVE'
+                and any(sp.type == 'BEZIER' or (sp.type == 'NURBS' and sp.order_u > 2) for sp in obj.data.splines))
+
+    def smooth_source(self):
+        return any(self.is_smooth_curve(bpy.data.objects.get(n)) for n, idx in self.sel.items() if idx)
+
+    def modal(self, context, event):
+        if (event.type == 'B' and event.value == 'PRESS' and self.phase == 'radius' and self.smooth_source()
+                and not (event.ctrl or event.alt or event.oskey or event.shift)):
+            self.STATE["bezier"] = not self.STATE.get("bezier", True)      # B : Bézier = Oui / Non (mémorisé)
+            self.refresh(context)
+            return {'RUNNING_MODAL'}
+        return super().modal(context, event)
 
     def source_chains(self):
         """[(nom objet, points, fermée)] des arêtes choisies."""
@@ -1237,7 +1257,12 @@ class DESSIN_OT_offset_edge(DessinEdgeRound):
                 for (Q, closed), (P, _c) in zip(chains, src_of.get(name, [])):
                     if not offset_arc_object(context, src, P, Q, closed, self.STATE["dist"]):
                         rest.append((Q, closed))
-                if rest:
+                if rest and self.STATE.get("bezier", True) and self.is_smooth_curve(src):
+                    # courbe lisse : le décalage reste une Bézier (ajustée à 0,02 % de sa taille près), pas une polyligne dense
+                    pts = np.array([tuple(q) for Q, _c in rest for q in Q], dtype=np.float64)
+                    diag = float(np.linalg.norm(pts.max(axis=0) - pts.min(axis=0))) if len(pts) else 0.0
+                    build_beziers(context, "Offset", rest, max(1e-6, diag * 2e-4))
+                elif rest:
                     build_polylines(context, "Offset", rest)
             elif self.reenter_edit:
                 self.append_edges(src, chains)
@@ -1274,6 +1299,177 @@ def build_polylines(context, name, chains):
         for pt, q in zip(sp.points, Q):
             pt.co = (q.x, q.y, q.z, 1.0)
         sp.use_cyclic_u = closed
+    return _link_object(context, name, cu)
+
+
+# ---- ajustement de courbes de Bézier (P. J. Schneider, « An Algorithm for Automatically Fitting Digitized Curves »,
+#      Graphics Gems, 1990) : décalage d'une courbe lisse rendu en Bézier, au lieu d'une polyligne dense ----
+def _bz_eval(b, t):
+    s = 1.0 - t
+    return (s * s * s) * b[0] + (3 * s * s * t) * b[1] + (3 * s * t * t) * b[2] + (t * t * t) * b[3]
+
+
+def _bz_d1(b, t):
+    s = 1.0 - t
+    return 3 * s * s * (b[1] - b[0]) + 6 * s * t * (b[2] - b[1]) + 3 * t * t * (b[3] - b[2])
+
+
+def _bz_d2(b, t):
+    return 6 * (1.0 - t) * (b[2] - 2 * b[1] + b[0]) + 6 * t * (b[3] - 2 * b[2] + b[1])
+
+
+def _bz_unit(v):
+    n = np.linalg.norm(v)
+    return v / n if n > 1e-15 else v
+
+
+def _bz_generate(P, u, t1, t2):
+    p0, p3 = P[0], P[-1]
+    s = 1.0 - u
+    A1 = (3 * s * s * u)[:, None] * t1
+    A2 = (3 * s * u * u)[:, None] * t2
+    C = np.array([[np.einsum('ij,ij', A1, A1), np.einsum('ij,ij', A1, A2)],
+                  [np.einsum('ij,ij', A1, A2), np.einsum('ij,ij', A2, A2)]])
+    base = ((s * s * s) + 3 * s * s * u)[:, None] * p0 + (3 * s * u * u + u * u * u)[:, None] * p3
+    tmp = P - base
+    X = np.array([np.einsum('ij,ij', A1, tmp), np.einsum('ij,ij', A2, tmp)])
+    det = C[0, 0] * C[1, 1] - C[0, 1] * C[1, 0]
+    seg = np.linalg.norm(p3 - p0)
+    eps = 1e-6 * seg
+    a1 = a2 = 0.0
+    if abs(det) > 1e-18:
+        a1 = (X[0] * C[1, 1] - X[1] * C[0, 1]) / det
+        a2 = (C[0, 0] * X[1] - C[1, 0] * X[0]) / det
+    if a1 < eps or a2 < eps:
+        a1 = a2 = seg / 3.0
+    return [p0, p0 + t1 * a1, p3 + t2 * a2, p3]
+
+
+def _bz_max_error(P, b, u):
+    d = np.array([np.linalg.norm(_bz_eval(b, t) - p) for p, t in zip(P, u)])
+    i = int(np.argmax(d))
+    return float(d[i]), i
+
+
+def _bz_reparam(P, b, u):
+    out = []
+    for p, t in zip(P, u):
+        q, q1, q2 = _bz_eval(b, t) - p, _bz_d1(b, t), _bz_d2(b, t)
+        den = q1.dot(q1) + q.dot(q2)
+        out.append(min(1.0, max(0.0, t - q.dot(q1) / den)) if abs(den) > 1e-18 else t)
+    return np.array(out)
+
+
+def _bz_chord(P):
+    d = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(P, axis=0), axis=1))])
+    return d / d[-1] if d[-1] > 0 else np.linspace(0.0, 1.0, len(P))
+
+
+def _bz_fit(P, t1, t2, tol, depth=0):
+    if len(P) == 2:
+        d = np.linalg.norm(P[1] - P[0]) / 3.0
+        return [[P[0], P[0] + t1 * d, P[1] + t2 * d, P[1]]]
+    u = _bz_chord(P)
+    b = _bz_generate(P, u, t1, t2)
+    err, k = _bz_max_error(P, b, u)
+    if err <= tol:
+        return [b]
+    if err <= tol * 4:
+        for _ in range(6):
+            u = _bz_reparam(P, b, u)
+            b = _bz_generate(P, u, t1, t2)
+            err, k = _bz_max_error(P, b, u)
+            if err <= tol:
+                return [b]
+    if depth > 40:
+        return [b]
+    k = min(max(k, 1), len(P) - 2)
+    tc = _bz_unit(P[k - 1] - P[k + 1])
+    return _bz_fit(P[:k + 1], t1, tc, tol, depth + 1) + _bz_fit(P[k:], -tc, t2, tol, depth + 1)
+
+
+def fit_bezier_path(P, closed, tol, corner_deg=35.0):
+    """Points (n, 3) d'une courbe -> [(co, poignée gauche, poignée droite, angle vif)] d'une Bézier qui la suit à `tol` près.
+    Les angles vifs (> corner_deg) restent des pointes."""
+    P = np.asarray(P, dtype=np.float64)
+    keep = [0] + [i for i in range(1, len(P)) if np.linalg.norm(P[i] - P[i - 1]) > 1e-12]
+    P = P[keep]
+    if closed and len(P) > 2 and np.linalg.norm(P[0] - P[-1]) < 1e-12:
+        P = P[:-1]
+    n = len(P)
+    if n < 2 or (closed and n < 3):
+        return None
+    cos_c = math.cos(math.radians(corner_deg))
+
+    def corner(i):
+        a, b = P[i] - P[i - 1], P[(i + 1) % n] - P[i]
+        return _bz_unit(a).dot(_bz_unit(b)) < cos_c
+    if closed:
+        corners = [i for i in range(n) if corner(i)]
+        start = corners[0] if corners else 0
+        Q = np.vstack([P[start:], P[:start], P[start:start + 1]])
+        cq = sorted({(c - start) % n for c in corners} | {0, n})
+    else:
+        Q = P
+        cq = [0] + [i for i in range(1, n - 1) if corner(i)] + [n - 1]
+    smooth_seam = closed and not any(corner(i) for i in range(n))
+    segs = []
+    for a, b in zip(cq, cq[1:]):
+        R = Q[a:b + 1]
+        if len(R) < 2:
+            continue
+        if smooth_seam:
+            t1 = _bz_unit(Q[1] - Q[-2])
+            t2 = -t1
+        else:
+            t1 = _bz_unit(R[1] - R[0])
+            t2 = _bz_unit(R[-2] - R[-1])
+        segs += _bz_fit(R, t1, t2, tol * 0.5)        # (contrôlé aux échantillons : marge pour l'entre-deux)
+    if not segs:
+        return None
+    pts = []
+    for i, b in enumerate(segs):
+        hl = pts[-1] if pts else None
+        if hl is None:
+            pts.append([b[0], 2 * b[0] - b[1], b[1]])         # extrémité ouverte : poignée gauche en miroir
+        else:
+            hl[2] = b[1]
+        pts.append([b[3], b[2], 2 * b[3] - b[2]])
+    if closed:                       # le dernier point est le premier : on les fusionne
+        last = pts.pop()
+        pts[0][1] = last[1]
+    out = []
+    for co, hl, hr in pts:
+        a, b = co - hl, hr - co
+        sharp = (np.linalg.norm(a) > 1e-12 and np.linalg.norm(b) > 1e-12 and _bz_unit(a).dot(_bz_unit(b)) < 0.999)
+        out.append((co, hl, hr, sharp))
+    return out
+
+
+def build_beziers(context, name, chains, tol):
+    """Courbe de Bézier ajustée sur chaque chaîne (coordonnées monde) ; une chaîne qui ne s'ajuste pas reste une polyligne."""
+    cu = bpy.data.curves.new(name, 'CURVE')
+    cu.dimensions = '3D'
+    for Q, closed in chains:
+        fit = fit_bezier_path([tuple(q) for q in Q], closed, tol)
+        if not fit:
+            sp = cu.splines.new('POLY')
+            sp.points.add(len(Q) - 1)
+            for pt, q in zip(sp.points, Q):
+                pt.co = (q.x, q.y, q.z, 1.0)
+            sp.use_cyclic_u = closed
+            continue
+        sp = cu.splines.new('BEZIER')
+        sp.bezier_points.add(len(fit) - 1)
+        for bp, (co, hl, hr, sharp) in zip(sp.bezier_points, fit):
+            bp.handle_left_type = bp.handle_right_type = 'FREE'
+            bp.co = tuple(co)
+            bp.handle_left = tuple(hl)
+            bp.handle_right = tuple(hr)
+            if not sharp:
+                bp.handle_left_type = bp.handle_right_type = 'ALIGNED'
+        sp.use_cyclic_u = closed
+        sp.resolution_u = 12
     return _link_object(context, name, cu)
 
 

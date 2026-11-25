@@ -1,3 +1,45 @@
+# Wanderer CAD 2.96.130 — what's new since 2.96.129
+
+## Toolbar: Wanderer tools or Blender tools, in one click
+
+- **New W button**, next to Select at the top of the toolbar, in Object and Edit Mode: one click shows Blender's own tools and hides the Wanderer tools; one more click brings the Wanderer tools back. Handy to switch to a Blender workflow for a moment without disabling the add-on.
+- **Preferences > Toolbar**: choose which tool families (Curves, Transform, Surfaces, Solids, SubD, Annotation...) and which tools appear in the toolbar. Each family can be unfolded to tick or untick its tools one by one.
+- **A tidier toolbar.** **Sphere** and its variants (Ellipsoid, Truncated Sphere, Torus) are now in the same drop-down as **Box** (with Cylinder, Cone, Pyramid and Tube), right under Duplicate Border. **Plane** stays at the head of the surface tools. **Pipe** and **Layout** are no longer in the toolbar: the commands (`pipe`, `layout`) and the tools panel still have them, and the layouts stay in the tabs under the view (Viewport and Detail View remain in the toolbar).
+- **Edit Mode: Extrude moves to the surface tools**, right after Plane, where the extrusion sits in Object Mode (it was after Mirror).
+- **SubD tools**: **To SubD** now sits right next to **SubD Box**, and **Symmetry** next to **SubD Loft**.
+
+## Gizmo
+
+- **Shift on the round extrude handle: normal extrusion** (#44). Without Shift the handle still does Extrude Manifold (the sides already in the extrusion direction are stretched, pushing inward cuts the volume). With Shift it does Blender's normal extrusion: new side faces, with an edge left where the face was.
+- The rotation angle shown while turning is smaller on high-resolution screens (Retina).
+- The value box of the Gizmo follows a light theme (it stayed dark).
+
+## Curves
+
+- **Offset keeps a smooth curve smooth** (#43). The offset of a Bezier or NURBS curve is now a smooth Bezier curve with few points, instead of a dense polyline. Press **B** during Offset to switch between Bezier and Polyline (the choice is remembered). Sharp corners stay sharp; circles and arcs still give true circles and arcs.
+- **Simplify Curve** has a **Result** option: Same type, Bezier or Polyline. A dense polyline can be turned back into a light, smooth Bezier curve.
+- **Polyline menu** (right click on a curve): new **Simplify Curve** and **Toggle Spline Type** (polyline to Bezier curve and back). The entries of this menu now show a tooltip (they showed "undocumented operator").
+- **Join welds the ends more reliably** (#36). The tolerance now follows the size of the curves and their scale: far from the origin or at a large scale, ends that met within a fraction of a millimetre were left apart, so the curve stayed open and its extrusion had no caps.
+
+## Surfaces
+
+- **New Edge Surface**, like EdgeSrf: click two, three or four curves (C picks a chain of curves, Backspace removes the last one) and the surface is built from them. It is in the surface tools and in the command line (`edgesrf`).
+- **Offset Surface and Thicken work on History extrusions**: the extrusion keeps its modifier, and the result follows its real shape.
+- **Match Surface**: the matched edge no longer drifts. New options: **Match** (along the edge or to the closest points) and **Smooth** (how far the change spreads into the surface).
+
+## Selection and commands
+
+- **Objects created by one command stay selected** (#38): Boundary, Offset on several curves and the other commands that create several objects now leave all of them selected (the last one active), so you can join them or change their layer right away. With Boundary, the outlines of every area clicked stay selected until the end of the command.
+- **Edit Mode commands for the current mode** (#41): typed in the command line, **Separate**, **Delete** (with Blender's Delete menu: Vertices / Segments on a curve, Vertices / Edges / Faces on a mesh), **Select All / None / Invert** and Blender's other commands now use the operator of the current mode, so they work on curves too.
+- **Ctrl+click: shortest path** (#35). In Edit Mode, Ctrl+click on a selected vertex, edge or face still removes it; Ctrl+click on an unselected one selects the shortest path from the active element, as in Blender (meshes and curves). Ctrl+drag still removes a whole area.
+- **Back to Select after the "pick, then Enter" tools** (#42): after Join, Explode, Simplify Curve and the like, the tool returns to Select (following the *Return to Select* preference), so the next right click opens the context menu instead of running the command again.
+
+## Views
+
+- **Project turns itself off in perspective**: when a view switches from orthographic to perspective, the Project snap is turned off (it only makes sense in an orthographic view). You can still turn it back on.
+- **Drawing under the sidebar** (#40): with Blender's *Region Overlap*, the sidebar (N) covers the whole height of the view but is transparent under its panels. That part now counts as the view: a polyline follows the cursor there, and clicks and selection work.
+- **Four views**: the navigation gizmos are hidden in the four views, and the bars at the bottom are no longer split by the gap between the views.
+
 # Wanderer CAD 2.96.129 — what's new since 2.96.128
 
 ## The Gumball is now the Gizmo

@@ -11,7 +11,7 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from gpu_extras.batch import batch_for_shader
 from mathutils import Vector
 
-from .core import _redraw_all_areas, addon_globals, pref
+from .core import _redraw_all_areas, addon_globals, idle_tool, pref
 from .drawing import _HOVER, find_window_region, get_shader, px_scale, region_rv3d
 from .base import DessinBase
 from .selection import _project_region, draw_box_cb, draw_fence_cb, objects_screen_bounds
@@ -661,6 +661,36 @@ class DESSIN_OT_bar_click(bpy.types.Operator):
         return {'CANCELLED', 'PASS_THROUGH'}
 
 
+def pick_run(context, cmd, action=""):
+    """Lance dessin.<cmd> sur les objets désignés puis repasse à Select (issue #42 : sinon l'outil restait armé et le clic
+    droit suivant relançait la commande au lieu d'ouvrir le menu contextuel)."""
+    f = getattr(bpy.ops.dessin, cmd, None)
+    if f is None:
+        return {'CANCELLED'}
+    try:
+        idle_tool()                    # d'abord : une commande qui ouvre une boîte de dialogue rend la main tout de suite
+    except (RuntimeError, TypeError, AttributeError):
+        pass
+    try:
+        return f('INVOKE_DEFAULT', action=action) if action else f('INVOKE_DEFAULT')
+    except (RuntimeError, TypeError):
+        return {'CANCELLED'}
+
+
+class DESSIN_OT_pick_run(bpy.types.Operator):
+    """Outils « on désigne les objets, puis Entrée » (Join, Simplify...) : Entrée / Espace lancent la commande, puis Select."""
+    bl_idname = "dessin.pick_run"
+    bl_label = "Run the command"
+    bl_options = {'INTERNAL'}
+
+    cmd: bpy.props.StringProperty()
+    action: bpy.props.StringProperty(default="")
+
+    def invoke(self, context, event):
+        pick_run(context, self.cmd, self.action)
+        return {'FINISHED'}
+
+
 class DESSIN_OT_rclick_run(bpy.types.Operator):
     """Outils « on désigne les objets, puis Entrée » (Join, Explode...) : clic droit rapide = Entrée (option des préférences)."""
     bl_idname = "dessin.rclick_run"
@@ -689,15 +719,7 @@ class DESSIN_OT_rclick_run(bpy.types.Operator):
                 return {'FINISHED'}
             return {'RUNNING_MODAL'}
         if event.type == 'RIGHTMOUSE' and event.value == 'RELEASE':
-            f = getattr(bpy.ops.dessin, self.cmd, None)
-            if f is not None:
-                try:
-                    if self.action:
-                        f('INVOKE_DEFAULT', action=self.action)
-                    else:
-                        f('INVOKE_DEFAULT')
-                except (RuntimeError, TypeError):
-                    pass
+            pick_run(context, self.cmd, self.action)
             return {'FINISHED'}
         if event.type == 'ESC':
             return {'CANCELLED'}
@@ -739,6 +761,22 @@ def _spline_nodes(sp):
 
 def _rev_nodes(nodes):
     return [{"co": n["co"], "hl": n["hr"], "hr": n["hl"], "tl": n["tr"], "tr": n["tl"], "r": n["r"]} for n in reversed(nodes)]
+
+
+def curve_join_tol(obj):
+    """Tolérance de jonction dans les coordonnées locales de la courbe : JOIN_TOL (unités Blender), et au moins un
+    millionième de sa taille (issue #36 : loin de l'origine ou à grande échelle, les extrémités accrochées en simple
+    précision diffèrent de plus de 1e-4), ramenée à l'échelle de l'objet."""
+    try:
+        sc = max(1e-12, min(abs(v) for v in obj.matrix_world.to_scale()))
+        size = max(obj.dimensions) if obj.dimensions else 0.0
+        far = max((abs(v) for v in obj.matrix_world.translation), default=0.0)
+        pts = [abs(c) for sp in obj.data.splines
+               for q in (sp.bezier_points if sp.type == 'BEZIER' else sp.points) for c in q.co[:3]]
+        far = max(far, max(pts, default=0.0) * sc)
+        return max(JOIN_TOL, 1e-6 * max(size, far)) / sc
+    except (AttributeError, ValueError, TypeError):
+        return JOIN_TOL
 
 
 def _join_poly_splines(cu, tol):
@@ -843,7 +881,7 @@ class DESSIN_OT_join(bpy.types.Operator):
             self.report({'INFO'}, f"Joined: {len(objs)} object(s), {n0 - n1} point(s) merged")
         else:
             before = len(active.data.splines)
-            _join_poly_splines(active.data, JOIN_TOL)
+            _join_poly_splines(active.data, curve_join_tol(active))
             self.report({'INFO'}, f"Joined: {before} curve(s) -> {len(active.data.splines)}")
         for o in list(context.view_layer.objects):
             if o is not None:

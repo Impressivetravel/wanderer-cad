@@ -8,7 +8,7 @@ from bpy_extras.view3d_utils import region_2d_to_origin_3d, region_2d_to_vector_
 from mathutils import Vector, geometry
 
 from .core import (
-    AXES3, IDLE_FALLBACK, IDLE_TOOL, SNAP_NAMES, TAU, TRACK_DWELL, TRACK_MAX, TRACK_RADIUS, _LAST_TYPED, arc_samples,
+    AXES3, IDLE_FALLBACK, IDLE_TOOL, SNAP_NAMES, idle_tool_id, TAU, TRACK_DWELL, TRACK_MAX, TRACK_RADIUS, _LAST_TYPED, arc_samples,
     build_bezier_arc, build_polyline, build_shape_mesh, drawing_axis, edit_add_geometry, grid_snap_len, grid_snap_point,
     grid_snap_step, idle_tool, last_typed, oneshot_clear, oneshot_keys, osnap, plane_axes, plane_origin, pref, shape_output,
     scene_imperial, scene_m_per_unit, typed_length, unit_info,
@@ -17,7 +17,7 @@ from .units_text import typing_add
 from .snapping import collect_snap_points
 from .drawing import (
     _HOVER, draw_pixel_cb, draw_view_cb, find_snap_in, find_window_region, main_window_region, over_nav_gizmo,
-    project_px, px_scale, region_rv3d, track_lines_near,
+    project_px, px_scale, region_rv3d, track_lines_near, ui_opaque_at,
 )
 
 
@@ -267,6 +267,8 @@ class DessinBase(bpy.types.Operator):
         x, y = event.mouse_x, event.mouse_y
         for r in self.area.regions:
             if shown.get(r.type) and r.x <= x < r.x + r.width and r.y <= y < r.y + r.height:
+                if r.type == 'UI' and ui_opaque_at(self.area, r, x, y) is False:
+                    continue        # barre latérale transparente sous ses panneaux (Region Overlap) : c'est la vue (#40)
                 return True
         return over_nav_gizmo(self.area, x, y)
 
@@ -326,7 +328,7 @@ class DessinBase(bpy.types.Operator):
             pass
         if not getattr(self, "tool_id", None) or not pref("auto_idle"):
             return
-        for name in (IDLE_TOOL, IDLE_FALLBACK):
+        for name in (idle_tool_id(), IDLE_FALLBACK):
             try:
                 bpy.ops.wm.tool_set_by_id(name=name)
                 return

@@ -19,6 +19,50 @@ from .command_line import (
 from .languages import LANGUAGE_ITEMS
 
 
+def _toolbar_redraw():
+    try:
+        _update_toolbar_filter()
+    except NameError:
+        pass
+
+
+def _csv(text):
+    return [t for t in (text or "").split(",") if t]
+
+
+class DESSIN_OT_toolbar_show(bpy.types.Operator):
+    """Shows or hides Wanderer tools in the toolbar (they stay in the command line and the Wanderer tab)"""
+    bl_idname = "dessin.toolbar_show"
+    bl_label = "Show in the toolbar"
+    bl_options = {'INTERNAL'}
+    ids: bpy.props.StringProperty()
+    show: bpy.props.BoolProperty()
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__package__].preferences
+        hidden = set(_csv(prefs.toolbar_hidden))
+        ids = set(_csv(self.ids))
+        hidden = hidden - ids if self.show else hidden | ids
+        prefs.toolbar_hidden = ",".join(sorted(hidden))
+        _toolbar_redraw()
+        return {'FINISHED'}
+
+
+class DESSIN_OT_toolbar_fold(bpy.types.Operator):
+    """Shows or hides the list of tools of this family"""
+    bl_idname = "dessin.toolbar_fold"
+    bl_label = "Tools of this family"
+    bl_options = {'INTERNAL'}
+    family: bpy.props.StringProperty()
+
+    def execute(self, context):
+        prefs = context.preferences.addons[__package__].preferences
+        opened = set(_csv(prefs.toolbar_open))
+        opened ^= {self.family}
+        prefs.toolbar_open = ",".join(sorted(opened))
+        return {'FINISHED'}
+
+
 class DESSIN_OT_prefs_reset(bpy.types.Operator):
     bl_idname = "dessin.prefs_reset"
     bl_label = "Reset to defaults"
@@ -524,6 +568,11 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
         name="Show Wanderer tools in the toolbar", default=True, update=lambda self, context: _update_toolbar_filter(),
         description="Shows the Wanderer tools in the left toolbar. Off: the toolbar keeps only Select / Lasso and Blender's tools; "
                     "the tools stay available in the Wanderer tab of the sidebar, with their shortcuts and in the command line")
+    toolbar_blender: bpy.props.BoolProperty(
+        name="Toolbar shows Blender's tools", default=False, update=lambda self, context: _toolbar_redraw(),
+        description="Set by the W button of the toolbar: on, the toolbar shows Blender's own tools instead of the Wanderer tools")
+    toolbar_hidden: bpy.props.StringProperty(default="", options={'HIDDEN'})     # outils Wanderer décochés (Toolbar)
+    toolbar_open: bpy.props.StringProperty(default="", options={'HIDDEN'})       # familles dépliées dans les préférences
     show_tool_annotate: bpy.props.BoolProperty(name="Annotate", default=False, update=_update_hide_native,
                                                description="Shows Blender's own Annotate tools in the toolbar")
     show_tool_measure: bpy.props.BoolProperty(name="Measure", default=False, update=_update_hide_native,
@@ -832,11 +881,51 @@ class DESSIN_AP_prefs(bpy.types.AddonPreferences):
     def _draw_toolbar(self, layout):
         layout.prop(self, "show_toolbar_tools")
         layout.prop(self, "remap_grs")
+        layout.label(text="The W button next to Select switches the toolbar between the Wanderer tools and Blender's tools.", icon='INFO')
+        layout.separator()
+        layout.label(text="Wanderer tools in the toolbar (checked = shown; hidden tools stay in the command line and the Wanderer tab)")
+        self._draw_toolbar_families(layout)
         layout.separator()
         layout.label(text="Blender's main toolbar tools (checked = shown)")
         col = layout.column(align=True)
         for key in list(HIDE_NATIVE_PREFIXES) + list(HIDE_TOOL_GROUPS):
             col.prop(self, key)
+
+    def _draw_toolbar_families(self, layout):
+        from .layers import tool_families, tool_short_labels
+        fams = [(t, [c for c in cl if c.bl_idname != "dessin.toolbar_switch"]) for t, cl in tool_families()]
+        labels = tool_short_labels(fams)
+        hidden = set(_csv(self.toolbar_hidden))
+        opened = set(_csv(self.toolbar_open))
+        col = layout.column(align=True)
+        col.active = self.show_toolbar_tools
+        for title, classes in fams:
+            ids, seen = [], set()
+            for c in classes:
+                if c.bl_idname not in seen:
+                    seen.add(c.bl_idname)
+                    ids.append((c.bl_idname, labels.get(c.bl_idname, c.bl_label)))
+            shown = [i for i, _l in ids if i not in hidden]
+            box = col.box()
+            row = box.row(align=True)
+            is_open = title in opened
+            row.operator(DESSIN_OT_toolbar_fold.bl_idname, text="", emboss=False,
+                         icon='DISCLOSURE_TRI_DOWN' if is_open else 'DISCLOSURE_TRI_RIGHT').family = title
+            all_on = len(shown) == len(ids)
+            op = row.operator(DESSIN_OT_toolbar_show.bl_idname, text="", emboss=False,
+                              icon='CHECKBOX_HLT' if shown else 'CHECKBOX_DEHLT')
+            op.ids = ",".join(i for i, _l in ids)
+            op.show = not all_on
+            row.label(text=f"{title}  ({len(shown)}/{len(ids)})")
+            if not is_open:
+                continue
+            grid = box.grid_flow(row_major=True, columns=3, even_columns=True, align=True)
+            for tid, lab in ids:
+                on = tid not in hidden
+                op = grid.operator(DESSIN_OT_toolbar_show.bl_idname, text=lab, emboss=False,
+                                   icon='CHECKBOX_HLT' if on else 'CHECKBOX_DEHLT')
+                op.ids = tid
+                op.show = not on
 
     def _draw_performance(self, layout):
         col = layout.column(align=True)
