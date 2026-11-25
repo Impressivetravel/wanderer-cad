@@ -166,7 +166,9 @@ Please open an [issue](../../issues) with your Blender version, what you did and
 
 ## Support the project
 
-I'm a designer, not a developer. Wanderer CAD started as the tool I was missing in my own work, and it became a project close to my heart. I share it so that as many people as possible can benefit from it, hoping it answers your needs as well as it answers mine.
+I'm a designer, not a developer. I first made Wanderer CAD for myself: I was modeling in Rhino and then moving to Blender, and each time I had to switch the way I work. I wanted the same shortcuts and the same tools on both sides. It isn't meant to replace a CAD program, but to bring more precise tools to a Blender workflow, so that people coming from Rhino or AutoCAD can keep their habits: same commands, same shortcuts.
+
+It became a project close to my heart. I share it so that as many people as possible can benefit from it, hoping it answers your needs as well as it answers mine.
 
 Wanderer CAD has now been downloaded more than 2,000 times, and that is a real pleasure to see. Thank you for joining the Wanderers!
 
