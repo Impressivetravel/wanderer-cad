@@ -14,12 +14,12 @@ Precision drawing and modeling tools for Blender, with a workflow that feels fam
 
 | | |
 |---|---|
-| ![A command line, like CAD software](docs/images/slides/02-command-line.jpg) | ![A Gizmo, as in Rhino](docs/images/slides/03-gumball.jpg) |
+| ![A command line, like CAD software](docs/images/slides/02-command-line.jpg) | ![The Gizmo](docs/images/slides/03-gumball.jpg) |
 | ![Object snaps and SmartTrack](docs/images/slides/04-snaps-smarttrack.jpg) | ![Control points you can see](docs/images/slides/05-curves.jpg) |
 | ![Extrude, with History](docs/images/slides/06-extrude-history.jpg) | ![Dimensions](docs/images/slides/07-dimensions.jpg) |
 | ![Layouts, from the model to a sheet](docs/images/slides/08-layouts.jpg) | ![Layers and selection filters](docs/images/slides/09-layers-filters.jpg) |
-| ![Every tool in the sidebar](docs/images/slides/10-tools-panel.jpg) | ![Your workflow in one click](docs/images/slides/11-presets-preferences.jpg) |
-| ![Help where you need it](docs/images/slides/13-tooltips-display-as.jpg) | |
+| ![Every tool, by family](docs/images/slides/10-tools-panel.jpg) | ![Your workflow in one click](docs/images/slides/11-presets-preferences.jpg) |
+| ![Six themes](docs/images/slides/12-themes.jpg) | ![Help where you need it](docs/images/slides/13-tooltips-display-as.jpg) |
 
 ## Features
 
